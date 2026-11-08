@@ -112,6 +112,55 @@ describe("v0.2 save compatibility (AC-16, 17, 21)",()=>{
     expect(migrated.entities.find((e:any)=>e.id===3).inputBuffers.iron_ore).toBe(1);
     expect(validateSave(migrated)).toEqual(migrated);
   });
+  it("migrates a populated v0.1 factory preserving cash, history, arbiters, active cycles and deterministic continuation",()=>{
+    const old=createGame();
+    old.schemaVersion=1;old.tick=409;old.balanceCents=-235;
+    old.paused=false;old.introOpen=false;old.introSeen=true;
+    old.mission.activeId="M4";old.mission.soldOre=16;old.mission.soldIngot=24;
+    old.mission.profitStreakTicks=12;
+    old.totalOreProduced=300;old.totalIngotProduced=119;
+    old.arbiters={"4":2,"7":5};
+    old.rollingEvents=Array.from({length:60},(_,i)=>({tick:350+i,revenueCents:i%2?700:0,costCents:i%2?5:60}));
+    old.lastEvent=old.rollingEvents[59];
+    const make=(id:number,kind:"iron_mine"|"conveyor"|"furnace",x:number,y:number,props:Record<string,unknown>={})=>({
+      id,kind,x,y,direction:"E" as const,output:null,belt:null,oreInput:0,cycle:null,
+      status:"waiting_for_inputs" as const,...props
+    });
+    old.entities.push(
+      make(2,"iron_mine",3,5,{output:"iron_ore",status:"blocked_output"}),
+      make(3,"conveyor",4,5,{belt:"iron_ore",status:"working"}),
+      make(4,"furnace",5,5,{oreInput:1,cycle:2,status:"working"}),
+      make(5,"conveyor",6,5,{belt:"iron_ingot",status:"working"}),
+      make(6,"conveyor",7,5),
+      make(7,"conveyor",8,5),
+      make(8,"conveyor",9,5),
+      make(9,"conveyor",7,9,{belt:"iron_ore",status:"working"}),
+      make(10,"iron_mine",2,2,{cycle:1,status:"working"})
+    );
+    old.nextId=11;
+    delete old.technologies;delete old.coalDeposits;
+    delete old.sales;delete old.materialLedger;delete old.totalRevenueCents;delete old.totalCostCents;
+    delete old.foundryStorySeen;
+    delete old.mission.soldCoal;delete old.mission.soldGear;delete old.mission.soldSteel;
+    for(const entity of old.entities){delete entity.inputBuffers;delete entity.reservedInputs;}
+    const migrated=validateSave(JSON.parse(JSON.stringify(old)));
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.balanceCents).toBe(-235);
+    expect(migrated.tick).toBe(409);
+    expect(migrated.arbiters).toEqual(old.arbiters);
+    expect(migrated.rollingEvents).toEqual(old.rollingEvents);
+    expect(migrated.lastEvent).toEqual(old.lastEvent);
+    expect(migrated.mission).toMatchObject({activeId:"M4",soldOre:16,soldIngot:24,profitStreakTicks:12});
+    expect(migrated.entities.map(e=>[e.id,e.kind,e.x,e.y,e.direction,e.cycle,e.output,e.belt]))
+      .toEqual(old.entities.map(e=>[e.id,e.kind,e.x,e.y,e.direction,e.cycle,e.output,e.belt]));
+    expect(migrated.entities.find(e=>e.id===4)).toMatchObject({
+      oreInput:1,inputBuffers:{iron_ore:1},reservedInputs:{iron_ore:2},cycle:2
+    });
+    expect(migrated.entities.find(e=>e.id===9)).toMatchObject({x:7,y:9,belt:"iron_ore"});
+    expect(validateSave(JSON.parse(JSON.stringify(migrated)))).toEqual(migrated);
+    const resumed=validateSave(JSON.parse(JSON.stringify(migrated)));
+    expect(runTicks(resumed,360)).toEqual(runTicks(migrated,360));
+  });
   it("rejects corrupt snapshots instead of silently replacing them",()=>{
     expect(()=>validateSave({...createGame(),entities:[]})).toThrow();
   });

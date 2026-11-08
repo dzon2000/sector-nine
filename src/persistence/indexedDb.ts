@@ -1,4 +1,4 @@
-import {COAL_DEPOSITS,type GameState} from "../domain/model";
+import {COAL_DEPOSITS,ITEMS,emptyLedger,emptySales,type GameState} from "../domain/model";
 const DATABASE="sector-nine-v0.1";
 const STORE="snapshots";
 function openDb():Promise<IDBDatabase>{
@@ -48,6 +48,10 @@ export function validateSave(value:unknown):GameState{
     n.schemaVersion=2;
     n.coalDeposits=COAL_DEPOSITS.map(d=>({...d}));
     n.technologies={coal_extraction:false,mechanical_components:false,advanced_smelting:false};
+    n.sales={...emptySales(),iron_ore:n.mission.soldOre,iron_ingot:n.mission.soldIngot};
+    // Migration starts a new ledger epoch; pre-v2 demolitions were not recorded.
+    n.materialLedger=emptyLedger();
+    n.totalRevenueCents=0;n.totalCostCents=0;
     for(const e of n.entities){
       if(e.kind==="furnace"){
         e.inputBuffers={iron_ore:e.oreInput};
@@ -60,6 +64,13 @@ export function validateSave(value:unknown):GameState{
   }
   if(n.schemaVersion===2){
     if(!n.technologies||!n.coalDeposits)throw Error("Invalid v2 progression state. Data preserved.");
+    if(!n.sales||!n.materialLedger||!Number.isSafeInteger(n.totalRevenueCents)||!Number.isSafeInteger(n.totalCostCents))throw Error("Invalid v2 economy ledger. Data preserved.");
+    for(const item of ITEMS){
+      if(!Number.isSafeInteger(n.sales[item])||n.sales[item]<0)throw Error("Invalid v2 sales history. Data preserved.");
+      for(const field of ["produced","consumed","sold","demolished"] as const){
+        if(!Number.isSafeInteger(n.materialLedger[item]?.[field])||n.materialLedger[item][field]<0)throw Error("Invalid v2 material audit. Data preserved.");
+      }
+    }
     for(const e of n.entities){
       if(!e.inputBuffers||!e.reservedInputs)throw Error("Invalid v2 inventory. Data preserved.");
       for(const inventory of [e.inputBuffers,e.reservedInputs]){

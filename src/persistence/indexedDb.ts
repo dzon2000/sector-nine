@@ -10,7 +10,7 @@ function openDb():Promise<IDBDatabase>{
   });
 }
 function transaction<T>(db:IDBDatabase,mode:IDBTransactionMode,action:(store:IDBObjectStore,resolve:(v:T)=>void,reject:(e:unknown)=>void)=>void):Promise<T>{
-  return new Promise((resolve,reject)=>{
+  return new Promise<T>((resolve,reject)=>{
     const tx=db.transaction(STORE,mode);
     tx.onerror=()=>reject(tx.error);
     action(tx.objectStore(STORE),resolve,reject);

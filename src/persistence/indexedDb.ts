@@ -1,4 +1,4 @@
-import {createGame,type GameState,type Entity} from "../domain/model";
+import {COAL_DEPOSITS,type GameState} from "../domain/model";
 const DATABASE="sector-nine-v0.1";
 const STORE="snapshots";
 function openDb():Promise<IDBDatabase>{
@@ -19,23 +19,23 @@ function transaction<T>(db:IDBDatabase,mode:IDBTransactionMode,action:(store:IDB
 export function validateSave(value:unknown):GameState{
   if(!value||typeof value!=="object")throw Error("Save is missing or corrupt.");
   const s=value as GameState;
-  if(s.schemaVersion!==1)throw Error("Unsupported save schema. Export or reset your save manually.");
+  if(s.schemaVersion!==1&&s.schemaVersion!==2)throw Error("Unsupported save schema. Export or reset your save manually.");
   if(s.width!==12||s.height!==12||!Number.isSafeInteger(s.tick)||s.tick<0||
     !Number.isSafeInteger(s.balanceCents)||!Array.isArray(s.entities)||!Array.isArray(s.rollingEvents)||
     (!s.arbiters||typeof s.arbiters!=="object"||Array.isArray(s.arbiters)||Object.entries(s.arbiters).some(([key,value])=>!Number.isSafeInteger(Number(key))||Number(key)<1||!Number.isSafeInteger(value)||value<0))||!s.mission||!Number.isSafeInteger(s.nextId)||
     !Number.isSafeInteger(s.totalOreProduced)||!Number.isSafeInteger(s.totalIngotProduced)||
     !Number.isSafeInteger(s.mission.soldOre)||!Number.isSafeInteger(s.mission.soldIngot)||
-    !Number.isSafeInteger(s.mission.profitStreakTicks)||!["M1","M2","M3","M4","DONE"].includes(s.mission.activeId)||
+    !Number.isSafeInteger(s.mission.profitStreakTicks)||!["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(s.mission.activeId)||
     typeof s.paused!=="boolean"||typeof s.introSeen!=="boolean"||typeof s.introOpen!=="boolean"||
     typeof s.tutorialEnabled!=="boolean"||s.rollingEvents.length>60)throw Error("Save validation failed. Your data has not been overwritten.");
   const spots=new Set<string>();
   for(const e of s.entities){
     if(!Number.isSafeInteger(e.id)||!Number.isInteger(e.x)||!Number.isInteger(e.y)||
       e.x<0||e.x>=12||e.y<0||e.y>=12||!["N","E","S","W"].includes(e.direction)||
-      !["iron_mine","furnace","conveyor","sell_terminal"].includes(e.kind)||
+      !["iron_mine","coal_mine","furnace","assembler","advanced_furnace","conveyor","sell_terminal"].includes(e.kind)||
       !Number.isInteger(e.oreInput)||e.oreInput<0||e.oreInput>4||
       (e.cycle!==null&&(!Number.isInteger(e.cycle)||e.cycle<0))||
-      ![null,"iron_ore","iron_ingot"].includes(e.output)||![null,"iron_ore","iron_ingot"].includes(e.belt)
+      ![null,"iron_ore","iron_ingot","coal","gear","steel"].includes(e.output)||![null,"iron_ore","iron_ingot","coal","gear","steel"].includes(e.belt)
     )throw Error("Invalid entity in save. Data preserved.");
     const key=e.x+","+e.y;if(spots.has(key))throw Error("Overlapping entities in save. Data preserved.");spots.add(key);
   }
@@ -43,7 +43,31 @@ export function validateSave(value:unknown):GameState{
     throw Error("Save lacks the permanent sales terminal. Data preserved.");
   for(const e of s.rollingEvents)if(!Number.isSafeInteger(e.tick)||!Number.isSafeInteger(e.revenueCents)||!Number.isSafeInteger(e.costCents))
     throw Error("Corrupt accounting history. Data preserved.");
-  return s;
+  const n=structuredClone(s);
+  if(n.schemaVersion===1){
+    n.schemaVersion=2;
+    n.coalDeposits=COAL_DEPOSITS.map(d=>({...d}));
+    n.technologies={coal_extraction:false,mechanical_components:false,advanced_smelting:false};
+    for(const e of n.entities){
+      if(e.kind==="furnace"){
+        e.inputBuffers={iron_ore:e.oreInput};
+        e.reservedInputs=e.cycle!==null?{iron_ore:2}:{};
+      }else{
+        e.inputBuffers={};
+        e.reservedInputs={};
+      }
+    }
+  }
+  if(n.schemaVersion===2){
+    if(!n.technologies||!n.coalDeposits)throw Error("Invalid v2 progression state. Data preserved.");
+    for(const e of n.entities){
+      if(!e.inputBuffers||!e.reservedInputs)throw Error("Invalid v2 inventory. Data preserved.");
+      for(const inventory of [e.inputBuffers,e.reservedInputs]){
+        if(Object.values(inventory).some(q=>!Number.isSafeInteger(q)||q<0||q>4))throw Error("Invalid v2 inventory quantity. Data preserved.");
+      }
+    }
+  }
+  return n;
 }
 // All writes and deletes share one queue. Capture snapshots before enqueueing.
 let pending:Promise<void>=Promise.resolve();

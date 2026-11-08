@@ -105,7 +105,7 @@ export function tick(state:GameState):GameState {
   // Phase 3: start any processor when its typed inputs satisfy its declarative recipe.
   for(const e of s.entities){
     if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle===null&&e.output===null){
-      const recipe=e.kind==="assembler"?RECIPES.gear:e.kind==="advanced_furnace"?RECIPES.steel:RECIPES.iron_ingot;
+      const recipe=recipeFor(e.kind)!;
       const inventory={...(e.inputBuffers??{})};
       if(Object.entries(recipe.input).every(([item,qty])=>(inventory[item as Item]??0)>=qty)){
         for(const [item,qty] of Object.entries(recipe.input)){

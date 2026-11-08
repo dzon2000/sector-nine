@@ -32,6 +32,7 @@ export function tick(state:GameState):GameState {
       if(e.cycle>0)e.cycle--;
       if(e.cycle===0&&e.output===null){
         const recipe=e.kind==="assembler"?RECIPES.gear:e.kind==="advanced_furnace"?RECIPES.steel:RECIPES.iron_ingot;
+        for(const [item,qty] of Object.entries(e.reservedInputs??recipe.input))audit(item as Item,"consumed",qty);
         e.output=recipe.output;e.cycle=null;e.reservedInputs={};audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
       }
     }
@@ -106,7 +107,6 @@ export function tick(state:GameState):GameState {
       if(Object.entries(recipe.input).every(([item,qty])=>(inventory[item as Item]??0)>=qty)){
         for(const [item,qty] of Object.entries(recipe.input)){
           inventory[item as Item]=(inventory[item as Item]??0)-qty;
-          audit(item as Item,"consumed",qty);
         }
         e.inputBuffers=inventory;e.reservedInputs={...recipe.input};e.cycle=recipe.durationTicks;
         if(e.kind==="furnace")e.oreInput=inventory.iron_ore??0;

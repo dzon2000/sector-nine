@@ -17,7 +17,7 @@ export const RECIPES: Record<RecipeId,Recipe> = {
 };
 export type Kind = "iron_mine" | "coal_mine" | "furnace" | "assembler" | "advanced_furnace" | "conveyor" | "sell_terminal";
 export type Status = "working" | "waiting_for_inputs" | "blocked_output" | "paused";
-export type MissionId = "M1" | "M2" | "M3" | "M4" | "DONE";
+export type MissionId = "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "DONE";
 export interface Entity {
   id: number; kind: Kind; x: number; y: number; direction: Direction;
   output: Item | null; belt: Item | null; oreInput: number;
@@ -31,8 +31,9 @@ export interface GameState {
   arbiters: Record<string, number>;
   rollingEvents: Accounting[]; lastEvent: Accounting;
   totalOreProduced: number; totalIngotProduced: number;
-  mission: { activeId: MissionId; soldOre: number; soldIngot: number; profitStreakTicks: number; };
+  mission: { activeId: MissionId; soldOre: number; soldIngot: number; profitStreakTicks: number; soldCoal?:number; soldGear?:number; soldSteel?:number; };
   introSeen: boolean; introOpen: boolean; tutorialEnabled: boolean;
+  foundryStorySeen?:boolean;
   coalDeposits?: {x:number;y:number}[];
   sales?: Record<Item,number>;
   materialLedger?: MaterialLedger;
@@ -62,8 +63,8 @@ export function createGame():GameState {
     nextId:2,arbiters:{},rollingEvents:[],lastEvent:{tick:0,revenueCents:0,costCents:0},
     totalOreProduced:0,totalIngotProduced:0,
     entities:[{id:1,kind:"sell_terminal",x:10,y:5,direction:"W",output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs"}],
-    mission:{activeId:"M1",soldOre:0,soldIngot:0,profitStreakTicks:0},
-    introSeen:false,introOpen:true,tutorialEnabled:true };
+    mission:{activeId:"M1",soldOre:0,soldIngot:0,soldCoal:0,soldGear:0,soldSteel:0,profitStreakTicks:0},
+    introSeen:false,introOpen:true,tutorialEnabled:true,foundryStorySeen:false };
 }
 export const money = (cents:number) => (cents/100).toFixed(2)+" Cr";
 export function stats(s:GameState) {

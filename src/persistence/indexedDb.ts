@@ -1,4 +1,4 @@
-import {COAL_DEPOSITS,ITEMS,emptyLedger,emptySales,type GameState} from "../domain/model";
+import {COAL_DEPOSITS,ITEMS,emptyLedger,emptySales,stockOnHand,recipeFor,type GameState,type Item} from "../domain/model";
 const DATABASE="sector-nine-v0.1";
 const STORE="snapshots";
 function openDb():Promise<IDBDatabase>{
@@ -64,6 +64,10 @@ export function validateSave(value:unknown):GameState{
         e.reservedInputs={};
       }
     }
+    // The new ledger starts now. Preserve existing material as opening stock,
+    // never as newly produced inventory. Historical costs and sales remain historical.
+    const opening=stockOnHand(n.entities);
+    for(const item of ITEMS)n.materialLedger![item].opening=opening[item];
   }
   if(n.schemaVersion===2){
     // Earlier v0.2 development snapshots predate the Foundry interlude fields.
@@ -75,24 +79,63 @@ export function validateSave(value:unknown):GameState{
     if(n.mission.soldCoal===undefined)n.mission.soldCoal=0;
     if(n.mission.soldGear===undefined)n.mission.soldGear=0;
     if(n.mission.soldSteel===undefined)n.mission.soldSteel=0;
-    if(!n.technologies||!n.coalDeposits)throw Error("Invalid v2 progression state. Data preserved.");
+    const technologyNames=["coal_extraction","mechanical_components","advanced_smelting"];
+    const tech=n.technologies;
+    if(!tech||typeof tech!=="object"||Array.isArray(tech)||
+       Object.keys(tech).length!==technologyNames.length||
+       Object.keys(tech).some(key=>!technologyNames.includes(key))||
+       technologyNames.some(key=>typeof tech[key as keyof typeof tech]!=="boolean"))
+      throw Error("Invalid v2 technology state. Data preserved.");
+    if(!Array.isArray(n.coalDeposits)||n.coalDeposits.length!==COAL_DEPOSITS.length||
+       n.coalDeposits.some((d,i)=>!d||typeof d!=="object"||Object.keys(d).length!==2||
+         d.x!==COAL_DEPOSITS[i].x||d.y!==COAL_DEPOSITS[i].y))
+      throw Error("Invalid v2 coal deposits. Data preserved.");
     if(typeof n.foundryStorySeen!=="boolean"||
-       !Number.isSafeInteger(n.mission.soldCoal)||n.mission.soldCoal!<0||
-       !Number.isSafeInteger(n.mission.soldGear)||n.mission.soldGear!<0||
-       !Number.isSafeInteger(n.mission.soldSteel)||n.mission.soldSteel!<0)
+       !Number.isSafeInteger(n.mission.soldCoal)||n.mission.soldCoal<0||
+       !Number.isSafeInteger(n.mission.soldGear)||n.mission.soldGear<0||
+       !Number.isSafeInteger(n.mission.soldSteel)||n.mission.soldSteel<0)
       throw Error("Invalid v2 mission or narrative state. Data preserved.");
-    if(!n.sales||!n.materialLedger||!Number.isSafeInteger(n.totalRevenueCents)||!Number.isSafeInteger(n.totalCostCents))throw Error("Invalid v2 economy ledger. Data preserved.");
+    if(!n.sales||typeof n.sales!=="object"||Array.isArray(n.sales)||
+       !n.materialLedger||typeof n.materialLedger!=="object"||Array.isArray(n.materialLedger)||
+       !Number.isSafeInteger(n.totalRevenueCents)||!Number.isSafeInteger(n.totalCostCents)||
+       Object.keys(n.sales).length!==ITEMS.length||
+       Object.keys(n.materialLedger).length!==ITEMS.length||
+       Object.keys(n.sales).some(item=>!ITEMS.includes(item as Item))||
+       Object.keys(n.materialLedger).some(item=>!ITEMS.includes(item as Item)))
+      throw Error("Invalid v2 economy ledger. Data preserved.");
+    // Pre-review v2 snapshots did not store opening stock. Infer the epoch
+    // opening from physical stock and existing audited events; never count
+    // historical material as newly produced.
+    const stock=stockOnHand(n.entities);
     for(const item of ITEMS){
       if(!Number.isSafeInteger(n.sales[item])||n.sales[item]<0)throw Error("Invalid v2 sales history. Data preserved.");
-      for(const field of ["produced","consumed","sold","demolished"] as const){
-        if(!Number.isSafeInteger(n.materialLedger[item]?.[field])||n.materialLedger[item][field]<0)throw Error("Invalid v2 material audit. Data preserved.");
+      const ledger=n.materialLedger[item];
+      if(!ledger||typeof ledger!=="object"||Array.isArray(ledger))throw Error("Invalid v2 material audit. Data preserved.");
+      const fields=["opening","produced","consumed","sold","demolished"] as const;
+      if(ledger.opening===undefined&&Object.keys(ledger).length===4){
+        const opening=stock[item]-ledger.produced+ledger.consumed+ledger.sold+ledger.demolished;
+        ledger.opening=opening;
+      }
+      if(Object.keys(ledger).length!==fields.length||Object.keys(ledger).some(key=>!fields.includes(key as typeof fields[number])))
+        throw Error("Invalid v2 material audit keys. Data preserved.");
+      for(const field of fields){
+        if(!Number.isSafeInteger(ledger[field])||ledger[field]<0)
+          throw Error("Invalid v2 material audit. Data preserved.");
       }
     }
     for(const e of n.entities){
-      if(!e.inputBuffers||!e.reservedInputs)throw Error("Invalid v2 inventory. Data preserved.");
+      const recipe=recipeFor(e.kind);
       for(const inventory of [e.inputBuffers,e.reservedInputs]){
-        if(Object.values(inventory).some(q=>!Number.isSafeInteger(q)||q<0||q>4))throw Error("Invalid v2 inventory quantity. Data preserved.");
+        if(!inventory||typeof inventory!=="object"||Array.isArray(inventory))
+          throw Error("Invalid v2 inventory. Data preserved.");
+        for(const [item,quantity] of Object.entries(inventory)){
+          if(!ITEMS.includes(item as Item)||!recipe?.input[item as Item]||
+             !Number.isSafeInteger(quantity)||quantity<0||quantity>4)
+            throw Error("Invalid v2 inventory type or quantity. Data preserved.");
+        }
       }
+      if(e.kind==="furnace"&&e.oreInput!==(e.inputBuffers?.iron_ore??0))
+        throw Error("Inconsistent furnace legacy buffer and typed inventory. Data preserved.");
     }
   }
   return n;

@@ -2,11 +2,29 @@ export type Direction = "N" | "E" | "S" | "W";
 export type Item = "iron_ore" | "iron_ingot" | "coal" | "gear" | "steel";
 export type RecipeId = "iron_ingot" | "gear" | "steel";
 export type Inventory = Partial<Record<Item,number>>;
-export type MaterialEvent = "produced" | "consumed" | "sold" | "demolished";
+export type MaterialEvent = "opening" | "produced" | "consumed" | "sold" | "demolished";
 export type MaterialLedger = Record<Item,Record<MaterialEvent,number>>;
 export const ITEMS: readonly Item[]=["iron_ore","iron_ingot","coal","gear","steel"];
+export const PROCESSORS:readonly Kind[]=["furnace","assembler","advanced_furnace"];
+export function recipeFor(kind:Kind):Recipe|null{
+  if(kind==="furnace")return RECIPES.iron_ingot;
+  if(kind==="assembler")return RECIPES.gear;
+  if(kind==="advanced_furnace")return RECIPES.steel;
+  return null;
+}
+export function stockOnHand(entities:readonly Entity[]):Record<Item,number>{
+  const stock=emptySales();
+  for(const e of entities){
+    if(e.output)stock[e.output]++;
+    if(e.belt)stock[e.belt]++;
+    for(const item of ITEMS){
+      stock[item]+=(e.inputBuffers?.[item]??0)+(e.reservedInputs?.[item]??0);
+    }
+  }
+  return stock;
+}
 export function emptyLedger():MaterialLedger {
-  return Object.fromEntries(ITEMS.map(item=>[item,{produced:0,consumed:0,sold:0,demolished:0}])) as MaterialLedger;
+  return Object.fromEntries(ITEMS.map(item=>[item,{opening:0,produced:0,consumed:0,sold:0,demolished:0}])) as MaterialLedger;
 }
 export function emptySales():Record<Item,number>{return Object.fromEntries(ITEMS.map(item=>[item,0])) as Record<Item,number>;}
 export interface Recipe { input: Inventory; output: Item; durationTicks: number; operatingCostCents: number; }

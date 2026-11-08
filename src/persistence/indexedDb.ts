@@ -45,23 +45,38 @@ export function validateSave(value:unknown):GameState{
     throw Error("Corrupt accounting history. Data preserved.");
   return s;
 }
+// All writes and deletes share one queue. Capture snapshots before enqueueing.
+let pending:Promise<void>=Promise.resolve();
+function enqueue(operation:()=>Promise<void>):Promise<void>{
+  const task=pending.catch(()=>undefined).then(operation);
+  pending=task.catch(()=>undefined);
+  return task;
+}
+async function writeSnapshot(state:GameState):Promise<void>{
+  const db=await openDb();
+  await transaction<void>(db,"readwrite",(store,resolve,reject)=>{
+    const req=store.put(state,"slot1");
+    req.onsuccess=()=>resolve();req.onerror=()=>reject(req.error);
+  });
+}
+async function deleteSnapshot():Promise<void>{
+  const db=await openDb();
+  await transaction<void>(db,"readwrite",(store,resolve,reject)=>{
+    const req=store.delete("slot1");req.onsuccess=()=>resolve();req.onerror=()=>reject(req.error);
+  });
+}
 export async function loadGame():Promise<GameState|null>{
+  await pending;
   const db=await openDb();
   const value=await transaction<unknown>(db,"readonly",(store,resolve,reject)=>{
     const req=store.get("slot1");req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
   });
   return value===undefined?null:validateSave(value);
 }
-export async function saveGame(state:GameState):Promise<void>{
-  const db=await openDb();
-  await transaction<void>(db,"readwrite",(store,resolve,reject)=>{
-    const req=store.put(structuredClone(state),"slot1");
-    req.onsuccess=()=>resolve();req.onerror=()=>reject(req.error);
-  });
+export function saveGame(state:GameState):Promise<void>{
+  const snapshot=structuredClone(state);
+  return enqueue(()=>writeSnapshot(snapshot));
 }
-export async function eraseGame():Promise<void>{
-  const db=await openDb();
-  await transaction<void>(db,"readwrite",(store,resolve,reject)=>{
-    const req=store.delete("slot1");req.onsuccess=()=>resolve();req.onerror=()=>reject(req.error);
-  });
+export function eraseGame():Promise<void>{
+  return enqueue(deleteSnapshot);
 }

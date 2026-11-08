@@ -7,7 +7,7 @@ function build(kind:"iron_mine"|"furnace"|"conveyor",x:number,y:number,s:GameSta
 }
 describe("reference economy",()=>{
  it("AC05/AC10 produces ingots with no duplicated inventory",()=>{
-  let s=createGame();s=build("iron_mine",3,5,s);s=build("conveyor",4,5,s);s=build("furnace",5,5,s);
+  let s=createGame();s.mission.activeId="M3";s=build("iron_mine",3,5,s);s=build("conveyor",4,5,s);s=build("furnace",5,5,s);
   for(let x=6;x<=9;x++)s=build("conveyor",x,5,s);
   s=runTicks(setPause(s,false),1200);
   const p=stats(s)!;

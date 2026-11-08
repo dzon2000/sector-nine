@@ -1,19 +1,24 @@
-import {createGame,DEFINITIONS,DEPOSITS,STEP,rotate,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
+import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,STEP,rotate,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
 export type CommandResult={ok:boolean;message:string;state:GameState};
 function copy(s:GameState):GameState{return structuredClone(s);}
 export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:number,direction:Direction):CommandResult {
   if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0||x>=s.width||y>=s.height)
     return {ok:false,message:"Tile outside the map.",state:s};
   if(s.entities.some(e=>e.x===x&&e.y===y))return {ok:false,message:"Tile is occupied.",state:s};
+  if(kind==="furnace"&&["M1","M2"].includes(s.mission.activeId))return {ok:false,message:"Complete M2 to unlock the furnace.",state:s};
+  const technology=({coal_mine:"coal_extraction",assembler:"mechanical_components",advanced_furnace:"advanced_smelting"} as const)[kind as "coal_mine"|"assembler"|"advanced_furnace"];
+  if(technology&&!s.technologies?.[technology])return {ok:false,message:"Technology not unlocked.",state:s};
+  if(kind==="coal_mine"&&!COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Coal mines require a coal deposit.",state:s};
   if(kind==="iron_mine"&&!DEPOSITS.some(d=>d.x===x&&d.y===y))
     return {ok:false,message:"Mines must be placed on an iron deposit.",state:s};
+  if(kind!=="coal_mine"&&COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Deposit reserved for coal mining.",state:s};
   if(kind!=="iron_mine"&&DEPOSITS.some(d=>d.x===x&&d.y===y))
     return {ok:false,message:"Deposit reserved for an iron mine.",state:s};
   const price=DEFINITIONS[kind].price;
   if(s.balanceCents<price)return {ok:false,message:"Insufficient credits for construction.",state:s};
   const n=copy(s);
   n.balanceCents-=price;
-  n.entities.push({id:n.nextId++,kind,x,y,direction,output:null,belt:null,oreInput:0,cycle:null,status:"waiting_for_inputs"});
+  n.entities.push({id:n.nextId++,kind,x,y,direction,output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs"});
   return {ok:true,message:`${DEFINITIONS[kind].label} constructed for ${(price/100).toFixed(2)} Cr.`,state:n};
 }
 export function turn(s:GameState,id:number):CommandResult {

@@ -53,6 +53,7 @@ export function tick(state:GameState):GameState {
     planned.set(id,chosen);
   }
   // Resolve dependencies through chains without allowing duplicated or repeated movement.
+  const bySource=new Map<number,Request>([...planned.values()].map(r=>[r.source.id,r]));
   const approved=new Set<number>();
   const visiting=new Set<number>();
   function canMove(r:Request):boolean{
@@ -65,7 +66,7 @@ export function tick(state:GameState):GameState {
     else if(r.target.kind==="conveyor"){
       if(r.target.belt===null)possible=true;
       else{
-        const next=planned.get(r.target.id);
+        const next=bySource.get(r.target.id);
         possible=!!next&&canMove(next);
       }
     }

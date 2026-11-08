@@ -11,6 +11,7 @@ describe("v0.1 core",()=>{
   const s=createGame();expect(place(s,"iron_mine",4,5,"E").state).toBe(s);
   expect(place(s,"furnace",10,5,"E").ok).toBe(false);
   let n=s;for(let i=0;i<10;i++)n=build(n,"conveyor",i,0);
+  n.mission.activeId="M3";
   expect(place(n,"furnace",4,4,"E").ok).toBe(true);
  });
  it("AC03 refunds 75% capital",()=>{let s=build(createGame(),"iron_mine",3,5);expect(s.balanceCents).toBe(25500);expect(remove(s,2,false).ok).toBe(false);s=remove(s,2,true).state;expect(s.balanceCents).toBe(28875);});

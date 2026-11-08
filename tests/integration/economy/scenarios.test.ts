@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {createGame,DEFINITIONS,ITEMS,stats,type Direction,type GameState,type Item,type Kind} from "../../../src/domain/model";
-import {place} from "../../../src/game/commands";
+import {place,remove} from "../../../src/game/commands";
 import {runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
 
@@ -108,6 +108,25 @@ describe("v0.2 deterministic economy: 600-tick warm-up and 240-tick measurement 
           `Conservation failed for ${item}: ${JSON.stringify(l)}`).toBe(physical[item]);
       }
     }
+  });
+  it("explicit demolition accounts for all in-flight and buffered materials",()=>{
+    let state=setup(gears);
+    state=runTicks(state,125);
+    const machine=state.entities.find(e=>e.kind==="assembler")!;
+    const before=structuredClone(state.materialLedger!);
+    const destroyed={...machine.reservedInputs};
+    for(const item of ITEMS)destroyed[item]=(destroyed[item]??0)+(machine.inputBuffers?.[item]??0)+(machine.output===item?1:0);
+    const result=remove(state,machine.id,true);
+    expect(result.ok).toBe(true);
+    for(const item of ITEMS){
+      expect(result.state.materialLedger![item].demolished-before[item].demolished).toBe(destroyed[item]??0);
+    }
+  });
+  it("capital investments do not enter operating revenue or cost totals",()=>{
+    const state=runTicks(setup(steel),840);
+    const capitalCents=steel.reduce((sum,[kind])=>sum+DEFINITIONS[kind].price,0);
+    expect(state.balanceCents).toBe(1000000-capitalCents+(state.totalRevenueCents??0)-(state.totalCostCents??0));
+    expect((state.totalRevenueCents??0)).toBeGreaterThan(0);
   });
   it("two simultaneous independent gear and steel lines fit and both sell",()=>{
     const result=measure([...gears,...steel]);

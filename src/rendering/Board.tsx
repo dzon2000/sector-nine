@@ -1,4 +1,4 @@
-import {useEffect,useRef} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Application,Container,Graphics,Text,TextStyle} from "pixi.js";
 import {DEPOSITS,STEP,type Direction,type GameState,type Kind} from "../domain/model";
 export type Tool="select"|"demolish"|"iron_mine"|"furnace"|"conveyor";
@@ -7,6 +7,7 @@ const fill:Record<Kind,number>={iron_mine:0xc58d53,furnace:0xd76446,conveyor:0x5
 export function Board({state,tool,direction,onTile,selectedId}:{state:GameState;tool:Tool;direction:Direction;onTile:(x:number,y:number)=>void;selectedId:number|null}){
   const element=useRef<HTMLDivElement>(null);
   const app=useRef<Application|null>(null);
+  const [initialized,setInitialized]=useState(false);
   const action=useRef(onTile);action.current=onTile;
   useEffect(()=>{
     let cancelled=false;
@@ -15,13 +16,13 @@ export function Board({state,tool,direction,onTile,selectedId}:{state:GameState;
       await instance.init({width:TILE*12,height:TILE*12,background:0x101a27,antialias:true,resolution:Math.min(devicePixelRatio,2),autoDensity:true});
       if(cancelled){instance.destroy(true);return;}
       element.current?.appendChild(instance.canvas);
-      app.current=instance;
+      app.current=instance;setInitialized(true);
     })();
     return ()=>{cancelled=true;if(app.current===instance){app.current=null;instance.destroy(true);}};
   },[]);
   useEffect(()=>{
     const instance=app.current;
-    if(!instance)return;
+    if(!instance||!initialized)return;
     const root=new Container();instance.stage.removeChildren().forEach(c=>c.destroy({children:true}));
     instance.stage.addChild(root);
     for(let y=0;y<12;y++)for(let x=0;x<12;x++){
@@ -51,6 +52,6 @@ export function Board({state,tool,direction,onTile,selectedId}:{state:GameState;
         const t=new Text({text:String(count),style:new TextStyle({fontSize:10,fill:0x101a27,fontWeight:"bold"})});t.position.set(X+30,Y+5);root.addChild(t);
       }
     }
-  },[state,tool,direction,selectedId]);
+  },[state,tool,direction,selectedId,initialized]);
   return <div className="board" ref={element} aria-label="12 by 12 factory map" data-testid="factory-board"/>;
 }

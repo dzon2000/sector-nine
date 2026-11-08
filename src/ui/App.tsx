@@ -108,7 +108,7 @@ export default function App(){
   if(!game)return null;
   const kpi=stats(game),mission=MISSIONS[game.mission.activeId];
   const foundryActive=["M5","M6","M7","DONE"].includes(game.mission.activeId);
-  const foundryStoryOpen=foundryActive&&(!game.foundryStorySeen||replayFoundry);
+  const foundryStoryOpen=(["M5","M6","M7"].includes(game.mission.activeId)&&!game.foundryStorySeen)||(foundryActive&&replayFoundry);
   return <div className="app">
     <header><div className="brand">SEKTOR <strong>9</strong><small>INDUSTRIAL OPERATIONS</small></div>
       <div className="kpis"><div>Cash<strong data-testid="cash">{money(game.balanceCents)}</strong></div><div>Revenue / min<strong>{kpi?money(kpi.revenueCents):"Collecting data"}</strong></div><div>Operating cost / min<strong>{kpi?money(kpi.costCents):"Collecting data"}</strong></div><div>Profit / min<strong data-testid="profit">{kpi?money(kpi.profitCents):"Collecting data"}</strong></div></div>

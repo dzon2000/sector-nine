@@ -1,4 +1,4 @@
-import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,STEP,rotate,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
+import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,ITEMS,STEP,rotate,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
 export type CommandResult={ok:boolean;message:string;state:GameState};
 function copy(s:GameState):GameState{return structuredClone(s);}
 export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:number,direction:Direction):CommandResult {
@@ -31,6 +31,15 @@ export function remove(s:GameState,id:number,confirmed=false):CommandResult {
   if(!e||e.kind==="sell_terminal")return {ok:false,message:"Sales terminal cannot be removed.",state:s};
   if(!confirmed)return {ok:false,message:"Confirm demolition. Buffered items will be destroyed.",state:s};
   const n=copy(s);
+  if(n.materialLedger){
+    const demolish=(item:keyof typeof n.materialLedger,quantity:number)=>{n.materialLedger![item].demolished+=quantity;};
+    if(e.output)demolish(e.output,1);
+    if(e.belt)demolish(e.belt,1);
+    if(e.kind==="furnace"){
+      if(e.oreInput>0)demolish("iron_ore",e.oreInput);
+    }else for(const item of ITEMS)demolish(item,e.inputBuffers?.[item]??0);
+    for(const item of ITEMS)demolish(item,e.reservedInputs?.[item]??0);
+  }
   n.entities=n.entities.filter(e=>e.id!==id);
   const refund=Math.floor(DEFINITIONS[e.kind].price*0.75);
   n.balanceCents+=refund;

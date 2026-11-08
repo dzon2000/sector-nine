@@ -110,6 +110,9 @@ describe("WP6 new-player full campaign from 300 Cr (V02-AC-22)",()=>{
     expect(c.state.mission.soldGear).toBe(8);
     expect(c.state.sales!.gear).toBeGreaterThanOrEqual(8);
     research(c,"advanced_smelting");
+    // Continue the existing profitable lines until the player can afford the new furnace.
+    // No cash injection, debug state or economic coefficient changes.
+    c.state=runTicks(c.state,240);
     // The shared coal+ingot conveyor is replaced with the dual-input steel furnace.
     demolish(c,7,5);
     construct(c,["advanced_furnace",7,5,"E"]);

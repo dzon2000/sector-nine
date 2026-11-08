@@ -206,7 +206,7 @@ describe("AC-12: mission edges",()=>{
     s.rollingEvents.push({tick:119,revenueCents:100,costCents:0});
     s.rollingEvents.shift();
     updateMission(s);
-    expect(s.mission.activeId).toBe("DONE");
+    expect(s.mission.activeId).toBe("M5");
   });
   it("resets M4 streak immediately if profit falls below threshold",()=>{
     const s=createGame();s.mission.activeId="M4";s.mission.profitStreakTicks=25;

@@ -20,18 +20,19 @@ export function tick(state:GameState):GameState {
   const s:GameState=structuredClone(state);
   s.tick++;
   let revenueCents=0,costCents=0;
+  const audit=(item:Item,event:"produced"|"consumed"|"sold"|"demolished",quantity=1)=>{if(s.materialLedger)s.materialLedger[item][event]+=quantity;};
   // Phase 1: finish due cycles; output cannot be replaced if occupied.
   for(const e of s.entities){
     if(e.kind==="iron_mine"||e.kind==="coal_mine"){
       if(e.output===null){
         e.cycle=(e.cycle??(e.kind==="coal_mine"?3:2))-1;
-        if(e.cycle===0){e.output=e.kind==="coal_mine"?"coal":"iron_ore";e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;costCents+=e.kind==="coal_mine"?80:60;}
+        if(e.cycle===0){e.output=e.kind==="coal_mine"?"coal":"iron_ore";e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;audit(e.output!,"produced");costCents+=e.kind==="coal_mine"?80:60;}
       }
     }else if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle!==null){
       if(e.cycle>0)e.cycle--;
       if(e.cycle===0&&e.output===null){
         const recipe=e.kind==="assembler"?RECIPES.gear:e.kind==="advanced_furnace"?RECIPES.steel:RECIPES.iron_ingot;
-        e.output=recipe.output;e.cycle=null;e.reservedInputs={};costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
+        e.output=recipe.output;e.cycle=null;e.reservedInputs={};audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
       }
     }
   }
@@ -91,6 +92,8 @@ export function tick(state:GameState):GameState {
     else if(t.kind==="assembler"||t.kind==="advanced_furnace")t.inputBuffers={...(t.inputBuffers??{}),[r.item]:(t.inputBuffers?.[r.item]??0)+1};
     else if(t.kind==="sell_terminal"){
       revenueCents+=REVENUE[r.item];
+      if(s.sales)s.sales[r.item]++;
+      audit(r.item,"sold");
       if(r.item==="iron_ore")s.mission.soldOre++;
       else if(r.item==="iron_ingot")s.mission.soldIngot++;
     }
@@ -101,7 +104,10 @@ export function tick(state:GameState):GameState {
       const recipe=e.kind==="assembler"?RECIPES.gear:e.kind==="advanced_furnace"?RECIPES.steel:RECIPES.iron_ingot;
       const inventory=e.kind==="furnace"?{...e.inputBuffers,iron_ore:e.oreInput}:e.inputBuffers??{};
       if(Object.entries(recipe.input).every(([item,qty])=>(inventory[item as Item]??0)>=qty)){
-        for(const [item,qty] of Object.entries(recipe.input))inventory[item as Item]=(inventory[item as Item]??0)-qty;
+        for(const [item,qty] of Object.entries(recipe.input)){
+          inventory[item as Item]=(inventory[item as Item]??0)-qty;
+          audit(item as Item,"consumed",qty);
+        }
         e.inputBuffers=inventory;e.reservedInputs={...recipe.input};e.cycle=recipe.durationTicks;
         if(e.kind==="furnace")e.oreInput=inventory.iron_ore??0;
       }
@@ -113,6 +119,8 @@ export function tick(state:GameState):GameState {
   }
   // Phase 4: accounting and progression; capital expenditure is intentionally excluded.
   s.balanceCents+=revenueCents-costCents;
+  if(s.totalRevenueCents!==undefined)s.totalRevenueCents+=revenueCents;
+  if(s.totalCostCents!==undefined)s.totalCostCents+=costCents;
   s.lastEvent={tick:s.tick,revenueCents,costCents};
   s.rollingEvents.push(s.lastEvent);
   if(s.rollingEvents.length>60)s.rollingEvents.shift();

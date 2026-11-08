@@ -50,7 +50,7 @@ export function createGame():GameState {
     coalDeposits:COAL_DEPOSITS.map(d=>({...d})),technologies:{coal_extraction:false,mechanical_components:false,advanced_smelting:false},
     nextId:2,arbiters:{},rollingEvents:[],lastEvent:{tick:0,revenueCents:0,costCents:0},
     totalOreProduced:0,totalIngotProduced:0,
-    entities:[{id:1,kind:"sell_terminal",x:10,y:5,direction:"W",output:null,belt:null,oreInput:0,cycle:null,status:"waiting_for_inputs"}],
+    entities:[{id:1,kind:"sell_terminal",x:10,y:5,direction:"W",output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs"}],
     mission:{activeId:"M1",soldOre:0,soldIngot:0,profitStreakTicks:0},
     introSeen:false,introOpen:true,tutorialEnabled:true };
 }

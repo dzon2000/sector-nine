@@ -46,6 +46,9 @@ export function validateSave(value:unknown):GameState{
   const n=structuredClone(s);
   if(n.schemaVersion===1){
     n.schemaVersion=2;
+    if(n.mission.activeId==="DONE")n.mission.activeId="M5";
+    n.mission.soldCoal=0;n.mission.soldGear=0;n.mission.soldSteel=0;
+    n.foundryStorySeen=false;
     n.coalDeposits=COAL_DEPOSITS.map(d=>({...d}));
     n.technologies={coal_extraction:false,mechanical_components:false,advanced_smelting:false};
     n.sales={...emptySales(),iron_ore:n.mission.soldOre,iron_ingot:n.mission.soldIngot};
@@ -64,6 +67,11 @@ export function validateSave(value:unknown):GameState{
   }
   if(n.schemaVersion===2){
     if(!n.technologies||!n.coalDeposits)throw Error("Invalid v2 progression state. Data preserved.");
+    if(typeof n.foundryStorySeen!=="boolean"||
+       !Number.isSafeInteger(n.mission.soldCoal)||n.mission.soldCoal!<0||
+       !Number.isSafeInteger(n.mission.soldGear)||n.mission.soldGear!<0||
+       !Number.isSafeInteger(n.mission.soldSteel)||n.mission.soldSteel!<0)
+      throw Error("Invalid v2 mission or narrative state. Data preserved.");
     if(!n.sales||!n.materialLedger||!Number.isSafeInteger(n.totalRevenueCents)||!Number.isSafeInteger(n.totalCostCents))throw Error("Invalid v2 economy ledger. Data preserved.");
     for(const item of ITEMS){
       if(!Number.isSafeInteger(n.sales[item])||n.sales[item]<0)throw Error("Invalid v2 sales history. Data preserved.");

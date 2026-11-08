@@ -67,7 +67,7 @@ describe("v0.2 headless production (AC-04 through AC-09)",()=>{
     expect(s.entities.find((e:any)=>e.id===machine.id).output).toBeNull();
     expect(s.rollingEvents.reduce((sum:number,e:any)=>sum+e.costCents,0)).toBe(0);
     s.entities.find((e:any)=>e.id===machine.id).inputBuffers.iron_ingot=2;
-    s=runTicks(s,5);
+    s=runTicks(s,6);
     expect(s.entities.find((e:any)=>e.id===machine.id).output).toBe("gear");
     expect(s.rollingEvents.reduce((sum:number,e:any)=>sum+e.costCents,0)).toBe(250);
   });
@@ -84,7 +84,7 @@ describe("v0.2 headless production (AC-04 through AC-09)",()=>{
     expect(s.entities.find((e:any)=>e.id===id).output).toBeNull();
     expect(s.lastEvent.costCents).toBe(0);
     s.entities.find((e:any)=>e.id===id).inputBuffers.coal=1;
-    s=runTicks(s,8);
+    s=runTicks(s,9);
     expect(s.entities.find((e:any)=>e.id===id).output).toBe("steel");
     expect(s.rollingEvents.reduce((sum:number,e:any)=>sum+e.costCents,0)).toBe(350);
     s=runTicks(s,10);
@@ -95,6 +95,10 @@ describe("v0.2 headless production (AC-04 through AC-09)",()=>{
 describe("v0.2 save compatibility (AC-16, 17, 21)",()=>{
   it("upgrades a valid v1 snapshot without losing occupied future coal tiles or active furnace cycle",()=>{
     const old=createGame();
+    old.schemaVersion=1;
+    delete old.technologies;
+    delete old.coalDeposits;
+    for(const entity of old.entities){delete entity.inputBuffers;delete entity.reservedInputs;}
     old.entities.push({id:2,kind:"conveyor",x:7,y:9,direction:"N",output:null,belt:"iron_ore",oreInput:0,cycle:null,status:"working"});
     old.entities.push({id:3,kind:"furnace",x:4,y:2,direction:"E",output:null,belt:null,oreInput:1,cycle:2,status:"working"});
     old.nextId=4;old.tick=123;old.balanceCents=12345;

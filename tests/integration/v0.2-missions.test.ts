@@ -75,6 +75,20 @@ describe("WP5 mission progression and narrative (AC-13, AC-15)",()=>{
    expect(next.foundryStorySeen).toBe(false);
    expect(validateSave(next)).toEqual(next);
  });
+ it("upgrades pre-WP5 v2 snapshots once and preserves existing financial history",()=>{
+   const old=createGame();
+   old.mission.activeId="DONE";
+   old.balanceCents=9743;
+   old.tick=145;
+   delete old.foundryStorySeen;
+   delete old.mission.soldCoal;delete old.mission.soldGear;delete old.mission.soldSteel;
+   const restored=validateSave(old);
+   expect(restored.mission.activeId).toBe("M5");
+   expect(restored.balanceCents).toBe(9743);
+   expect(restored.tick).toBe(145);
+   expect(restored.foundryStorySeen).toBe(false);
+   expect(validateSave(restored)).toEqual(restored);
+ });
  it("persisted narrative acknowledgement survives reload without modifying economy",()=>{
    const s=atMission("M5");s.foundryStorySeen=true;
    const restored=validateSave(JSON.parse(JSON.stringify(s)));

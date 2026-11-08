@@ -192,7 +192,7 @@ describe("AC-12: mission edges",()=>{
   it("requires a full rolling window and exactly 60 qualifying ticks for M4",()=>{
     let s=running(createGame());
     s.mission.activeId="M4";
-    for(let i=1;i<=119;i++){
+    for(let i=1;i<=118;i++){
       s.tick=i;
       s.rollingEvents.push({tick:i,revenueCents:100,costCents:0});
       if(s.rollingEvents.length>60)s.rollingEvents.shift();
@@ -200,8 +200,8 @@ describe("AC-12: mission edges",()=>{
       expect(s.mission.activeId).toBe("M4");
       expect(s.mission.profitStreakTicks).toBe(Math.max(0,i-59));
     }
-    s.tick=120;
-    s.rollingEvents.push({tick:120,revenueCents:100,costCents:0});
+    s.tick=119;
+    s.rollingEvents.push({tick:119,revenueCents:100,costCents:0});
     s.rollingEvents.shift();
     updateMission(s);
     expect(s.mission.activeId).toBe("DONE");

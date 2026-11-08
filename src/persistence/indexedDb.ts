@@ -66,6 +66,15 @@ export function validateSave(value:unknown):GameState{
     }
   }
   if(n.schemaVersion===2){
+    // Earlier v0.2 development snapshots predate the Foundry interlude fields.
+    // Upgrade only absent fields; explicit invalid values are still rejected.
+    if(n.foundryStorySeen===undefined){
+      n.foundryStorySeen=false;
+      if(n.mission.activeId==="DONE")n.mission.activeId="M5";
+    }
+    if(n.mission.soldCoal===undefined)n.mission.soldCoal=0;
+    if(n.mission.soldGear===undefined)n.mission.soldGear=0;
+    if(n.mission.soldSteel===undefined)n.mission.soldSteel=0;
     if(!n.technologies||!n.coalDeposits)throw Error("Invalid v2 progression state. Data preserved.");
     if(typeof n.foundryStorySeen!=="boolean"||
        !Number.isSafeInteger(n.mission.soldCoal)||n.mission.soldCoal!<0||

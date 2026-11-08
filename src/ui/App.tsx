@@ -21,8 +21,9 @@ export default function App(){
   const [panel,setPanel]=useState(0);
   const [help,setHelp]=useState(false);
   const [ready,setReady]=useState(false);
+  const resetting=useRef(false);
   const change=useCallback((f:(s:GameState)=>GameState)=>{
-    const s=latest.current;if(!s)return;
+    const s=latest.current;if(!s||resetting.current)return;
     const next=f(s);latest.current=next;setGame(next);
   },[]);
   useEffect(()=>{
@@ -33,7 +34,7 @@ export default function App(){
     if(!ready||!game||error)return;
     const id=window.setInterval(()=>{
       const s=latest.current;
-      if(!s||s.paused||s.introOpen||document.hidden)return;
+      if(!s||resetting.current||s.paused||s.introOpen||document.hidden)return;
       const next=tick(s);latest.current=next;setGame(next);
       if(next.tick%10===0)void saveGame(next).catch(e=>setError(String(e)));
     },1000);
@@ -41,7 +42,7 @@ export default function App(){
   },[ready,game?.paused,game?.introOpen,error]);
   useEffect(()=>{
     const onVisibility=()=>{
-      if(document.hidden&&latest.current){
+      if(document.hidden&&latest.current&&!resetting.current){
         change(s=>setPause(s,true));
         void saveGame({...latest.current!,paused:true}).catch(e=>setError(String(e)));
       }
@@ -49,7 +50,7 @@ export default function App(){
     document.addEventListener("visibilitychange",onVisibility);
     return ()=>document.removeEventListener("visibilitychange",onVisibility);
   },[change]);
-  const persist=(s:GameState)=>{latest.current=s;setGame(s);void saveGame(s).catch(e=>setError(String(e)));};
+  const persist=(s:GameState)=>{if(resetting.current)return;latest.current=s;setGame(s);void saveGame(s).catch(e=>setError(String(e)));};
   const selectedEntity=game?.entities.find(e=>e.id===selected);
   const rotateChoice=()=>{
     if(tool!=="select"&&tool!=="demolish")setDirection(d=>rotate(d));
@@ -80,8 +81,9 @@ export default function App(){
     setMessage(result.message);if(result.ok){persist(result.state);setSelected(result.state.nextId-1);}
   };
   const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)void saveGame(s).catch(e=>setError(String(e)));};
-  const fresh=async()=>{if(!window.confirm("Factory Reset? All progress and your save will be permanently deleted."))return;
-    try{await eraseGame();const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setMessage("New factory started.");}catch(e){setError(String(e));}};
+  const fresh=async()=>{if(resetting.current||!window.confirm("Factory Reset? All progress and your save will be permanently deleted."))return;
+    resetting.current=true;
+    try{await eraseGame();const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
   if(error)return <main className="error"><h1>Save error</h1><p role="alert">{error}</p><p>Stored data has not been overwritten. Export or back up your IndexedDB data before resetting.</p><button onClick={()=>void fresh()}>Factory Reset</button></main>;
   if(!game)return null;

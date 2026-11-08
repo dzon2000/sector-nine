@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useRef,useState} from "react";
 import {begin,place,remove,reset,setPause,turn} from "../game/commands";
 import {MISSIONS} from "../game/missions";
+import {TECHNOLOGIES,TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type TechnologyId} from "../game/technologies";
 import {createGame,DEFINITIONS,DEPOSITS,money,rotate,stats,type Direction,type GameState} from "../domain/model";
 import {tick} from "../simulation/engine";
 import {loadGame,saveGame,eraseGame} from "../persistence/indexedDb";
@@ -20,6 +21,7 @@ export default function App(){
   const [error,setError]=useState<string|null>(null);
   const [panel,setPanel]=useState(0);
   const [help,setHelp]=useState(false);
+  const [showTechnology,setShowTechnology]=useState(false);
   const [ready,setReady]=useState(false);
   const resetting=useRef(false);
   const change=useCallback((f:(s:GameState)=>GameState)=>{
@@ -80,10 +82,19 @@ export default function App(){
     const result=place(game,tool,x,y,direction);
     setMessage(result.message);if(result.ok){persist(result.state);setSelected(result.state.nextId-1);}
   };
+  const buyTechnology=(id:TechnologyId)=>{
+    const current=latest.current;if(!current)return;
+    const status=technologyStatus(current,id);
+    if(status.status!=="available"||!status.affordable){setMessage(status.missing.join("; ")||"Insufficient credits.");return;}
+    if(!window.confirm(`Unlock ${TECHNOLOGIES[id].label} for ${money(TECHNOLOGIES[id].costCents)}? This is a one-time, permanent payment and cannot be undone.`))return;
+    const result=purchaseTechnology(current,id);
+    setMessage(result.message);
+    if(result.ok)persist(result.state);
+  };
   const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)void saveGame(s).catch(e=>setError(String(e)));};
   const fresh=async()=>{if(resetting.current||!window.confirm("Factory Reset? All progress and your save will be permanently deleted."))return;
     resetting.current=true;
-    try{await eraseGame();const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+    try{await eraseGame();const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
   if(error)return <main className="error"><h1>Save error</h1><p role="alert">{error}</p><p>Stored data has not been overwritten. Export or back up your IndexedDB data before resetting.</p><button onClick={()=>void fresh()}>Factory Reset</button></main>;
   if(!game)return null;
@@ -95,7 +106,23 @@ export default function App(){
     </header>
     <div className="workspace"><aside className="palette"><h2>Construction</h2>
       {(["select","iron_mine","furnace","conveyor","demolish"] as const).map(t=><button key={t} className={tool===t?"active":""} onClick={()=>setTool(t)} aria-pressed={tool===t}>{t==="select"?"Inspect":t==="demolish"?"Demolish":DEFINITIONS[t].label}{t!=="select"&&t!=="demolish"?<span>{money(DEFINITIONS[t].price)}</span>:null}</button>)}
-      <div className="mini"><p>Facing preview: <b>{direction}</b></p><button onClick={rotateChoice}>Rotate (R)</button><p>Esc: cancel · Space: run / pause · Delete: demolish</p></div>
+      <div className="mini"><button onClick={()=>setShowTechnology(v=>!v)} aria-expanded={showTechnology} aria-controls="technology-panel">Technology {showTechnology?"−":"+"}</button><p>Facing preview: <b>{direction}</b></p><button onClick={rotateChoice}>Rotate (R)</button><p>Esc: cancel · Space: run / pause · Delete: demolish</p></div>
+      {showTechnology&&<section id="technology-panel" className="technology-panel" aria-label="Technology unlocks">
+        <h3>Technology unlocks</h3>
+        <p>Meet milestones, then permanently purchase each unlock. No automatic credit deduction.</p>
+        {TECHNOLOGY_ORDER.map(id=>{
+          const definition=TECHNOLOGIES[id],status=technologyStatus(game,id);
+          return <article key={id} className="technology-node" data-testid={`technology-${id}`}>
+            <h3>{definition.label}</h3>
+            <p>Unlocks: {definition.unlocks}</p>
+            <p>Cost: {money(definition.costCents)}</p>
+            <p>Status: <strong>{status.status==="locked"?"Locked":status.status==="available"?"Available":"Unlocked"}</strong></p>
+            <ul>{status.requirements.map(label=><li key={label}>{status.missing.includes(label)?"Pending: ":"Met: "}{label}</li>)}</ul>
+            {status.status==="available"&&<button onClick={()=>buyTechnology(id)} disabled={!status.affordable} data-testid={`unlock-${id}`}>Unlock {definition.label} — {money(definition.costCents)}</button>}
+            {status.status==="available"&&!status.affordable&&<p>Insufficient credits to purchase.</p>}
+          </article>;
+        })}
+      </section>}
       <h3>Deposits</h3><p>{DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p>
     </aside><main className="center"><div className="board-title"><span>SECTOR MAP · 12 × 12</span><span>Tick {game.tick} · {game.paused?"PAUSED":"RUNNING"}</span></div>
       <Board state={game} tool={tool} direction={direction} selectedId={selected} onTile={tile}/><p className="tip">M: mine · F: furnace · B: belt · $: sales terminal · arrows show output direction</p></main>

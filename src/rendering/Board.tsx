@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from "react";
 import {Application,Container,Graphics,Text,TextStyle} from "pixi.js";
 import {DEPOSITS,COAL_DEPOSITS,STEP,type Direction,type GameState,type Kind} from "../domain/model";
+import {CARGO_GLYPHS,CARGO_COLORS,processorCargoSummary} from "./cargo";
 export type Tool="select"|"demolish"|"iron_mine"|"coal_mine"|"furnace"|"assembler"|"advanced_furnace"|"conveyor";
 const TILE=44;
 const fill:Record<Kind,number>={iron_mine:0xc58d53,coal_mine:0x676c79,furnace:0xd76446,assembler:0xc3a4e8,advanced_furnace:0xb64c4c,conveyor:0x508fa3,sell_terminal:0x68b98a};
@@ -52,10 +53,21 @@ export function Board({state,tool,direction,onTile,selectedId}:{state:GameState;
         const g=new Graphics().moveTo(X+22,Y+22).lineTo(X+22+dx*15,Y+22+dy*15).stroke({width:3,color:0xffffff});
         root.addChild(g);
       }
-      const count=e.kind==="conveyor"?(e.belt?1:0):e.kind==="furnace"?e.oreInput+(e.output?1:0):(e.output?1:0);
-      if(count){
-        root.addChild(new Graphics().circle(X+33,Y+10,7).fill(e.output==="iron_ingot"||e.belt==="iron_ingot"?0xffd27f:0xa5c2eb));
-        const t=new Text({text:String(count),style:new TextStyle({fontSize:10,fill:0x101a27,fontWeight:"bold"})});t.position.set(X+30,Y+5);root.addChild(t);
+      const cargo=e.kind==="conveyor"?e.belt:e.output;
+      if(cargo){
+        root.addChild(new Graphics().roundRect(X+25,Y+5,17,14,3).fill(CARGO_COLORS[cargo]).stroke({width:1,color:0x162535}));
+        const t=new Text({text:CARGO_GLYPHS[cargo],style:new TextStyle({fontSize:10,fontWeight:"bold",fill:0x101a27})});
+        t.position.set(X+27,Y+6);root.addChild(t);
+      }
+      const stock=processorCargoSummary(e);
+      if(stock){
+        root.addChild(new Graphics().roundRect(X+4,Y+30,36,13,2).fill(0x10202e));
+        const available=new Text({text:stock.buffer,style:new TextStyle({fontSize:8,fontWeight:"bold",fill:0xe7f4fb})});
+        available.position.set(X+6,Y+31);root.addChild(available);
+        if(stock.reserved){
+          const reserved=new Text({text:stock.reserved,style:new TextStyle({fontSize:7,fontWeight:"bold",fill:0xf7db9e})});
+          reserved.position.set(X+5,Y+23);root.addChild(reserved);
+        }
       }
     }
   },[state,tool,direction,selectedId,initialized]);

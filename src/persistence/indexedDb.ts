@@ -22,7 +22,7 @@ export function validateSave(value:unknown):GameState{
   if(s.schemaVersion!==1)throw Error("Unsupported save schema. Export or reset your save manually.");
   if(s.width!==12||s.height!==12||!Number.isSafeInteger(s.tick)||s.tick<0||
     !Number.isSafeInteger(s.balanceCents)||!Array.isArray(s.entities)||!Array.isArray(s.rollingEvents)||
-    typeof s.arbiters!=="object"||!s.mission||!Number.isSafeInteger(s.nextId)||
+    (!s.arbiters||typeof s.arbiters!=="object"||Array.isArray(s.arbiters)||Object.entries(s.arbiters).some(([key,value])=>!Number.isSafeInteger(Number(key))||Number(key)<1||!Number.isSafeInteger(value)||value<0))||!s.mission||!Number.isSafeInteger(s.nextId)||
     !Number.isSafeInteger(s.totalOreProduced)||!Number.isSafeInteger(s.totalIngotProduced)||
     !Number.isSafeInteger(s.mission.soldOre)||!Number.isSafeInteger(s.mission.soldIngot)||
     !Number.isSafeInteger(s.mission.profitStreakTicks)||!["M1","M2","M3","M4","DONE"].includes(s.mission.activeId)||

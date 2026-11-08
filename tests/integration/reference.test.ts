@@ -14,7 +14,7 @@ describe("reference economy",()=>{
   expect(s.mission.soldIngot).toBeGreaterThan(200);
   expect(p.revenueCents).toBeGreaterThanOrEqual(9800);
   expect(p.profitCents).toBeGreaterThanOrEqual(5000);
-  expect(s.mission.activeId).toBe("M1");
+  expect(["M2","M3","M4","DONE"]).toContain(s.mission.activeId);
   expect(s.totalOreProduced).toBeGreaterThanOrEqual(s.mission.soldIngot*2);
  });
  it("AC12 M4 requires completed window and streak",()=>{

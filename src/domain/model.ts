@@ -2,6 +2,13 @@ export type Direction = "N" | "E" | "S" | "W";
 export type Item = "iron_ore" | "iron_ingot" | "coal" | "gear" | "steel";
 export type RecipeId = "iron_ingot" | "gear" | "steel";
 export type Inventory = Partial<Record<Item,number>>;
+export type MaterialEvent = "produced" | "consumed" | "sold" | "demolished";
+export type MaterialLedger = Record<Item,Record<MaterialEvent,number>>;
+export const ITEMS: readonly Item[]=["iron_ore","iron_ingot","coal","gear","steel"];
+export function emptyLedger():MaterialLedger {
+  return Object.fromEntries(ITEMS.map(item=>[item,{produced:0,consumed:0,sold:0,demolished:0}])) as MaterialLedger;
+}
+export function emptySales():Record<Item,number>{return Object.fromEntries(ITEMS.map(item=>[item,0])) as Record<Item,number>;}
 export interface Recipe { input: Inventory; output: Item; durationTicks: number; operatingCostCents: number; }
 export const RECIPES: Record<RecipeId,Recipe> = {
   iron_ingot:{input:{iron_ore:2},output:"iron_ingot",durationTicks:4,operatingCostCents:160},
@@ -27,6 +34,9 @@ export interface GameState {
   mission: { activeId: MissionId; soldOre: number; soldIngot: number; profitStreakTicks: number; };
   introSeen: boolean; introOpen: boolean; tutorialEnabled: boolean;
   coalDeposits?: {x:number;y:number}[];
+  sales?: Record<Item,number>;
+  materialLedger?: MaterialLedger;
+  totalRevenueCents?:number; totalCostCents?:number;
   technologies?: Record<"coal_extraction"|"mechanical_components"|"advanced_smelting",boolean>;
 }
 export const DEPOSITS = [{x:3,y:5},{x:2,y:2},{x:2,y:9}] as const;
@@ -47,6 +57,7 @@ export const rotate = (d:Direction):Direction => ({N:"E",E:"S",S:"W",W:"N"})[d] 
 export const location = (x:number,y:number) => `${x},${y}`;
 export function createGame():GameState {
   return { schemaVersion:2,width:12,height:12,tick:0,paused:true,balanceCents:30000,
+    sales:emptySales(),materialLedger:emptyLedger(),totalRevenueCents:0,totalCostCents:0,
     coalDeposits:COAL_DEPOSITS.map(d=>({...d})),technologies:{coal_extraction:false,mechanical_components:false,advanced_smelting:false},
     nextId:2,arbiters:{},rollingEvents:[],lastEvent:{tick:0,revenueCents:0,costCents:0},
     totalOreProduced:0,totalIngotProduced:0,

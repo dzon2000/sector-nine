@@ -19,6 +19,8 @@ function entity(s:GameState,x:number,y:number){
 }
 function reference():GameState{
   let s=createGame();
+  // Legacy reference fixture represents a factory with M2 already completed.
+  s.mission.activeId="M3";
   s=add(s,"iron_mine",3,5);
   s=add(s,"conveyor",4,5);
   s=add(s,"furnace",5,5);
@@ -239,7 +241,7 @@ describe("AC-13: snapshot integrity and resume",()=>{
   });
   it("rejects invalid schema, duplicate positions and corrupt accounting without resetting",()=>{
     const s=reference();
-    expect(()=>validateSave({...s,schemaVersion:2})).toThrow(/schema/i);
+    expect(()=>validateSave({...s,schemaVersion:99})).toThrow(/schema/i);
     expect(()=>validateSave({...s,arbiters:null})).toThrow(/validation/i);
     expect(()=>validateSave({...s,arbiters:[]})).toThrow(/validation/i);
     expect(()=>validateSave({...s,arbiters:{"3":-1}})).toThrow(/validation/i);

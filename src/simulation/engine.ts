@@ -97,6 +97,9 @@ export function tick(state:GameState):GameState {
       audit(r.item,"sold");
       if(r.item==="iron_ore")s.mission.soldOre++;
       else if(r.item==="iron_ingot")s.mission.soldIngot++;
+      else if(r.item==="coal"&&s.mission.activeId==="M5")s.mission.soldCoal=(s.mission.soldCoal??0)+1;
+      else if(r.item==="gear"&&s.mission.activeId==="M6")s.mission.soldGear=(s.mission.soldGear??0)+1;
+      else if(r.item==="steel"&&s.mission.activeId==="M7")s.mission.soldSteel=(s.mission.soldSteel??0)+1;
     }
   }
   // Phase 3: start new furnace cycles when enough ore is buffered.

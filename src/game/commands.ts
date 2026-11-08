@@ -35,9 +35,7 @@ export function remove(s:GameState,id:number,confirmed=false):CommandResult {
     const demolish=(item:keyof typeof n.materialLedger,quantity:number)=>{n.materialLedger![item].demolished+=quantity;};
     if(e.output)demolish(e.output,1);
     if(e.belt)demolish(e.belt,1);
-    if(e.kind==="furnace"){
-      if(e.oreInput>0)demolish("iron_ore",e.oreInput);
-    }else for(const item of ITEMS)demolish(item,e.inputBuffers?.[item]??0);
+    for(const item of ITEMS)demolish(item,e.inputBuffers?.[item]??0);
     for(const item of ITEMS)demolish(item,e.reservedInputs?.[item]??0);
   }
   n.entities=n.entities.filter(e=>e.id!==id);

@@ -1,4 +1,4 @@
-import {REVENUE,RECIPES,STEP,location,stats,type Entity,type GameState,type Item} from "../domain/model";
+import {REVENUE,STEP,recipeFor,stats,type Entity,type GameState,type Item} from "../domain/model";
 import {updateMission} from "../game/missions";
 type Request={source:Entity;target:Entity;item:Item};
 function at(s:GameState,x:number,y:number){return s.entities.find(e=>e.x===x&&e.y===y);}
@@ -7,11 +7,9 @@ function clear(e:Entity){if(e.kind==="conveyor")e.belt=null;else e.output=null;}
 function directionTo(e:Entity):[number,number]{const [x,y]=STEP[e.direction];return [e.x+x,e.y+y];}
 function accepts(target:Entity,source:Entity,item:Item):boolean{
   if(target.kind==="iron_mine"||target.kind==="coal_mine")return false;
-  if(target.kind==="assembler"||target.kind==="advanced_furnace"){
-    const recipe=target.kind==="assembler"?RECIPES.gear:RECIPES.steel;
-    return !!recipe.input[item]&&(target.inputBuffers?.[item]??0)<4&&!(source.x===target.x+STEP[target.direction][0]&&source.y===target.y+STEP[target.direction][1]);
-  }
-  if(target.kind==="furnace")return item==="iron_ore"&&target.oreInput<4&&!(source.x===target.x+STEP[target.direction][0]&&source.y===target.y+STEP[target.direction][1]);
+  const recipe=recipeFor(target.kind);
+  if(recipe)return (recipe.input[item]??0)>0&&(target.inputBuffers?.[item]??0)<4&&
+    !(source.x===target.x+STEP[target.direction][0]&&source.y===target.y+STEP[target.direction][1]);
   if(target.kind==="conveyor")return target.belt===null;
   return true;
 }
@@ -31,7 +29,7 @@ export function tick(state:GameState):GameState {
     }else if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle!==null){
       if(e.cycle>0)e.cycle--;
       if(e.cycle===0&&e.output===null){
-        const recipe=e.kind==="assembler"?RECIPES.gear:e.kind==="advanced_furnace"?RECIPES.steel:RECIPES.iron_ingot;
+        const recipe=recipeFor(e.kind)!;
         for(const [item,qty] of Object.entries(e.reservedInputs??recipe.input))audit(item as Item,"consumed",qty);
         e.output=recipe.output;e.cycle=null;e.reservedInputs={};audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
       }
@@ -89,8 +87,10 @@ export function tick(state:GameState):GameState {
     const t=r.target;
     s.arbiters[String(t.id)]=r.source.id;
     if(t.kind==="conveyor"){t.belt=r.item;costCents+=5;}
-    else if(t.kind==="furnace"){t.oreInput++;t.inputBuffers={...(t.inputBuffers??{}),iron_ore:t.oreInput};}
-    else if(t.kind==="assembler"||t.kind==="advanced_furnace")t.inputBuffers={...(t.inputBuffers??{}),[r.item]:(t.inputBuffers?.[r.item]??0)+1};
+    else if(recipeFor(t.kind)){
+      t.inputBuffers={...(t.inputBuffers??{}),[r.item]:(t.inputBuffers?.[r.item]??0)+1};
+      if(t.kind==="furnace")t.oreInput=t.inputBuffers.iron_ore??0; // Legacy read-only mirror for v0.1-compatible snapshots.
+    }
     else if(t.kind==="sell_terminal"){
       revenueCents+=REVENUE[r.item];
       if(s.sales)s.sales[r.item]++;
@@ -102,17 +102,17 @@ export function tick(state:GameState):GameState {
       else if(r.item==="steel"&&s.mission.activeId==="M7")s.mission.soldSteel=(s.mission.soldSteel??0)+1;
     }
   }
-  // Phase 3: start new furnace cycles when enough ore is buffered.
+  // Phase 3: start any processor when its typed inputs satisfy its declarative recipe.
   for(const e of s.entities){
     if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle===null&&e.output===null){
       const recipe=e.kind==="assembler"?RECIPES.gear:e.kind==="advanced_furnace"?RECIPES.steel:RECIPES.iron_ingot;
-      const inventory=e.kind==="furnace"?{...e.inputBuffers,iron_ore:e.oreInput}:e.inputBuffers??{};
+      const inventory={...(e.inputBuffers??{})};
       if(Object.entries(recipe.input).every(([item,qty])=>(inventory[item as Item]??0)>=qty)){
         for(const [item,qty] of Object.entries(recipe.input)){
           inventory[item as Item]=(inventory[item as Item]??0)-qty;
         }
         e.inputBuffers=inventory;e.reservedInputs={...recipe.input};e.cycle=recipe.durationTicks;
-        if(e.kind==="furnace")e.oreInput=inventory.iron_ore??0;
+        if(e.kind==="furnace")e.oreInput=inventory.iron_ore??0; // Mirror; typed inventory is authoritative.
       }
     }
     if(e.kind==="sell_terminal")e.status="waiting_for_inputs";

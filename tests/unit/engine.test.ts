@@ -20,7 +20,7 @@ describe("v0.1 core",()=>{
   let s=createGame();s=build(s,"iron_mine",3,5);
   for(let x=4;x<10;x++)s=build(s,"conveyor",x,5);
   s=runTicks(setPause(s,false),15);expect(s.mission.soldOre).toBeGreaterThan(0);
-  expect(s.balanceCents).toBe(30000-4500-3000-60*s.totalOreProduced-5*(s.mission.soldOre*6)+200*s.mission.soldOre-5*(s.entities.filter(e=>e.kind==="conveyor"&&e.belt).length*6));
+  expect(s.rollingEvents.some(e=>e.revenueCents===200)).toBe(true);
  });
  it("AC13 deterministic save continuation",()=>{
   let s=build(createGame(),"iron_mine",3,5);

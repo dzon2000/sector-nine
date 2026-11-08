@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {createGame,stats,type Direction,type GameState,type Item,type Kind} from "../../../src/domain/model";
+import {createGame,DEFINITIONS,ITEMS,stats,type Direction,type GameState,type Item,type Kind} from "../../../src/domain/model";
 import {place} from "../../../src/game/commands";
 import {runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
@@ -42,10 +42,10 @@ type Measurement={state:GameState;start:GameState;sales:Record<Item,number>;reve
 function measure(layout:readonly Position[]):Measurement{
   const start=runTicks(setup(layout),600);
   const state=runTicks(start,240);
-  const revenue=state.rollingEvents.reduce((n,e)=>n+e.revenueCents,0);
-  const cost=state.rollingEvents.reduce((n,e)=>n+e.costCents,0);
-  const now=state as GameState & {sales?:Partial<Record<Item,number>>};
-  const old=start as GameState & {sales?:Partial<Record<Item,number>>};
+  const revenue=(state.totalRevenueCents??0)-(start.totalRevenueCents??0);
+  const cost=(state.totalCostCents??0)-(start.totalCostCents??0);
+  const now=state;
+  const old=start;
   const sales=Object.fromEntries((["iron_ore","iron_ingot","coal","gear","steel"] as Item[])
     .map(item=>[item,(now.sales?.[item]??0)-(old.sales?.[item]??0)])) as Record<Item,number>;
   return {state,start,sales,revenue,cost,profit:revenue-cost};
@@ -70,8 +70,44 @@ describe("v0.2 deterministic economy: 600-tick warm-up and 240-tick measurement 
     expect(result.revenue).toBeGreaterThan(result.cost);
     expect(result.state.tick-result.start.tick).toBe(240);
     console.info(JSON.stringify({scenario:_name,ticks:240,productSales:result.sales[product],
-      revenueCentsLast60:result.revenue,costCentsLast60:result.cost,
-      operatingProfitCentsLast60:result.profit}));
+      revenueCents240:result.revenue,costCents240:result.cost,
+      operatingProfitCents240:result.profit}));
+  });
+  it("gear and steel generate higher operating profit per minute than the reference ingot line",()=>{
+    const baseline=measure(iron),gear=measure(gears),smelt=measure(steel);
+    expect(gear.profit).toBeGreaterThan(baseline.profit);
+    expect(smelt.profit).toBeGreaterThan(baseline.profit);
+    for(const [label,layout,record,feeCents] of [
+      ["gears",gears,gear,12000],["steel",steel,smelt,38000]
+    ] as const){
+      const capital=layout.reduce((sum,[kind])=>sum+DEFINITIONS[kind].price,0);
+      const baselineCapital=iron.reduce((sum,[kind])=>sum+DEFINITIONS[kind].price,0);
+      const incrementalCapitalCents=capital+feeCents-baselineCapital;
+      const incrementalProfitCentsPerMinute=(record.profit-baseline.profit)/4;
+      const paybackMinutes=incrementalCapitalCents/incrementalProfitCentsPerMinute;
+      expect(paybackMinutes).toBeGreaterThan(0);
+      expect(Number.isFinite(paybackMinutes)).toBe(true);
+      console.info(JSON.stringify({scenario:label,incrementalCapitalCents,incrementalProfitCentsPerMinute,paybackMinutes}));
+    }
+  });
+  it("material conservation balances production, consumption, sales, demolition and on-hand stock (AC-20)",()=>{
+    for(const layout of [coal,gears,steel,[...gears,...steel]]){
+      const state=runTicks(setup(layout),1100);
+      const ledger=state.materialLedger!;
+      const physical=Object.fromEntries(ITEMS.map(item=>[item,0])) as Record<Item,number>;
+      for(const e of state.entities){
+        if(e.output)physical[e.output]++;
+        if(e.belt)physical[e.belt]++;
+        if(e.kind==="furnace")physical.iron_ore+=e.oreInput;
+        else for(const item of ITEMS)physical[item]+=e.inputBuffers?.[item]??0;
+        for(const item of ITEMS)physical[item]+=e.reservedInputs?.[item]??0;
+      }
+      for(const item of ITEMS){
+        const l=ledger[item];
+        expect(l.produced-l.consumed-l.sold-l.demolished,
+          `Conservation failed for ${item}: ${JSON.stringify(l)}`).toBe(physical[item]);
+      }
+    }
   });
   it("two simultaneous independent gear and steel lines fit and both sell",()=>{
     const result=measure([...gears,...steel]);

@@ -1,4 +1,4 @@
-import {REVENUE,STEP,location,stats,type Entity,type GameState,type Item} from "../domain/model";
+import {REVENUE,STEP,recipeFor,stats,type Entity,type GameState,type Item} from "../domain/model";
 import {updateMission} from "../game/missions";
 type Request={source:Entity;target:Entity;item:Item};
 function at(s:GameState,x:number,y:number){return s.entities.find(e=>e.x===x&&e.y===y);}
@@ -6,8 +6,10 @@ function output(e:Entity):Item|null{return e.kind==="conveyor"?e.belt:e.output;}
 function clear(e:Entity){if(e.kind==="conveyor")e.belt=null;else e.output=null;}
 function directionTo(e:Entity):[number,number]{const [x,y]=STEP[e.direction];return [e.x+x,e.y+y];}
 function accepts(target:Entity,source:Entity,item:Item):boolean{
-  if(target.kind==="iron_mine")return false;
-  if(target.kind==="furnace")return item==="iron_ore"&&target.oreInput<4&&!(source.x===target.x+STEP[target.direction][0]&&source.y===target.y+STEP[target.direction][1]);
+  if(target.kind==="iron_mine"||target.kind==="coal_mine")return false;
+  const recipe=recipeFor(target.kind);
+  if(recipe)return (recipe.input[item]??0)>0&&(target.inputBuffers?.[item]??0)<4&&
+    !(source.x===target.x+STEP[target.direction][0]&&source.y===target.y+STEP[target.direction][1]);
   if(target.kind==="conveyor")return target.belt===null;
   return true;
 }
@@ -16,17 +18,20 @@ export function tick(state:GameState):GameState {
   const s:GameState=structuredClone(state);
   s.tick++;
   let revenueCents=0,costCents=0;
+  const audit=(item:Item,event:"produced"|"consumed"|"sold"|"demolished",quantity=1)=>{if(s.materialLedger)s.materialLedger[item][event]+=quantity;};
   // Phase 1: finish due cycles; output cannot be replaced if occupied.
   for(const e of s.entities){
-    if(e.kind==="iron_mine"){
+    if(e.kind==="iron_mine"||e.kind==="coal_mine"){
       if(e.output===null){
-        e.cycle=(e.cycle??2)-1;
-        if(e.cycle===0){e.output="iron_ore";e.cycle=null;s.totalOreProduced++;costCents+=60;}
+        e.cycle=(e.cycle??(e.kind==="coal_mine"?3:2))-1;
+        if(e.cycle===0){e.output=e.kind==="coal_mine"?"coal":"iron_ore";e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;audit(e.output!,"produced");costCents+=e.kind==="coal_mine"?80:60;}
       }
-    }else if(e.kind==="furnace"&&e.cycle!==null){
+    }else if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle!==null){
       if(e.cycle>0)e.cycle--;
       if(e.cycle===0&&e.output===null){
-        e.output="iron_ingot";e.cycle=null;costCents+=160;s.totalIngotProduced++;
+        const recipe=recipeFor(e.kind)!;
+        for(const [item,qty] of Object.entries(e.reservedInputs??recipe.input))audit(item as Item,"consumed",qty);
+        e.output=recipe.output;e.cycle=null;e.reservedInputs={};audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
       }
     }
   }
@@ -62,7 +67,7 @@ export function tick(state:GameState):GameState {
     visiting.add(r.source.id);
     let possible=false;
     if(r.target.kind==="sell_terminal")possible=true;
-    else if(r.target.kind==="furnace")possible=accepts(r.target,r.source,r.item);
+    else if(["furnace","assembler","advanced_furnace"].includes(r.target.kind))possible=accepts(r.target,r.source,r.item);
     else if(r.target.kind==="conveyor"){
       if(r.target.belt===null)possible=true;
       else{
@@ -82,25 +87,43 @@ export function tick(state:GameState):GameState {
     const t=r.target;
     s.arbiters[String(t.id)]=r.source.id;
     if(t.kind==="conveyor"){t.belt=r.item;costCents+=5;}
-    else if(t.kind==="furnace")t.oreInput++;
+    else if(recipeFor(t.kind)){
+      t.inputBuffers={...(t.inputBuffers??{}),[r.item]:(t.inputBuffers?.[r.item]??0)+1};
+      if(t.kind==="furnace")t.oreInput=t.inputBuffers.iron_ore??0; // Legacy read-only mirror for v0.1-compatible snapshots.
+    }
     else if(t.kind==="sell_terminal"){
       revenueCents+=REVENUE[r.item];
+      if(s.sales)s.sales[r.item]++;
+      audit(r.item,"sold");
       if(r.item==="iron_ore")s.mission.soldOre++;
-      else s.mission.soldIngot++;
+      else if(r.item==="iron_ingot")s.mission.soldIngot++;
+      else if(r.item==="coal"&&s.mission.activeId==="M5")s.mission.soldCoal=(s.mission.soldCoal??0)+1;
+      else if(r.item==="gear"&&s.mission.activeId==="M6")s.mission.soldGear=(s.mission.soldGear??0)+1;
+      else if(r.item==="steel"&&s.mission.activeId==="M7")s.mission.soldSteel=(s.mission.soldSteel??0)+1;
     }
   }
-  // Phase 3: start new furnace cycles when enough ore is buffered.
+  // Phase 3: start any processor when its typed inputs satisfy its declarative recipe.
   for(const e of s.entities){
-    if(e.kind==="furnace"&&e.cycle===null&&e.output===null&&e.oreInput>=2){
-      e.oreInput-=2;e.cycle=4;
+    if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle===null&&e.output===null){
+      const recipe=recipeFor(e.kind)!;
+      const inventory={...(e.inputBuffers??{})};
+      if(Object.entries(recipe.input).every(([item,qty])=>(inventory[item as Item]??0)>=qty)){
+        for(const [item,qty] of Object.entries(recipe.input)){
+          inventory[item as Item]=(inventory[item as Item]??0)-qty;
+        }
+        e.inputBuffers=inventory;e.reservedInputs={...recipe.input};e.cycle=recipe.durationTicks;
+        if(e.kind==="furnace")e.oreInput=inventory.iron_ore??0; // Mirror; typed inventory is authoritative.
+      }
     }
     if(e.kind==="sell_terminal")e.status="waiting_for_inputs";
     else if(e.kind==="conveyor")e.status=e.belt?"working":"waiting_for_inputs";
-    else if(e.kind==="iron_mine")e.status=e.output?"blocked_output":"working";
+    else if(e.kind==="iron_mine"||e.kind==="coal_mine")e.status=e.output?"blocked_output":"working";
     else e.status=e.cycle===0||e.output?"blocked_output":e.cycle!==null?"working":"waiting_for_inputs";
   }
   // Phase 4: accounting and progression; capital expenditure is intentionally excluded.
   s.balanceCents+=revenueCents-costCents;
+  if(s.totalRevenueCents!==undefined)s.totalRevenueCents+=revenueCents;
+  if(s.totalCostCents!==undefined)s.totalCostCents+=costCents;
   s.lastEvent={tick:s.tick,revenueCents,costCents};
   s.rollingEvents.push(s.lastEvent);
   if(s.rollingEvents.length>60)s.rollingEvents.shift();

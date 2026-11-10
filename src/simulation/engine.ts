@@ -85,6 +85,8 @@ export function tick(state:GameState):GameState {
     return possible;
   }
   for(const r of planned.values())canMove(r);
+  // Belt occupancy at the exact transfer boundary, before departures and arrivals.
+  const conveyorOccupiedAtTransfer=new Set(s.entities.filter(e=>e.kind==="conveyor"&&e.belt!==null).map(e=>e.id));
   // Depart all sources first, then arrive at destinations.
   const transfers=[...planned.values()].filter(r=>approved.has(r.source.id));
   for(const r of transfers)clear(r.source);
@@ -110,13 +112,6 @@ export function tick(state:GameState):GameState {
   }
   // Capture genuine movement outcomes after arbitration, before new cycles begin.
   const diagnosticDepartures=new Set(transfers.map(r=>r.source.id));
-  const occupiedConveyors=new Set(s.entities.filter(e=>e.kind==="conveyor"&&e.belt!==null).map(e=>e.id));
-  // Transfers have already departed: use the original sources from the pre-transfer requests
-  // to identify conveyors with a real item at the movement boundary.
-  const conveyorOccupiedAtTransfer=new Set<number>([
-    ...occupiedConveyors,
-    ...transfers.filter(r=>r.source.kind==="conveyor").map(r=>r.source.id)
-  ]);
   // Phase 3: start any processor when its typed inputs satisfy its declarative recipe.
   for(const e of s.entities){
     if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle===null&&e.output===null){

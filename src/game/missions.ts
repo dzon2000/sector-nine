@@ -36,7 +36,8 @@ export function updateMission(s:GameState):string|null {
       if((m.soldGear??0)<8)return null;
     }else{
       const window=missionWindow(s);
-      if(!window||!s.missionMetrics)return null;
+      if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
+      s.missionMetrics.lastEvaluatedTick=s.tick;
       s.missionMetrics.streakTicks=window.sales.gear>=9?s.missionMetrics.streakTicks+1:0;
       if(s.missionMetrics.streakTicks<120)return null;
     }
@@ -49,7 +50,8 @@ export function updateMission(s:GameState):string|null {
       if(!s.technologies?.advanced_smelting||(m.soldSteel??0)<8)return null;
     }else{
       const window=missionWindow(s);
-      if(!window||!s.missionMetrics)return null;
+      if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
+      s.missionMetrics.lastEvaluatedTick=s.tick;
       const qualifies=Boolean(s.technologies?.advanced_smelting)&&
         window.sales.gear>=7&&window.sales.steel>=7&&window.profitCents>=17500;
       s.missionMetrics.streakTicks=qualifies?s.missionMetrics.streakTicks+1:0;

@@ -71,8 +71,18 @@ describe("WP2 new sustained-throughput mission rules",()=>{
     updateMission(s);
     updateMission(s);
     expect(s.missionMetrics?.streakTicks).toBe(1);
-    s=step(s,0);
+    s=step(s,1); // Replace the gear leaving the trailing window.
     expect(s.missionMetrics?.streakTicks).toBe(2);
+  });
+
+  it("M6 resets immediately when a single rolling window drops from nine gears to eight",()=>{
+    let s=at("M6");
+    for(let i=0;i<60;i++)s=step(s,i<9?1:0);
+    expect(s.missionMetrics?.streakTicks).toBe(1);
+    s=step(s,0); // First recorded gear leaves the 60-tick window.
+    expect(missionWindow(s)?.sales.gear).toBe(8);
+    expect(s.missionMetrics?.streakTicks).toBe(0);
+    expect(s.mission.activeId).toBe("M6");
   });
 
   it("M6 requires full 120 consecutive evaluated windows, resets after one failing tick and never revokes completion",()=>{

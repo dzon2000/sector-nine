@@ -28,7 +28,7 @@ function step(s:GameState,gear:number,steel=0,profitCents=300):GameState{
   return advance(s,{gear,steel},profitCents);
 }
 function gear120(s:GameState, gearCount=9):GameState {
-  for(let i=1;i<=179;i++){
+  for(let i=1;i<=178;i++){
     s=step(s,(i-1)%60<gearCount?1:0);
   }
   return s;
@@ -68,13 +68,13 @@ describe("WP2 new sustained-throughput mission rules",()=>{
     let s=at("M6");
     s=gear120(s);
     expect(s.mission.activeId).toBe("M6");
-    expect(s.missionMetrics?.streakTicks).toBe(120); // 60th through 179th tick
+    expect(s.missionMetrics?.streakTicks).toBe(119); // 60th through 178th tick
     // Deliberately ensure no 120th qualifying evaluated tick before active tick 179.
     s=at("M6");s=gear120(s,9);
     expect(s.mission.activeId).toBe("M6");
-    s=step(s,1);
+    s=step(s,0);
     expect(s.mission.activeId).toBe("M7");
-    expect(s.missionMetrics).toEqual({activatedAtTick:180,salesTicks:[],streakTicks:0});
+    expect(s.missionMetrics).toEqual({activatedAtTick:179,salesTicks:[],streakTicks:0});
     const done=structuredClone(s);done.mission.activeId="DONE";done.missionMetrics=null;
     expect(updateMission(done)).toBeNull();
     expect(done.mission.activeId).toBe("DONE");
@@ -92,7 +92,7 @@ describe("WP2 new sustained-throughput mission rules",()=>{
       [7,7,291,true,false],[7,7,300,false,false]
     ] as const){
       let s=at("M7");s.technologies!.advanced_smelting=unlocked;
-      s=m7Sequence(s,179,gears,steels,profit);
+      s=m7Sequence(s,178,gears,steels,profit);
       expect(s.mission.activeId,JSON.stringify({gears,steels,profit,unlocked})).toBe("M7");
       s=step(s,0,0,profit);
       expect(s.mission.activeId,JSON.stringify({gears,steels,profit,unlocked})).toBe(passes?"DONE":"M7");

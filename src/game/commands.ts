@@ -39,6 +39,8 @@ export function remove(s:GameState,id:number,confirmed=false):CommandResult {
     for(const item of ITEMS)demolish(item,e.reservedInputs?.[item]??0);
   }
   n.entities=n.entities.filter(e=>e.id!==id);
+  // Entity IDs are stable. Never retain demolished machine/conveyor samples.
+  for(const sample of n.diagnostics?.samples??[])delete sample.entities[String(id)];
   const refund=Math.floor(DEFINITIONS[e.kind].price*0.75);
   n.balanceCents+=refund;
   return {ok:true,message:`Demolished. Refunded ${(refund/100).toFixed(2)} Cr; buffered items destroyed.`,state:n};

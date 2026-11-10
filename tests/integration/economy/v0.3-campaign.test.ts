@@ -54,6 +54,26 @@ function research(c:Campaign,id:TechnologyId):void {
   expect(fee).toBe(({coal_extraction:8000,mechanical_components:12000,advanced_smelting:18000})[id]);
   c.research+=fee;c.state=result.state;
 }
+/** Wait while an existing profitable route finances construction; fail on a credit deadlock. */
+function financeTo(c:Campaign,targetCents:number,maxTicks=1200):void {
+  const startedAt=c.state.tick;
+  const revenueBefore=c.state.totalRevenueCents??0;
+  const startCash=c.state.balanceCents;
+  while(c.state.balanceCents<targetCents && c.state.tick-startedAt<maxTicks){
+    c.state=runTicks(c.state,60);
+  }
+  expect(c.state.balanceCents,
+    `Cannot finance ${targetCents} cents after ${maxTicks} active ticks`).toBeGreaterThanOrEqual(targetCents);
+  if(c.state.tick>startedAt){
+    expect(c.state.totalRevenueCents).toBeGreaterThan(revenueBefore);
+    expect(c.state.balanceCents).toBeGreaterThan(startCash);
+  }
+  console.info("V03-WP3-FINANCE "+JSON.stringify({
+    targetCents,waitedActiveTicks:c.state.tick-startedAt,
+    revenueGainCents:(c.state.totalRevenueCents??0)-revenueBefore,
+    cashAtFinishCents:c.state.balanceCents
+  }));
+}
 function until(c:Campaign,mission:GameState["mission"]["activeId"],maxTicks=1500):void {
   const start=c.state.tick;
   while(c.state.mission.activeId!==mission&&c.state.tick-start<maxTicks)c.state=tick(c.state);
@@ -110,7 +130,7 @@ describe("WP3 new v0.3 campaign from 300 Cr (V03-AC-07)",()=>{
     expect(c.state).toEqual(validateSave(saved));
     research(c,"mechanical_components");
     // Expand the gear line while preserving southern ingot sales.
-    while(c.state.balanceCents<35000)c.state=runTicks(c.state,60);
+    financeTo(c,35000);
     construct(c,...gearLine);
 
     // Reuse the southern furnace and mine. First install the upper route,
@@ -129,7 +149,7 @@ describe("WP3 new v0.3 campaign from 300 Cr (V03-AC-07)",()=>{
     expect(c.state.mission.soldGear).toBeGreaterThanOrEqual(9);
     expect(c.state.sales!.gear).toBeGreaterThanOrEqual(9);
     // Keep the gear line operating while financing research and steel conversion.
-    while(c.state.balanceCents<40000)c.state=runTicks(c.state,60);
+    financeTo(c,40000);
     research(c,"advanced_smelting");
     // Divert the second iron stream to steel using existing assets.
     demolish(c,6,4);

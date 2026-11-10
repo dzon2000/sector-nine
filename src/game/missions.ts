@@ -37,7 +37,9 @@ export function updateMission(s:GameState):string|null {
     return "Mechanical assembly verified. Rebuild the advanced foundry using iron ingots and coal.";
   }
   if(m.activeId==="M7"&&s.technologies?.advanced_smelting&&(m.soldSteel??0)>=8){
-    m.activeId="DONE";return "Steel deliveries verified. A sealed Prometheus engineering archive awaits future investigation.";
+    m.activeId="DONE";
+    if(s.missionRuleVersion===3)s.missionMetrics=null;
+    return "Steel deliveries verified. A sealed Prometheus engineering archive awaits future investigation.";
   }
   return null;
 }

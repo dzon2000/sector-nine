@@ -82,6 +82,37 @@ test("WP4 mission HUD, terminal and inspector show source-derived counters acros
   await page.reload();
   await expect(page.getByTestId("mission-throughput")).toContainText("Stable: 1/120");
   await expect(page.getByTestId("terminal-throughput")).toContainText("gear: 9");
+  // Modify one authoritative deterministic terminal-sale event in the saved fixture.
+  // After reload, HUD, mission constraint and terminal counters must agree.
+  await page.evaluate(async()=>{
+    await new Promise<void>((resolve,reject)=>{
+      const req=indexedDB.open("sector-nine-v0.1",1);
+      req.onerror=()=>reject(req.error);
+      req.onsuccess=()=>{
+        const db=req.result,tx=db.transaction("snapshots","readwrite"),store=tx.objectStore("snapshots");
+        const get=store.get("slot1");
+        get.onsuccess=()=>{
+          const s=get.result;
+          s.missionMetrics.salesTicks[8].sales.gear=0;
+          s.missionMetrics.streakTicks=0;
+          s.diagnostics.samples[8].terminalSales.gear=0;
+          s.diagnostics.samples[8].entities["2"].conveyorMoves=0;
+          s.rollingEvents[8].revenueCents=0;
+          s.mission.soldGear=8;s.sales.gear=8;
+          s.materialLedger.gear.opening=8;s.materialLedger.gear.sold=8;
+          s.totalRevenueCents=16800;s.balanceCents=46800;
+          store.put(s,"slot1");
+        };
+        tx.oncomplete=()=>{db.close();resolve();};
+        tx.onerror=()=>{db.close();reject(tx.error);};
+      };
+    });
+  });
+  await page.reload();
+  await expect(page.getByTestId("mission-throughput")).toContainText("Gear sales: 8/9");
+  await expect(page.getByTestId("mission-throughput")).toContainText("Stable: 0/120");
+  await expect(page.getByTestId("mission-bottleneck")).toContainText("Increase gear production");
+  await expect(page.getByTestId("terminal-throughput")).toContainText("gear: 8");
 });
 test("WP4 legacy active M6 retains cumulative progress without v3 throughput HUD",async({page})=>{
   await page.goto("/");

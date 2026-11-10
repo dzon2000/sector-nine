@@ -147,6 +147,8 @@ export function validateSave(value:unknown):GameState{
       if(!metrics||typeof metrics!=="object"||Array.isArray(metrics)||
          !Number.isSafeInteger(metrics.activatedAtTick)||metrics.activatedAtTick<0||metrics.activatedAtTick>n.tick||
          !Number.isSafeInteger(metrics.streakTicks)||metrics.streakTicks<0||
+         (metrics.lastEvaluatedTick!==undefined&&(!Number.isSafeInteger(metrics.lastEvaluatedTick)||
+           metrics.lastEvaluatedTick<=metrics.activatedAtTick||metrics.lastEvaluatedTick>n.tick))||
          !Array.isArray(metrics.salesTicks)||metrics.salesTicks.length>60)
         throw Error("Invalid v3 mission metrics. Data preserved.");
       for(let i=0;i<metrics.salesTicks.length;i++){

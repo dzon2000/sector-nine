@@ -174,6 +174,38 @@ export function validateSave(value:unknown):GameState{
     n.missionMetrics=null;
     n.schemaVersion=3;
   }
+  // Diagnostics are bounded, simulation-derived v3 state. Older saves have no samples.
+  if(n.diagnostics===undefined)n.diagnostics={samples:[]};
+  const history=n.diagnostics;
+  if(!history||typeof history!=="object"||Array.isArray(history)||
+     Object.keys(history).length!==1||!Array.isArray(history.samples)||history.samples.length>60)
+    throw Error("Invalid v3 diagnostic history. Data preserved.");
+  const diagnosticEntities=new Set(n.entities.map(e=>String(e.id)));
+  for(let i=0;i<history.samples.length;i++){
+    const sample=history.samples[i];
+    if(!sample||typeof sample!=="object"||Array.isArray(sample)||
+       Object.keys(sample).length!==3||!Number.isSafeInteger(sample.tick)||
+       sample.tick<1||sample.tick>n.tick||
+       (i>0&&sample.tick!==history.samples[i-1].tick+1)||
+       !sample.entities||typeof sample.entities!=="object"||Array.isArray(sample.entities)||
+       !sample.terminalSales||typeof sample.terminalSales!=="object"||
+       Array.isArray(sample.terminalSales)||Object.keys(sample.terminalSales).length!==ITEMS.length||
+       Object.keys(sample.terminalSales).some(key=>!ITEMS.includes(key as Item))||
+       ITEMS.some(item=>!Number.isSafeInteger(sample.terminalSales[item])||sample.terminalSales[item]<0))
+      throw Error("Invalid v3 diagnostic sample. Data preserved.");
+    for(const [id,entry] of Object.entries(sample.entities)){
+      if(!diagnosticEntities.has(id)||!entry||typeof entry!=="object"||Array.isArray(entry)||
+         Object.keys(entry).length!==4||
+         !["working","input_starved","output_blocked","idle"].includes(entry.status)||
+         !Number.isSafeInteger(entry.completedUnits)||entry.completedUnits<0||
+         !Number.isSafeInteger(entry.conveyorMoves)||entry.conveyorMoves<0||entry.conveyorMoves>1||
+         !Number.isSafeInteger(entry.conveyorStalledTicks)||entry.conveyorStalledTicks<0||
+         entry.conveyorStalledTicks>1||entry.conveyorMoves+entry.conveyorStalledTicks>1)
+        throw Error("Invalid v3 entity diagnostic sample. Data preserved.");
+    }
+  }
+  if(history.samples.length&&history.samples.at(-1)!.tick!==n.tick)
+    throw Error("Stale v3 diagnostic history. Data preserved.");
   return n;
 }
 // All writes and deletes share one queue. Capture snapshots before enqueueing.

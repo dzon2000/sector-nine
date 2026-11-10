@@ -1,4 +1,5 @@
 import {stats,type GameState} from "../domain/model";
+import {activateMissionMetrics} from "./missionMetrics";
 export const MISSIONS={
  M1:{title:"Restore Extraction",hint:"Build an iron mine on a highlighted deposit. Rotate toward a delivery route and run the simulation."},
  M2:{title:"First Delivery",hint:"Deliver 10 iron ore to the terminal. Place conveyors, then rotate with R so their arrows lead toward the terminal."},
@@ -26,10 +27,14 @@ export function updateMission(s:GameState):string|null {
     if(m.profitStreakTicks>=60){m.activeId="M5";return "Sector 9 is viable again. The old foundry blueprint has surfaced in the archive.";}
   }
   if(m.activeId==="M5"&&(m.soldCoal??0)>=10){
-    m.activeId="M6";return "Coal deliveries confirmed. Reconstruct mechanical assembly and sell eight gears.";
+    m.activeId="M6";
+    if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
+    return "Coal deliveries confirmed. Reconstruct mechanical assembly and sell eight gears.";
   }
   if(m.activeId==="M6"&&(m.soldGear??0)>=8){
-    m.activeId="M7";return "Mechanical assembly verified. Rebuild the advanced foundry using iron ingots and coal.";
+    m.activeId="M7";
+    if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
+    return "Mechanical assembly verified. Rebuild the advanced foundry using iron ingots and coal.";
   }
   if(m.activeId==="M7"&&s.technologies?.advanced_smelting&&(m.soldSteel??0)>=8){
     m.activeId="DONE";return "Steel deliveries verified. A sealed Prometheus engineering archive awaits future investigation.";

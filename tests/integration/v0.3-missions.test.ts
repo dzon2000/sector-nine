@@ -64,6 +64,17 @@ describe("WP2 new sustained-throughput mission rules",()=>{
     expect(s.mission.activeId).toBe("M6");
   });
 
+  it("evaluates the same active tick at most once even when the mission evaluator is called again",()=>{
+    let s=at("M6");
+    for(let i=0;i<60;i++)s=step(s,i<9?1:0);
+    expect(s.missionMetrics?.streakTicks).toBe(1);
+    updateMission(s);
+    updateMission(s);
+    expect(s.missionMetrics?.streakTicks).toBe(1);
+    s=step(s,0);
+    expect(s.missionMetrics?.streakTicks).toBe(2);
+  });
+
   it("M6 requires full 120 consecutive evaluated windows, resets after one failing tick and never revokes completion",()=>{
     let s=at("M6");
     s=gear120(s);

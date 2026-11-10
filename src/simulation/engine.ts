@@ -1,4 +1,5 @@
-import {REVENUE,STEP,recipeFor,stats,type Entity,type GameState,type Item} from "../domain/model";
+import {REVENUE,STEP,recipeFor,stats,emptySales,type Entity,type GameState,type Item} from "../domain/model";
+import {recordMissionTick} from "../game/missionMetrics";
 import {updateMission} from "../game/missions";
 type Request={source:Entity;target:Entity;item:Item};
 function at(s:GameState,x:number,y:number){return s.entities.find(e=>e.x===x&&e.y===y);}
@@ -18,6 +19,7 @@ export function tick(state:GameState):GameState {
   const s:GameState=structuredClone(state);
   s.tick++;
   let revenueCents=0,costCents=0;
+  const tickSales=emptySales();
   const audit=(item:Item,event:"produced"|"consumed"|"sold"|"demolished",quantity=1)=>{if(s.materialLedger)s.materialLedger[item][event]+=quantity;};
   // Phase 1: finish due cycles; output cannot be replaced if occupied.
   for(const e of s.entities){
@@ -93,6 +95,7 @@ export function tick(state:GameState):GameState {
     }
     else if(t.kind==="sell_terminal"){
       revenueCents+=REVENUE[r.item];
+      tickSales[r.item]++;
       if(s.sales)s.sales[r.item]++;
       audit(r.item,"sold");
       if(r.item==="iron_ore")s.mission.soldOre++;
@@ -128,6 +131,7 @@ export function tick(state:GameState):GameState {
   s.rollingEvents.push(s.lastEvent);
   if(s.rollingEvents.length>60)s.rollingEvents.shift();
   updateMission(s);
+  recordMissionTick(s,tickSales);
   return s;
 }
 export function runTicks(s:GameState,count:number):GameState {

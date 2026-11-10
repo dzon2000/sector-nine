@@ -5,7 +5,7 @@ import {tick} from "../../src/simulation/engine";
 import {validateSave} from "../../src/persistence/indexedDb";
 
 function atMission(id:"M5"|"M6"|"M7"):GameState{
- const s=createGame();s.mission.activeId=id;s.paused=false;s.introOpen=false;return s;
+ const s=createGame();s.mission.activeId=id;s.missionRuleVersion=2;s.missionMetrics=null;s.paused=false;s.introOpen=false;return s;
 }
 function sell(s:GameState,item:"coal"|"gear"|"steel",n=1):GameState{
  let next=s;

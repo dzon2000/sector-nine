@@ -42,7 +42,7 @@ function build(layout:readonly Construction[],mission:"M6"|"M7",options?:{cash?:
 }
 function cost(layout:readonly Construction[]):number{return layout.reduce((sum,[kind])=>sum+DEFINITIONS[kind].price,0);}
 function measure(s:GameState,numberOfTicks:number){
-  let working=0,starved=0,blocked=0,occupiedStalled=0,completed=0;
+  let working=0,starved=0,blocked=0,completed=0;
   const before=structuredClone(s);
   for(let i=0;i<numberOfTicks;i++){
     const previous=s;
@@ -53,8 +53,7 @@ function measure(s:GameState,numberOfTicks:number){
         else if(entity.status==="waiting_for_inputs")starved++;
         else if(entity.status==="blocked_output")blocked++;
       }
-      if(entity.kind==="conveyor"&&entity.belt&&
-         previous.entities.find(e=>e.id===entity.id)?.belt===entity.belt)occupiedStalled++;
+
     }
     completed+=(s.materialLedger!.gear.produced-before.materialLedger!.gear.produced)-
       (previous.materialLedger!.gear.produced-before.materialLedger!.gear.produced);
@@ -63,7 +62,7 @@ function measure(s:GameState,numberOfTicks:number){
   return {s,sales,revenueCents:s.totalRevenueCents!-before.totalRevenueCents!,
     costCents:s.totalCostCents!-before.totalCostCents!,
     profitCents:(s.totalRevenueCents!-before.totalRevenueCents!)-(s.totalCostCents!-before.totalCostCents!),
-    working,starved,blocked,occupiedStalled,completed};
+    working,starved,blocked,completed};
 }
 function conservation(s:GameState){
   const stock=stockOnHand(s.entities);
@@ -135,7 +134,7 @@ describe("WP3 real-engine physical mission feasibility (V03-AC-04,05,15,16,17)",
         sales:measurement.sales,revenueCents:measurement.revenueCents,costCents:measurement.costCents,
         profitCents:measurement.profitCents,operatingProfitPer60Ticks:measurement.profitCents/4,
         workingEntityTicks:measurement.working,starvedEntityTicks:measurement.starved,
-        blockedEntityTicks:measurement.blocked,occupiedStalledConveyorTicks:measurement.occupiedStalled}));
+        blockedEntityTicks:measurement.blocked}));
     }
   });
 });

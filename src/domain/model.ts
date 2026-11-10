@@ -43,9 +43,17 @@ export interface Entity {
   inputBuffers?: Inventory; reservedInputs?: Inventory;
 }
 export interface Accounting { tick: number; revenueCents: number; costCents: number; }
+export interface MissionSaleTick { tick:number; sales:Record<Item,number>; }
+export interface MissionMetrics {
+  activatedAtTick:number;
+  salesTicks:MissionSaleTick[];
+  streakTicks:number;
+}
 export interface GameState {
-  schemaVersion: 1 | 2; width: 12; height: 12; tick: number; paused: boolean;
+  schemaVersion: 1 | 2 | 3; width: 12; height: 12; tick: number; paused: boolean;
   balanceCents: number; entities: Entity[]; nextId: number;
+  missionRuleVersion?:2|3;
+  missionMetrics?:MissionMetrics|null;
   arbiters: Record<string, number>;
   rollingEvents: Accounting[]; lastEvent: Accounting;
   totalOreProduced: number; totalIngotProduced: number;
@@ -75,7 +83,7 @@ export const STEP: Record<Direction,[number,number]> = {N:[0,-1],E:[1,0],S:[0,1]
 export const rotate = (d:Direction):Direction => ({N:"E",E:"S",S:"W",W:"N"})[d] as Direction;
 export const location = (x:number,y:number) => `${x},${y}`;
 export function createGame():GameState {
-  return { schemaVersion:2,width:12,height:12,tick:0,paused:true,balanceCents:30000,
+  return { schemaVersion:3,missionRuleVersion:3,missionMetrics:null,width:12,height:12,tick:0,paused:true,balanceCents:30000,
     sales:emptySales(),materialLedger:emptyLedger(),totalRevenueCents:0,totalCostCents:0,
     coalDeposits:COAL_DEPOSITS.map(d=>({...d})),technologies:{coal_extraction:false,mechanical_components:false,advanced_smelting:false},
     nextId:2,arbiters:{},rollingEvents:[],lastEvent:{tick:0,revenueCents:0,costCents:0},

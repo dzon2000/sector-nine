@@ -20,7 +20,13 @@ const gearLine:Construction[]=[
 ];
 
 type Campaign={state:GameState;spent:number;refunded:number;research:number;checkpoints:{stage:string;tick:number;cashCents:number}[]};
-function campaign():Campaign{return {state:begin(createGame()),spent:0,refunded:0,research:0,checkpoints:[]};}
+// Preserve the original v0.2 campaign economics as a dedicated legacy-rule regression.
+function campaign():Campaign{
+  const state=begin(createGame());
+  state.missionRuleVersion=2;
+  state.missionMetrics=null;
+  return {state,spent:0,refunded:0,research:0,checkpoints:[]};
+}
 function construct(c:Campaign,...entries:Construction[]):void {
   for(const [kind,x,y,direction] of entries){
     const before=c.state.balanceCents;

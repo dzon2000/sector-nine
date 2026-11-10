@@ -1,5 +1,5 @@
 import {stats,type GameState} from "../domain/model";
-import {activateMissionMetrics} from "./missionMetrics";
+import {activateMissionMetrics,missionWindow} from "./missionMetrics";
 export const MISSIONS={
  M1:{title:"Restore Extraction",hint:"Build an iron mine on a highlighted deposit. Rotate toward a delivery route and run the simulation."},
  M2:{title:"First Delivery",hint:"Deliver 10 iron ore to the terminal. Place conveyors, then rotate with R so their arrows lead toward the terminal."},
@@ -29,17 +29,35 @@ export function updateMission(s:GameState):string|null {
   if(m.activeId==="M5"&&(m.soldCoal??0)>=10){
     m.activeId="M6";
     if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
-    return "Coal deliveries confirmed. Reconstruct mechanical assembly and sell eight gears.";
+    return "Coal deliveries confirmed. Reconstruct mechanical assembly and increase sustained gear throughput.";
   }
-  if(m.activeId==="M6"&&(m.soldGear??0)>=8){
+  if(m.activeId==="M6"){
+    if(s.missionRuleVersion===2){
+      if((m.soldGear??0)<8)return null;
+    }else{
+      const window=missionWindow(s);
+      if(!window||!s.missionMetrics)return null;
+      s.missionMetrics.streakTicks=window.sales.gear>=9?s.missionMetrics.streakTicks+1:0;
+      if(s.missionMetrics.streakTicks<120)return null;
+    }
     m.activeId="M7";
     if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
-    return "Mechanical assembly verified. Rebuild the advanced foundry using iron ingots and coal.";
+    return "Mechanical assembly verified. Restore the foundry while maintaining two profitable product streams.";
   }
-  if(m.activeId==="M7"&&s.technologies?.advanced_smelting&&(m.soldSteel??0)>=8){
+  if(m.activeId==="M7"){
+    if(s.missionRuleVersion===2){
+      if(!s.technologies?.advanced_smelting||(m.soldSteel??0)<8)return null;
+    }else{
+      const window=missionWindow(s);
+      if(!window||!s.missionMetrics)return null;
+      const qualifies=Boolean(s.technologies?.advanced_smelting)&&
+        window.sales.gear>=7&&window.sales.steel>=7&&window.profitCents>=17500;
+      s.missionMetrics.streakTicks=qualifies?s.missionMetrics.streakTicks+1:0;
+      if(s.missionMetrics.streakTicks<120)return null;
+    }
     m.activeId="DONE";
     if(s.missionRuleVersion===3)s.missionMetrics=null;
-    return "Steel deliveries verified. A sealed Prometheus engineering archive awaits future investigation.";
+    return "Sustained foundry operations confirmed. A sealed Prometheus engineering archive awaits future investigation.";
   }
   return null;
 }

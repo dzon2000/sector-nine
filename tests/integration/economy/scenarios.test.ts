@@ -73,6 +73,17 @@ describe("v0.2 deterministic economy: 600-tick warm-up and 240-tick measurement 
       revenueCents240:result.revenue,costCents240:result.cost,
       operatingProfitCents240:result.profit}));
   });
+  it("locks exact v0.2 coal, gear and steel operating-profit reference values without retuning",()=>{
+    const references=[
+      ["coal",coal,15200],
+      ["gears",gears,36900],
+      ["steel",steel,46650]
+    ] as const;
+    for(const [label,layout,expectedProfitCents240] of references){
+      const actual=measure(layout);
+      expect(actual.profit,`Operating profit drift in ${label} for 240 ticks`).toBe(expectedProfitCents240);
+    }
+  });
   it("gear and steel generate higher operating profit per minute than the reference ingot line",()=>{
     const baseline=measure(iron),gear=measure(gears),smelt=measure(steel);
     expect(gear.profit).toBeGreaterThan(baseline.profit);

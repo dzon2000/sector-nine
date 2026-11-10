@@ -196,6 +196,7 @@ describe("WP2 legacy mission contracts",()=>{
     delete old.missionRuleVersion;
     delete old.missionMetrics;
     old.tick=433;
+    old.paused=false;
     old.mission.activeId="M7";
     old.mission.soldGear=11;
     old.mission.soldSteel=7;

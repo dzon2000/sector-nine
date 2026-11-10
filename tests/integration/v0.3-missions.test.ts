@@ -190,6 +190,42 @@ describe("WP2 legacy mission contracts",()=>{
     expect(s.mission.activeId).toBe("DONE");
     expect(validateSave({...s,paused:true}).mission.activeId).toBe("DONE");
   });
+  it("migrates a populated v2 M7 save without losing reserved cycles, belts, arbiter, money or partial mission sales",()=>{
+    const old=createGame();
+    old.schemaVersion=2;
+    delete old.missionRuleVersion;
+    delete old.missionMetrics;
+    old.tick=433;
+    old.mission.activeId="M7";
+    old.mission.soldGear=11;
+    old.mission.soldSteel=7;
+    old.technologies!.advanced_smelting=true;
+    old.balanceCents=71910;
+    old.arbiters={"1":2};
+    old.entities.push(
+      {id:2,kind:"conveyor",x:9,y:5,direction:"E",output:null,belt:"steel",oreInput:0,cycle:null,status:"working",inputBuffers:{},reservedInputs:{}},
+      {id:3,kind:"advanced_furnace",x:7,y:5,direction:"E",output:null,belt:null,oreInput:0,cycle:4,status:"working",
+        inputBuffers:{coal:1},reservedInputs:{iron_ingot:2,coal:1}}
+    );
+    old.nextId=4;
+    old.materialLedger!.steel.opening=1;
+    old.materialLedger!.coal.opening=2;
+    old.materialLedger!.iron_ingot.opening=2;
+    const restored=validateSave(JSON.parse(JSON.stringify(old)));
+    expect(restored.schemaVersion).toBe(3);
+    expect(restored.missionRuleVersion).toBe(2);
+    expect(restored.mission.soldSteel).toBe(7);
+    expect(restored.mission.soldGear).toBe(11);
+    expect(restored.balanceCents).toBe(71910);
+    expect(restored.entities).toEqual(old.entities);
+    expect(restored.arbiters).toEqual(old.arbiters);
+    expect(restored.technologies).toEqual(old.technologies);
+    const continued=tick(restored);
+    expect(continued.mission.activeId).toBe("DONE");
+    expect(continued.mission.soldSteel).toBe(8);
+    expect(validateSave(continued)).toEqual(continued);
+  });
+
   it("v2 active M5 migrates to v3 M6, whereas old M6 and M7 retain v2 rules",()=>{
     for(const id of ["M5","M6","M7","DONE"] as const){
       const s=createGame();s.schemaVersion=2;s.mission.activeId=id;

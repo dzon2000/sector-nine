@@ -81,7 +81,7 @@ describe("WP6 new-player full campaign from 300 Cr (V02-AC-22)",()=>{
   it("reaches M7 completion with real commands, terminal sales and permanent paid unlocks",()=>{
     const c=campaign();
     expect(c.state.balanceCents).toBe(30000);
-    expect(c.state.schemaVersion).toBe(2);
+    expect(c.state.schemaVersion).toBe(3);
     // Waste a small amount on an ordinary misplaced belt, then recover using demolition.
     construct(c,["conveyor",0,0,"E"]);
     demolish(c,0,0);

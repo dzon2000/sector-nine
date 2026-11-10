@@ -130,8 +130,8 @@ export function tick(state:GameState):GameState {
   s.lastEvent={tick:s.tick,revenueCents,costCents};
   s.rollingEvents.push(s.lastEvent);
   if(s.rollingEvents.length>60)s.rollingEvents.shift();
-  updateMission(s);
   recordMissionTick(s,tickSales);
+  updateMission(s);
   return s;
 }
 export function runTicks(s:GameState,count:number):GameState {

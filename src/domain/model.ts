@@ -48,6 +48,7 @@ export interface MissionMetrics {
   activatedAtTick:number;
   salesTicks:MissionSaleTick[];
   streakTicks:number;
+  lastEvaluatedTick?:number;
 }
 export interface GameState {
   schemaVersion: 1 | 2 | 3; width: 12; height: 12; tick: number; paused: boolean;

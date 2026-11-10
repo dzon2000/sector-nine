@@ -19,7 +19,7 @@ function transaction<T>(db:IDBDatabase,mode:IDBTransactionMode,action:(store:IDB
 export function validateSave(value:unknown):GameState{
   if(!value||typeof value!=="object")throw Error("Save is missing or corrupt.");
   const s=value as GameState;
-  if(s.schemaVersion!==1&&s.schemaVersion!==2)throw Error("Unsupported save schema. Export or reset your save manually.");
+  if(s.schemaVersion!==1&&s.schemaVersion!==2&&s.schemaVersion!==3)throw Error("Unsupported save schema. Export or reset your save manually.");
   if(s.width!==12||s.height!==12||!Number.isSafeInteger(s.tick)||s.tick<0||
     !Number.isSafeInteger(s.balanceCents)||!Array.isArray(s.entities)||!Array.isArray(s.rollingEvents)||
     (!s.arbiters||typeof s.arbiters!=="object"||Array.isArray(s.arbiters)||Object.entries(s.arbiters).some(([key,value])=>!Number.isSafeInteger(Number(key))||Number(key)<1||!Number.isSafeInteger(value)||value<0))||!s.mission||!Number.isSafeInteger(s.nextId)||
@@ -69,7 +69,7 @@ export function validateSave(value:unknown):GameState{
     const opening=stockOnHand(n.entities);
     for(const item of ITEMS)n.materialLedger![item].opening=opening[item];
   }
-  if(n.schemaVersion===2){
+  if(n.schemaVersion===2||n.schemaVersion===3){
     // Earlier v0.2 development snapshots predate the Foundry interlude fields.
     // Upgrade only absent fields; explicit invalid values are still rejected.
     if(n.foundryStorySeen===undefined){
@@ -137,6 +137,40 @@ export function validateSave(value:unknown):GameState{
       if(e.kind==="furnace"&&e.oreInput!==(e.inputBuffers?.iron_ore??0))
         throw Error("Inconsistent furnace legacy buffer and typed inventory. Data preserved.");
     }
+  }
+  // Validate the complete v3 window before any migration or saved state is accepted.
+  if(n.schemaVersion===3){
+    if(n.missionRuleVersion!==2&&n.missionRuleVersion!==3)
+      throw Error("Invalid v3 mission rule version. Data preserved.");
+    const metrics=n.missionMetrics;
+    if(metrics!==null){
+      if(!metrics||typeof metrics!=="object"||Array.isArray(metrics)||
+         !Number.isSafeInteger(metrics.activatedAtTick)||metrics.activatedAtTick<0||metrics.activatedAtTick>n.tick||
+         !Number.isSafeInteger(metrics.streakTicks)||metrics.streakTicks<0||
+         !Array.isArray(metrics.salesTicks)||metrics.salesTicks.length>60)
+        throw Error("Invalid v3 mission metrics. Data preserved.");
+      for(let i=0;i<metrics.salesTicks.length;i++){
+        const event=metrics.salesTicks[i];
+        if(!event||typeof event!=="object"||!Number.isSafeInteger(event.tick)||
+           event.tick<=metrics.activatedAtTick||event.tick>n.tick||
+           (i>0&&event.tick!==metrics.salesTicks[i-1].tick+1)||
+           !event.sales||typeof event.sales!=="object"||Array.isArray(event.sales)||
+           Object.keys(event.sales).length!==ITEMS.length||
+           Object.keys(event.sales).some(key=>!ITEMS.includes(key as Item))||
+           ITEMS.some(item=>!Number.isSafeInteger(event.sales[item])||event.sales[item]<0))
+          throw Error("Invalid v3 terminal-sale history. Data preserved.");
+      }
+      if(metrics.salesTicks.length &&
+         metrics.salesTicks[metrics.salesTicks.length-1].tick!==n.tick)
+        throw Error("Stale v3 terminal-sale history. Data preserved.");
+    }
+    if(n.missionRuleVersion===2 && metrics!==null)
+      throw Error("Legacy missions cannot have v3 metric state. Data preserved.");
+  }else{
+    // v1 already upgraded to the v2 shape; keep active v2 M6/M7 cumulative rules.
+    n.missionRuleVersion=["M6","M7"].includes(n.mission.activeId)?2:3;
+    n.missionMetrics=null;
+    n.schemaVersion=3;
   }
   return n;
 }

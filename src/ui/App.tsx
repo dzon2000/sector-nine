@@ -1,6 +1,8 @@
 import {Fragment,useCallback,useEffect,useRef,useState} from "react";
 import {begin,place,remove,reset,setPause,turn} from "../game/commands";
 import {MISSIONS} from "../game/missions";
+import {entityDiagnostics,terminalDiagnostics,diagnosticHint} from "../game/diagnostics";
+import {missionWindow} from "../game/missionMetrics";
 import {TECHNOLOGIES,TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type TechnologyId} from "../game/technologies";
 import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
 import {tick} from "../simulation/engine";
@@ -107,6 +109,24 @@ export default function App(){
   if(error)return <main className="error"><h1>Save error</h1><p role="alert">{error}</p><p>Stored data has not been overwritten. Export or back up your IndexedDB data before resetting.</p><button onClick={()=>void fresh()}>Factory Reset</button></main>;
   if(!game)return null;
   const kpi=stats(game),mission=MISSIONS[game.mission.activeId];
+  const machineCounters=selectedEntity?entityDiagnostics(game,selectedEntity.id):null;
+  const terminalCounters=terminalDiagnostics(game);
+  const currentWindow=missionWindow(game);
+  const throughputMission=game.missionRuleVersion===3&&
+    (game.mission.activeId==="M6"||game.mission.activeId==="M7");
+  const isM7=game.mission.activeId==="M7";
+  const missionStreak=game.missionMetrics?.streakTicks??0;
+  const unmetRequirements:string[]=[];
+  if(throughputMission){
+    if(!currentWindow)unmetRequirements.push("Collect 60 active mission ticks before evaluating throughput.");
+    else{
+      if(currentWindow.sales.gear<(isM7?7:9))unmetRequirements.push("Increase gear production and inspect assembler inputs.");
+      if(isM7&&currentWindow.sales.steel<7)unmetRequirements.push("Increase steel output; inspect coal and iron-ingot supply.");
+      if(isM7&&currentWindow.profitCents<17500)unmetRequirements.push("Improve operating profit while preserving parallel production.");
+    }
+    if(isM7&&!game.technologies?.advanced_smelting)
+      unmetRequirements.push("Purchase Advanced Smelting technology.");
+  }
   const foundryActive=["M5","M6","M7","DONE"].includes(game.mission.activeId);
   const foundryStoryOpen=(["M5","M6","M7"].includes(game.mission.activeId)&&!game.foundryStorySeen)||(foundryActive&&replayFoundry);
   return <div className="app">
@@ -146,14 +166,50 @@ export default function App(){
       <Board state={game} tool={tool} direction={direction} selectedId={selected} onTile={tile}/><p className="tip">M: iron mine · C: coal mine · F: furnace · A: assembler · S: advanced furnace · B: conveyor · $: terminal</p></main>
       <aside className="inspector"><h2>Inspector</h2>{selectedEntity?<><h3>{DEFINITIONS[selectedEntity.kind].label}</h3><dl><dt>Position</dt><dd>({selectedEntity.x}, {selectedEntity.y})</dd><dt>Facing</dt><dd>{selectedEntity.direction}</dd><dt>Status</dt><dd>{game.paused?"paused":selectedEntity.status}</dd><dt>Output</dt><dd>{selectedEntity.output??selectedEntity.belt??"empty"}</dd>{(["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind))&&Object.entries(selectedEntity.kind==="furnace"?RECIPES.iron_ingot.input:selectedEntity.kind==="assembler"?RECIPES.gear.input:RECIPES.steel.input).map(([item,required])=><Fragment key={item}><dt>{item.replaceAll("_"," ")} buffer</dt><dd>{selectedEntity.inputBuffers?.[item as Item]??0}/4 (needs {required})</dd></Fragment>)}
         <dt>Cycle</dt><dd>{selectedEntity.cycle===null?"idle":selectedEntity.cycle+" ticks remaining"}</dd></dl>
+        <section aria-label="Selected structure diagnostics" data-testid="entity-diagnostics" className="diagnostic-panel">
+          <h3>Trailing 60 active ticks</h3>
+          {machineCounters?<>
+            <p>Observed {machineCounters.ticks}/60 active ticks.</p>
+            {selectedEntity.kind==="conveyor"?
+              <p>Moved: {machineCounters.conveyorMoves} items; occupied but stalled: {machineCounters.conveyorStalledTicks} ticks.</p>:
+              selectedEntity.kind==="sell_terminal"?
+                <p>Terminal intake: {terminalCounters.totalSales} items across {terminalCounters.ticks} ticks.</p>:
+                <dl>
+                  <dt>Processing</dt><dd>{Math.round(100*machineCounters.workingTicks/machineCounters.ticks)}% ({machineCounters.workingTicks} ticks)</dd>
+                  <dt>Missing inputs</dt><dd>{Math.round(100*machineCounters.inputStarvedTicks/machineCounters.ticks)}% ({machineCounters.inputStarvedTicks} ticks)</dd>
+                  <dt>Blocked output</dt><dd>{Math.round(100*machineCounters.outputBlockedTicks/machineCounters.ticks)}% ({machineCounters.outputBlockedTicks} ticks)</dd>
+                  <dt>Completed units</dt><dd>{machineCounters.completedUnits} ({machineCounters.completedPer60Ticks.toFixed(1)}/60 ticks)</dd>
+                </dl>}
+          </>:<p>Collecting active-tick diagnostic data.</p>}
+          <p data-testid="diagnostic-hint">{diagnosticHint(game,selectedEntity.id)}</p>
+        </section>
         {["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind)&&<p>Recipe: {selectedEntity.kind==="furnace"?"2 iron ore → 1 iron ingot (4 ticks)":selectedEntity.kind==="assembler"?"2 iron ingots → 1 gear (5 ticks)":"2 iron ingots + 1 coal → 1 steel (8 ticks)"}</p>}
         {selectedEntity.reservedInputs&&Object.values(selectedEntity.reservedInputs).some(v=>v>0)&&<p>Reserved inputs: {Object.entries(selectedEntity.reservedInputs).map(([item,count])=>`${item}: ${count}`).join(", ")}</p>}
         {COAL_DEPOSITS.some(d=>d.x===selectedEntity.x&&d.y===selectedEntity.y)&&selectedEntity.kind!=="coal_mine"&&<p>A coal deposit is beneath this structure. Demolish it to build a coal mine.</p>}
         {selectedEntity.kind!=="sell_terminal"&&<><button onClick={()=>{const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);if(r.ok)persist(r.state);}}>Rotate clockwise</button><button className="danger" onClick={()=>demolish(selectedEntity.id)}>Demolish</button></>}</>:<p>Select a machine or conveyor to view status and controls.</p>}
+      <section aria-label="Terminal throughput" data-testid="terminal-throughput" className="diagnostic-panel">
+        <h3>Terminal sales / trailing 60 active ticks</h3>
+        <p>Observed: {terminalCounters.ticks}/60 ticks. Total intake: {terminalCounters.totalSales} items.</p>
+        <p>{(["iron_ore","iron_ingot","coal","gear","steel"] as const).map(item=>
+          `${item.replaceAll("_"," ")}: ${terminalCounters.sales[item]}`).join(" · ")}</p>
+        <p>Per item: real terminal sales, not machine production. A terminal is not assumed congested.</p>
+      </section>
       <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>void fresh()}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>
       </aside></div>
     <footer><div><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{mission.title}</h2><p>{game.tutorialEnabled?mission.hint:"Tutorial hints hidden."}</p>
-      <div className="progress">{game.mission.activeId==="M2"?`${game.mission.soldOre} / 10 ore sold`:game.mission.activeId==="M3"?`${game.mission.soldIngot} / 20 ingots sold`:game.mission.activeId==="M4"?`${game.mission.profitStreakTicks} / 60 qualifying ticks`:game.mission.activeId==="M5"?`${game.mission.soldCoal??0} / 10 coal sold`:game.mission.activeId==="M6"?`${game.mission.soldGear??0} / 8 gears sold`:game.mission.activeId==="M7"?`${game.mission.soldSteel??0} / 8 steel sold`:""}</div></div>
+      {throughputMission&&<section className="mission-throughput" aria-label="Mission throughput diagnostics" data-testid="mission-throughput">
+        <h3>Live objective · trailing 60 active ticks</h3>
+        <p>{currentWindow?"Complete 60-tick window":"Collecting mission-local window"}</p>
+        <ul>
+          <li>Gear sales: {currentWindow?.sales.gear??0}/{isM7?7:9} per 60 ticks</li>
+          {isM7&&<li>Steel sales: {currentWindow?.sales.steel??0}/7 per 60 ticks</li>}
+          {isM7&&<li>Operating profit: {money(currentWindow?.profitCents??0)}/175.00 Cr per 60 ticks</li>}
+          {isM7&&<li>Advanced Smelting: {game.technologies?.advanced_smelting?"Unlocked":"Locked"}</li>}
+          <li>Stable: {missionStreak}/120 consecutive qualifying ticks</li>
+        </ul>
+        <p data-testid="mission-bottleneck">{unmetRequirements[0]??"All conditions met in current window; maintain stable throughput."}</p>
+      </section>}
+      <div className="progress">{game.mission.activeId==="M2"?`${game.mission.soldOre} / 10 ore sold`:game.mission.activeId==="M3"?`${game.mission.soldIngot} / 20 ingots sold`:game.mission.activeId==="M4"?`${game.mission.profitStreakTicks} / 60 qualifying ticks`:game.mission.activeId==="M5"?`${game.mission.soldCoal??0} / 10 coal sold`:game.mission.activeId==="M6"&&!throughputMission?`${game.mission.soldGear??0} / 8 gears sold`:game.mission.activeId==="M7"&&!throughputMission?`${game.mission.soldSteel??0} / 8 steel sold`:""}</div></div>
       <div><p role="status">{message}</p><button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button></div></footer>
     {foundryStoryOpen&&!game.introOpen&&!help&&<div className="overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Foundry Directive"><small>{foundryPanel+1} / 3 · PROMETHEUS ARCHIVE</small><h1>{FOUNDRY_NARRATIVE[foundryPanel][0]}</h1><p>{FOUNDRY_NARRATIVE[foundryPanel][1]}</p><div className="actions">{foundryPanel>0&&<button onClick={()=>setFoundryPanel(p=>p-1)}>Previous</button>}{foundryPanel<2&&<button onClick={()=>setFoundryPanel(p=>p+1)}>Next</button>}<button onClick={closeFoundry}>Close / Return</button><button onClick={closeFoundry}>Skip Directive</button></div></section></div>}
     {(game.introOpen||help)&&<div className="overlay"><section className="story" role="dialog" aria-modal="true"><small>{panel+1} / 3 · SECTOR 9 ARCHIVE</small><h1>{NARRATIVE[panel][0]}</h1><p>{NARRATIVE[panel][1]}</p><div className="actions">{panel>0&&<button onClick={()=>setPanel(p=>p-1)}>Previous</button>}{panel<2&&<button onClick={()=>setPanel(p=>p+1)}>Next</button>}<button onClick={()=>{if(help){setHelp(false);return;}go();}}> {help?"Close / Return":"Begin Operations"}</button>{!help&&<button onClick={go}>Skip Introduction</button>}</div></section></div>}

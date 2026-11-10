@@ -43,6 +43,9 @@ describe("WP4 authoritative 60-active-tick diagnostic counters",()=>{
     const furnace=s.entities.find(e=>e.kind==="furnace")!;
     furnace.inputBuffers={iron_ore:2};furnace.oreInput=2;
     s.materialLedger!.iron_ore.opening=2;
+    // Keep the downstream belt occupied, so completed output cannot discharge.
+    s.entities.find(e=>e.kind==="conveyor")!.belt="iron_ingot";
+    s.materialLedger!.iron_ingot.opening=1;
     s=runTicks(s,6);
     const d=entityDiagnostics(s,furnace.id)!;
     expect(d.ticks).toBe(6);
@@ -61,7 +64,7 @@ describe("WP4 authoritative 60-active-tick diagnostic counters",()=>{
     belt.belt="iron_ingot";s.materialLedger!.iron_ingot.opening++;
     s=tick(s);
     expect(entityDiagnostics(s,furnace.id)?.outputBlockedTicks).toBe(1);
-    belt.belt=null; // clear obstacle as a controlled test fixture
+    s.entities.find(e=>e.id===belt.id)!.belt=null; // clear obstacle on current cloned state
     s=tick(s);
     expect(entityDiagnostics(s,furnace.id)?.workingTicks).toBeGreaterThan(0);
   });

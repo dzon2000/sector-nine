@@ -121,6 +121,15 @@ describe("WP3 real-engine physical mission feasibility (V03-AC-04,05,15,16,17)",
       const measurement=measure(warmed,240);
       expect(measurement.sales[product]).toBeGreaterThan(0);
       expect(measurement.profitCents).toBeGreaterThan(0);
+      const approved={
+        "one-chain gear":{gear:30,steel:0,profitCents:36900},
+        "F-M6":{gear:48,steel:0,profitCents:58560},
+        "steel-only":{gear:0,steel:30,profitCents:46650},
+        "F-M7":{gear:30,steel:30,profitCents:83550}
+      }[name];
+      expect(measurement.sales.gear).toBe(approved.gear);
+      expect(measurement.sales.steel).toBe(approved.steel);
+      expect(measurement.profitCents).toBe(approved.profitCents);
       expect(measurement.working+measurement.starved+measurement.blocked).toBeGreaterThan(0);
       console.info("V03-WP3-REFERENCE "+JSON.stringify({name,buildCostCents:cost(layout),ticks:240,
         sales:measurement.sales,revenueCents:measurement.revenueCents,costCents:measurement.costCents,
@@ -160,6 +169,29 @@ describe("WP3 stockpile, backpressure, persistence and reversibility (V03-AC-06,
     s=runTicks(s,600);
     expect(s.mission.activeId).toBe("M6");
     expect(s.missionMetrics?.streakTicks).toBeLessThan(120);
+    conservation(s);
+  });
+  it("prefilled assembler output, outgoing belts and input buffer cannot bypass sustained M6 throughput",()=>{
+    let s=build(primary,"M6");
+    const assembler=s.entities.find(e=>e.kind==="assembler")!;
+    assembler.output="gear";
+    assembler.inputBuffers={iron_ingot:4};
+    let openingGears=1;
+    for(const e of s.entities.filter(e=>e.kind==="conveyor"&&
+      ((e.y===2&&e.x>=7)||(e.x===10&&e.y>=3&&e.y<=4)))){
+      e.belt="gear";openingGears++;
+    }
+    s.materialLedger!.gear.opening=openingGears;
+    s.materialLedger!.iron_ingot.opening=4;
+    expect(openingGears).toBe(7);
+    conservation(s);
+    let longest=0;
+    for(let i=0;i<480;i++){
+      s=tick(s);
+      longest=Math.max(longest,s.missionMetrics?.streakTicks??0);
+    }
+    expect(longest).toBeLessThan(120);
+    expect(s.mission.activeId).toBe("M6");
     conservation(s);
   });
   it("physical F-M7 transport and arbitration remain deterministic after repeated save/restore",()=>{

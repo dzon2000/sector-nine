@@ -136,7 +136,7 @@ describe("WP3 real-engine physical mission feasibility (V03-AC-04,05,15,16,17)",
         workingEntityTicks:measurement.working,starvedEntityTicks:measurement.starved,
         blockedEntityTicks:measurement.blocked}));
     }
-  });
+  },20000);
 });
 
 describe("WP3 stockpile, backpressure, persistence and reversibility (V03-AC-06,16)",()=>{

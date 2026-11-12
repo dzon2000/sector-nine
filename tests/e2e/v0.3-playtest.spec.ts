@@ -102,3 +102,15 @@ test("WP5 opt-in local playtest records only real commands, reloads and exports 
   expect(report).toHaveProperty("activeTicks");
   expect(JSON.stringify(report)).not.toMatch(/email|userAgent|ipAddress|deviceId/i);
 });
+
+test("WP5 damaged optional playtest data cannot block loading or contaminate recorder",async({page})=>{
+  await page.addInitScript(()=>{
+    localStorage.setItem("sector-nine-v0.3-local-playtest",JSON.stringify({active:true,commands:{}}));
+  });
+  await page.goto("/");
+  await page.getByRole("button",{name:"Begin Operations"}).click();
+  await expect(page.getByTestId("cash")).toHaveText("300.00 Cr");
+  await page.getByRole("button",{name:/Local playtest/}).click();
+  await expect(page.getByTestId("start-playtest")).toBeVisible();
+  await expect(page.getByTestId("playtest-status")).toHaveCount(0);
+});

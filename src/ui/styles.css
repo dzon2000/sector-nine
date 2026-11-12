@@ -13,3 +13,13 @@
 .mission-throughput li{line-height:1.4}
 .mission-throughput p{font-size:12px;line-height:1.5;margin:5px 0}
 footer>div:first-child{max-width:880px}
+
+/* v0.3 local-only playtest: optional, never a blocking modal. */
+.playtest-panel{border-top:1px solid #34506a;margin-top:14px;padding-top:12px;font-size:12px}
+.playtest-panel>button{margin:0 0 8px}
+.playtest-panel p{margin:8px 0}
+.playtest-panel fieldset{border:1px solid #45647b;border-radius:6px;padding:8px;margin:10px 0}
+.playtest-panel legend{padding:0 4px}
+.playtest-panel fieldset label{display:block;margin:8px 0;line-height:1.35}
+.playtest-panel fieldset input{margin-right:8px;accent-color:#e7c07f}
+.playtest-panel button{white-space:normal}

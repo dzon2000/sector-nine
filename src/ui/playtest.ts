@@ -44,7 +44,9 @@ export function startPlaytest(game:GameState,now:number):PlaytestSession{
   return {active:true,startedAt:now,lastObservedAt:now,lastTick:game.tick,lastMission:game.mission.activeId,
     lastPaused:game.paused||game.introOpen,activity:"unclassified",
     wallMs:0,pausedMs:0,planningMs:0,waitingMs:0,unclassifiedMs:0,activeTicks:0,
-    commands:{place:0,turn:0,demolish:0,research:0},commandEvents:[],usedDeposits:[],
+    commands:{place:0,turn:0,demolish:0,research:0},commandEvents:[],
+    usedDeposits:game.entities.filter(e=>e.kind==="iron_mine"||e.kind==="coal_mine")
+      .map(e=>`${e.kind==="iron_mine"?"iron":"coal"}:(${e.x},${e.y})`),
     inputStarvedEntityTicks:0,outputBlockedEntityTicks:0,missionTransitions:[]};
 }
 export function annotatePlaytest(session:PlaytestSession,activity:PlaytestActivity,now:number):PlaytestSession{

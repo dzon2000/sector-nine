@@ -1,5 +1,4 @@
 import {test,expect,type Page} from "@playwright/test";
-import {readFile} from "node:fs/promises";
 
 async function seed(page:Page,mutation:"m5-ready"|"m6-streak"|"m7-starved"|"legacy-m6"){
   await page.evaluate(async mutation=>{
@@ -90,9 +89,10 @@ test("WP5 opt-in local playtest records only real commands, reloads and exports 
   await page.getByTestId("export-playtest").click();
   const download=await downloadPromise;
   expect(download.suggestedFilename()).toBe("sector-nine-playtest.json");
-  const path=await download.path();
-  expect(path).not.toBeNull();
-  const report=JSON.parse(await readFile(path!,"utf8"));
+  const stream=await download.createReadStream();
+  const chunks:string[]=[];
+  for await(const chunk of stream)chunks.push(chunk.toString("utf8"));
+  const report=JSON.parse(chunks.join(""));
   expect(report.format).toBe("sector-nine-playtest-v1");
   expect(report.commands).toEqual({place:1,turn:1,demolish:1,research:0});
   expect(report.commandEvents.map((e:{kind:string})=>e.kind)).toEqual(["place","turn","demolish"]);

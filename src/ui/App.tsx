@@ -8,7 +8,7 @@ import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,RECIPES,money,rotate,stats
 import {tick} from "../simulation/engine";
 import {loadGame,saveGame,eraseGame} from "../persistence/indexedDb";
 import {Board,type Tool} from "../rendering/Board";
-import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
+import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,isPlaytestSession,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
 const PLAYTEST_KEY="sector-nine-v0.3-local-playtest";
 const FOUNDRY_NARRATIVE=[
  ["OPERATIONS DIRECTIVE // FOUNDRY RESTORATION","Your first deliveries have restored confidence in Sector 9. A retired foundry blueprint has surfaced in the maintenance archive. It references coal-fired metallurgy and mechanical assemblies once used by Project Prometheus."],
@@ -67,9 +67,16 @@ export default function App(){
     loadGame().then(s=>{
       const initial=s??createGame();latest.current=initial;setGame(initial);
       try{const saved=localStorage.getItem(PLAYTEST_KEY);
-        if(saved){const session=resumePlaytest(JSON.parse(saved) as PlaytestSession,initial,Date.now());
-          playtestRef.current=session;setPlaytest(session);setShowPlaytest(true);}
-      }catch{localStorage.removeItem(PLAYTEST_KEY);}
+        if(saved){
+          const parsed:unknown=JSON.parse(saved);
+          if(!isPlaytestSession(parsed))throw new Error("Invalid optional playtest state");
+          const session=resumePlaytest(parsed,initial,Date.now());
+          playtestRef.current=session;setPlaytest(session);setShowPlaytest(true);
+        }
+      }catch{
+        // Recorder corruption or unavailable browser storage must not interrupt gameplay.
+        try{localStorage.removeItem(PLAYTEST_KEY);}catch{/* Recording remains optional. */}
+      }
       setReady(true);
     })
       .catch(e=>{setError(String(e));setReady(true);});

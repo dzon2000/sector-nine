@@ -29,6 +29,35 @@ export interface PlaytestSession {
   outputBlockedEntityTicks:number;
   missionTransitions:PlaytestTransition[];
 }
+/** Ignore malformed local recorder data; it must never block the game save. */
+export function isPlaytestSession(value:unknown):value is PlaytestSession{
+  if(!value||typeof value!=="object"||Array.isArray(value))return false;
+  const v=value as Record<string,unknown>;
+  const safe=(field:string)=>Number.isSafeInteger(v[field])&&(v[field] as number)>=0;
+  if(typeof v.active!=="boolean"||typeof v.lastPaused!=="boolean"||
+    !["unclassified","planning","waiting"].includes(String(v.activity))||
+    !["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(String(v.lastMission)))return false;
+  for(const field of ["startedAt","lastObservedAt","lastTick","wallMs","pausedMs","planningMs",
+    "waitingMs","unclassifiedMs","activeTicks","inputStarvedEntityTicks","outputBlockedEntityTicks"])
+    if(!safe(field))return false;
+  if(!v.commands||typeof v.commands!=="object"||Array.isArray(v.commands))return false;
+  const commands=v.commands as Record<string,unknown>;
+  if(["place","turn","demolish","research"].some(k=>!Number.isSafeInteger(commands[k])||
+    (commands[k] as number)<0))return false;
+  if(!Array.isArray(v.commandEvents)||!Array.isArray(v.usedDeposits)||
+    !Array.isArray(v.missionTransitions)||v.commandEvents.length>100000||
+    v.missionTransitions.length>10000||v.usedDeposits.length>100)return false;
+  if(v.usedDeposits.some(x=>typeof x!=="string"||x.length>100))return false;
+  if(v.commandEvents.some(x=>!x||typeof x!=="object"||
+    !["place","turn","demolish","research"].includes(x.kind)||
+    !Number.isSafeInteger(x.tick)||x.tick<0||
+    !Number.isSafeInteger(x.elapsedMs)||x.elapsedMs<0))return false;
+  if(v.missionTransitions.some(x=>!x||typeof x!=="object"||
+    !Number.isSafeInteger(x.tick)||x.tick<0||
+    !["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(x.from)||
+    !["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(x.to)))return false;
+  return true;
+}
 /** All durations are explicitly classified by prior known state; no subjective inference. */
 function elapsed(s:PlaytestSession,now:number):PlaytestSession{
   if(!s.active)return s;

@@ -30,6 +30,16 @@ describe("WP5 optional local-only playtest protocol",()=>{
     expect(continued.waitingMs).toBe(3000);
     expect(continued.activeTicks).toBe(10);
   });
+  it("includes already-used extraction deposits when playtest recording starts mid-campaign",()=>{
+    const game=state(150);
+    game.entities.push({id:2,kind:"iron_mine",x:2,y:2,direction:"E",output:null,belt:null,
+      oreInput:0,cycle:null,status:"working",inputBuffers:{},reservedInputs:{}});
+    game.entities.push({id:3,kind:"coal_mine",x:7,y:9,direction:"N",output:null,belt:null,
+      oreInput:0,cycle:null,status:"working",inputBuffers:{},reservedInputs:{}});
+    const recording=startPlaytest(game,4000);
+    expect(recording.usedDeposits).toEqual(["iron:(2,2)","coal:(7,9)"]);
+    expect(recording.commands.place).toBe(0);
+  });
   it("counts successful commands only and keeps the actual event type",()=>{
     let s=startPlaytest(state(),100);
     s=recordPlaytestCommand(s,{kind:"place",entityKind:"furnace",x:5,y:5},200);

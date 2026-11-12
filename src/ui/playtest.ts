@@ -6,7 +6,7 @@ export type PlaytestCommand=
   | {kind:"place";entityKind:Kind;x:number;y:number}
   | {kind:"turn"|"demolish";entityKind?:Kind;x:number;y:number}
   | {kind:"research";technology:string};
-export interface PlaytestCommandEvent extends PlaytestCommand {tick:number;elapsedMs:number}
+export type PlaytestCommandEvent = PlaytestCommand & {tick:number;elapsedMs:number};
 export interface PlaytestTransition {tick:number;from:MissionId;to:MissionId}
 export interface PlaytestSession {
   active:boolean;

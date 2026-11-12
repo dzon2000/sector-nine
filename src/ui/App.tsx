@@ -8,6 +8,8 @@ import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,RECIPES,money,rotate,stats
 import {tick} from "../simulation/engine";
 import {loadGame,saveGame,eraseGame} from "../persistence/indexedDb";
 import {Board,type Tool} from "../rendering/Board";
+import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
+const PLAYTEST_KEY="sector-nine-v0.3-local-playtest";
 const FOUNDRY_NARRATIVE=[
  ["OPERATIONS DIRECTIVE // FOUNDRY RESTORATION","Your first deliveries have restored confidence in Sector 9. A retired foundry blueprint has surfaced in the maintenance archive. It references coal-fired metallurgy and mechanical assemblies once used by Project Prometheus."],
  ["CONDITIONAL AUTHORIZATION","Corporate authorization is conditional. Purchase technology using production profits. Coal Extraction costs 80 Cr, Mechanical Components 120 Cr, and Advanced Smelting 180 Cr."],
@@ -33,20 +35,52 @@ export default function App(){
   const [foundryPanel,setFoundryPanel]=useState(0);
   const [ready,setReady]=useState(false);
   const resetting=useRef(false);
+  const [showPlaytest,setShowPlaytest]=useState(false);
+  const [playtest,setPlaytest]=useState<PlaytestSession|null>(null);
+  const playtestRef=useRef<PlaytestSession|null>(null);
+  const savePlaytest=(session:PlaytestSession|null)=>{
+    playtestRef.current=session;setPlaytest(session);
+    try{if(session)localStorage.setItem(PLAYTEST_KEY,JSON.stringify(session));
+      else localStorage.removeItem(PLAYTEST_KEY);
+    }catch{setMessage("Local playtest storage unavailable. Export your report before closing the tab.");}
+  };
+  const observePlaytest=(next:GameState,command?:PlaytestCommand)=>{
+    const session=playtestRef.current;
+    if(!session?.active)return;
+    const now=Date.now();
+    let updated=advancePlaytest(session,next,now);
+    if(command)updated=recordPlaytestCommand(updated,command,now);
+    savePlaytest(updated);
+  };
+  const exportPlaytest=()=>{
+    if(!playtestRef.current)return;
+    const report=buildPlaytestReport(playtestRef.current);
+    const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:"application/json"}));
+    const link=document.createElement("a");link.href=url;link.download="sector-nine-playtest.json";link.click();
+    URL.revokeObjectURL(url);
+  };
   const change=useCallback((f:(s:GameState)=>GameState)=>{
     const s=latest.current;if(!s||resetting.current)return;
-    const next=f(s);latest.current=next;setGame(next);
+    const next=f(s);latest.current=next;setGame(next);observePlaytest(next);
   },[]);
   useEffect(()=>{
-    loadGame().then(s=>{const initial=s??createGame();latest.current=initial;setGame(initial);setReady(true);})
+    loadGame().then(s=>{
+      const initial=s??createGame();latest.current=initial;setGame(initial);
+      try{const saved=localStorage.getItem(PLAYTEST_KEY);
+        if(saved){const session=resumePlaytest(JSON.parse(saved) as PlaytestSession,initial,Date.now());
+          playtestRef.current=session;setPlaytest(session);setShowPlaytest(true);}
+      }catch{localStorage.removeItem(PLAYTEST_KEY);}
+      setReady(true);
+    })
       .catch(e=>{setError(String(e));setReady(true);});
   },[]);
   useEffect(()=>{
     if(!ready||!game||error)return;
     const id=window.setInterval(()=>{
       const s=latest.current;
-      if(!s||resetting.current||s.paused||s.introOpen||document.hidden)return;
-      const next=tick(s);latest.current=next;setGame(next);
+      if(!s||resetting.current)return;
+      if(s.paused||s.introOpen||document.hidden){observePlaytest(s);return;}
+      const next=tick(s);latest.current=next;setGame(next);observePlaytest(next);
       if(next.tick%10===0)void saveGame(next).catch(e=>setError(String(e)));
     },1000);
     return ()=>clearInterval(id);
@@ -61,17 +95,21 @@ export default function App(){
     document.addEventListener("visibilitychange",onVisibility);
     return ()=>document.removeEventListener("visibilitychange",onVisibility);
   },[change]);
-  const persist=(s:GameState)=>{if(resetting.current)return;latest.current=s;setGame(s);void saveGame(s).catch(e=>setError(String(e)));};
+  const persist=(s:GameState,command?:PlaytestCommand)=>{
+    if(resetting.current)return;latest.current=s;setGame(s);observePlaytest(s,command);
+    void saveGame(s).catch(e=>setError(String(e)));
+  };
   const selectedEntity=game?.entities.find(e=>e.id===selected);
   const rotateChoice=()=>{
     if(tool!=="select"&&tool!=="demolish")setDirection(d=>rotate(d));
-    else if(selectedEntity){const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);if(r.ok)persist(r.state);}
+    else if(selectedEntity){const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);
+      if(r.ok)persist(r.state,{kind:"turn",entityKind:selectedEntity.kind,x:selectedEntity.x,y:selectedEntity.y});}
   };
   const demolish=(id:number)=>{
     const e=latest.current?.entities.find(e=>e.id===id);if(!e)return;
     if(!window.confirm("Demolish "+e.kind+"? Buffered items will be destroyed. Refund: "+money(Math.floor(DEFINITIONS[e.kind].price*0.75))))return;
     const result=remove(latest.current!,id,true);setMessage(result.message);
-    if(result.ok){persist(result.state);setSelected(null);}
+    if(result.ok){persist(result.state,{kind:"demolish",entityKind:e.kind,x:e.x,y:e.y});setSelected(null);}
   };
   useEffect(()=>{
     const listener=(e:KeyboardEvent)=>{
@@ -89,7 +127,7 @@ export default function App(){
     if(tool==="select"){setSelected(entity?.id??null);return;}
     if(tool==="demolish"){if(entity)demolish(entity.id);else setMessage("No object to demolish.");return;}
     const result=place(game,tool,x,y,direction);
-    setMessage(result.message);if(result.ok){persist(result.state);setSelected(result.state.nextId-1);}
+    setMessage(result.message);if(result.ok){persist(result.state,{kind:"place",entityKind:tool,x,y});setSelected(result.state.nextId-1);}
   };
   const closeFoundry=()=>{const s=latest.current;if(!s)return;const n=structuredClone(s);n.foundryStorySeen=true;persist(n);setReplayFoundry(false);setFoundryPanel(0);};
   const buyTechnology=(id:TechnologyId)=>{
@@ -99,12 +137,12 @@ export default function App(){
     if(!window.confirm(`Unlock ${TECHNOLOGIES[id].label} for ${money(TECHNOLOGIES[id].costCents)}? This is a one-time, permanent payment and cannot be undone.`))return;
     const result=purchaseTechnology(current,id);
     setMessage(result.message);
-    if(result.ok)persist(result.state);
+    if(result.ok)persist(result.state,{kind:"research",technology:id});
   };
   const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)void saveGame(s).catch(e=>setError(String(e)));};
   const fresh=async()=>{if(resetting.current||!window.confirm("Factory Reset? All progress and your save will be permanently deleted."))return;
     resetting.current=true;
-    try{await eraseGame();const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+    try{await eraseGame();savePlaytest(null);setShowPlaytest(false);const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
   if(error)return <main className="error"><h1>Save error</h1><p role="alert">{error}</p><p>Stored data has not been overwritten. Export or back up your IndexedDB data before resetting.</p><button onClick={()=>void fresh()}>Factory Reset</button></main>;
   if(!game)return null;
@@ -186,13 +224,41 @@ export default function App(){
         {["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind)&&<p>Recipe: {selectedEntity.kind==="furnace"?"2 iron ore → 1 iron ingot (4 ticks)":selectedEntity.kind==="assembler"?"2 iron ingots → 1 gear (5 ticks)":"2 iron ingots + 1 coal → 1 steel (8 ticks)"}</p>}
         {selectedEntity.reservedInputs&&Object.values(selectedEntity.reservedInputs).some(v=>v>0)&&<p>Reserved inputs: {Object.entries(selectedEntity.reservedInputs).map(([item,count])=>`${item}: ${count}`).join(", ")}</p>}
         {COAL_DEPOSITS.some(d=>d.x===selectedEntity.x&&d.y===selectedEntity.y)&&selectedEntity.kind!=="coal_mine"&&<p>A coal deposit is beneath this structure. Demolish it to build a coal mine.</p>}
-        {selectedEntity.kind!=="sell_terminal"&&<><button onClick={()=>{const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);if(r.ok)persist(r.state);}}>Rotate clockwise</button><button className="danger" onClick={()=>demolish(selectedEntity.id)}>Demolish</button></>}</>:<p>Select a machine or conveyor to view status and controls.</p>}
+        {selectedEntity.kind!=="sell_terminal"&&<><button onClick={()=>{const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);if(r.ok)persist(r.state,{kind:"turn",entityKind:selectedEntity.kind,x:selectedEntity.x,y:selectedEntity.y});}}>Rotate clockwise</button><button className="danger" onClick={()=>demolish(selectedEntity.id)}>Demolish</button></>}</>:<p>Select a machine or conveyor to view status and controls.</p>}
       <section aria-label="Terminal throughput" data-testid="terminal-throughput" className="diagnostic-panel">
         <h3>Terminal sales / trailing 60 active ticks</h3>
         <p>Observed: {terminalCounters.ticks}/60 ticks. Total intake: {terminalCounters.totalSales} items.</p>
         <p>{(["iron_ore","iron_ingot","coal","gear","steel"] as const).map(item=>
           `${item.replaceAll("_"," ")}: ${terminalCounters.sales[item]}`).join(" · ")}</p>
         <p>Per item: real terminal sales, not machine production. A terminal is not assumed congested.</p>
+      </section>
+      <section className="playtest-panel" aria-label="Optional local playtest" data-testid="playtest-panel">
+        <button onClick={()=>setShowPlaytest(open=>!open)} aria-expanded={showPlaytest} aria-controls="playtest-controls">Local playtest {showPlaytest?"−":"+"}</button>
+        {showPlaytest&&<div id="playtest-controls">
+          <p>Opt-in. Data stays in this browser; no server telemetry. Export a JSON report when finished.</p>
+          {!playtest?.active&&<button data-testid="start-playtest" onClick={()=>{
+            savePlaytest(startPlaytest(latest.current!,Date.now()));
+          }}>{playtest?"Start new recording":"Start recording"}</button>}
+          {playtest?.active&&<button data-testid="stop-playtest" onClick={()=>{
+            savePlaytest(finishPlaytest(playtestRef.current!,latest.current!,Date.now()));
+          }}>Stop recording</button>}
+          {playtest&&<>
+            <p data-testid="playtest-status">{playtest.active?"Recording":"Stopped"} · Active ticks: {playtest.activeTicks} · Wall time: {(playtest.wallMs/1000).toFixed(1)} s</p>
+            <p>Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s</p>
+            <p>Commands: placed {playtest.commands.place}, rotated {playtest.commands.turn}, demolished {playtest.commands.demolish}, researched {playtest.commands.research}</p>
+            {playtest.active&&<fieldset aria-label="Playtest time annotation">
+              <legend>Classify current unpaused time (manual annotation)</legend>
+              {(["unclassified","planning","waiting"] as PlaytestActivity[]).map(activity=>
+                <label key={activity}><input type="radio" name="playtest-activity"
+                  checked={playtest.activity===activity} onChange={()=>
+                    savePlaytest(annotatePlaytest(playtestRef.current!,activity,Date.now()))}/>
+                  {activity==="waiting"?"Waiting for credits":activity==="planning"?"Planning / routing":"Unclassified"}
+                </label>)}
+            </fieldset>}
+            <button data-testid="export-playtest" onClick={exportPlaytest}>Export local JSON report</button>
+            <button onClick={()=>{if(window.confirm("Discard local playtest measurements?"))savePlaytest(null);}}>Discard recording</button>
+          </>}
+        </div>}
       </section>
       <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>void fresh()}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>
       </aside></div>

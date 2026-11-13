@@ -70,6 +70,24 @@ test("WP5 legacy M6 retains 8-gear guidance rather than v3 120-tick requirement"
   await expect(page.locator("footer")).toContainText("Legacy campaign: sell eight gears");
   await expect(page.getByTestId("mission-throughput")).toHaveCount(0);
 });
+test("WP6 legacy rule provenance in downloaded playtest JSON",async({page})=>{
+  await page.goto("/");
+  await page.getByRole("button",{name:"Begin Operations"}).click();
+  await seed(page,"legacy-m6");await page.reload();
+  await page.getByRole("button",{name:/Local playtest/}).click();
+  await page.getByTestId("start-playtest").click();
+  await page.getByTestId("stop-playtest").click();
+  const downloadPromise=page.waitForEvent("download");
+  await page.getByTestId("export-playtest").click();
+  const download=await downloadPromise;
+  const stream=await download.createReadStream();
+  const chunks:string[]=[];
+  for await(const chunk of stream)chunks.push(chunk.toString("utf8"));
+  const report=JSON.parse(chunks.join(""));
+  expect(report).toMatchObject({
+    format:"sector-nine-playtest-v1",schemaVersion:3,missionRuleVersion:2
+  });
+});
 test("WP5 opt-in local playtest records only real commands, reloads and exports anonymized JSON",async({page})=>{
   page.on("dialog",d=>d.accept());
   await page.goto("/");await page.getByRole("button",{name:"Begin Operations"}).click();
@@ -94,6 +112,8 @@ test("WP5 opt-in local playtest records only real commands, reloads and exports 
   for await(const chunk of stream)chunks.push(chunk.toString("utf8"));
   const report=JSON.parse(chunks.join(""));
   expect(report.format).toBe("sector-nine-playtest-v1");
+  expect(report.schemaVersion).toBe(3);
+  expect(report.missionRuleVersion).toBe(3);
   expect(report.commands).toEqual({place:1,turn:1,demolish:1,research:0});
   expect(report.commandEvents.map((e:{kind:string})=>e.kind)).toEqual(["place","turn","demolish"]);
   expect(report).toHaveProperty("planningMs");

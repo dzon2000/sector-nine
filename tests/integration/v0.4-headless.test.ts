@@ -166,6 +166,7 @@ describe("v0.4 WP1 transport, fair supply and strict persistence boundaries",()=
   });
   it("requires physical coal travel before generator fueling; never credits a coal sale",()=>{
     const f=factory();
+    f.state.technologies!.coal_extraction=true;
     f.add("coal_mine",7,9,"N");
     f.add("conveyor",7,8,"N");
     f.add("conveyor",7,7,"N");

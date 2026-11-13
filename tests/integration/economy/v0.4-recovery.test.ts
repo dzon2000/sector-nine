@@ -166,6 +166,48 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     expect(t.state.sales!.steel).toBeGreaterThan(done.sales!.steel);
     observe(t,"M9 physical post-activation circuits");
     audit(t);
+
+    // Provisional M10 is not yet a production mission (WP2). Evaluate its
+    // intended post-activation rolling-window rule against real terminal events.
+    // This deliberately does not change any threshold or inject stock.
+    const m10StartTick=t.state.tick;
+    const initialCircuitSales=t.state.sales!.circuit;
+    const recent:{circuits:number;steel:number;covered:boolean}[]=[];
+    let maxCircuitWindow=0,maxSteelWindow=0,maxCoveredWindow=0;
+    let bestQualifyingStreak=0,streak=0,qualifyingWindows=0;
+    for(let i=0;i<240;i++){
+      const before={...t.state.sales!};
+      t.state=tick(t.state);
+      recent.push({circuits:t.state.sales!.circuit-before.circuit,
+        steel:t.state.sales!.steel-before.steel,
+        covered:t.state.power?.demandCovered===true});
+      if(recent.length>60)recent.shift();
+      if(recent.length!==60)continue;
+      const circuitCount=recent.reduce((sum,e)=>sum+e.circuits,0);
+      const steelCount=recent.reduce((sum,e)=>sum+e.steel,0);
+      const covered=recent.filter(e=>e.covered).length;
+      maxCircuitWindow=Math.max(maxCircuitWindow,circuitCount);
+      maxSteelWindow=Math.max(maxSteelWindow,steelCount);
+      maxCoveredWindow=Math.max(maxCoveredWindow,covered);
+      const qualifies=circuitCount>=11&&steelCount>=5&&covered>=57;
+      streak=qualifies?streak+1:0;
+      if(qualifies)qualifyingWindows++;
+      bestQualifyingStreak=Math.max(bestQualifyingStreak,streak);
+    }
+    const actualM10CircuitSales=t.state.sales!.circuit-initialCircuitSales;
+    expect(actualM10CircuitSales).toBeLessThan(44);
+    expect(maxSteelWindow).toBeGreaterThanOrEqual(5);
+    expect(bestQualifyingStreak).toBeLessThan(60);
+    console.info("V04-WP3-M10-PROBE "+JSON.stringify({
+      startTick:m10StartTick,endTick:t.state.tick,
+      actualCircuitSales240:actualM10CircuitSales,
+      maxCircuitsPer60:maxCircuitWindow,maxSteelPer60:maxSteelWindow,
+      maxDemandCoveredPer60:maxCoveredWindow,
+      qualifyingWindows,bestQualifyingStreak,
+      candidate:{circuitsPer60:11,steelPer60:5,demandCoveredTicksPer60:57,streak:60},
+      warning:"WP2 mission engine not implemented; evaluation uses recorded real physical events"
+    }));
+    audit(t);
     console.info("V04-WP3-RECOVERY "+JSON.stringify({
       authenticHumanSave:false,source:"actual v0.3 300-Cr engine campaign",
       finalTick:t.state.tick,fromDoneTick:done.tick,

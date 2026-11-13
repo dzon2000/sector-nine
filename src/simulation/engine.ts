@@ -25,10 +25,12 @@ export function tick(state:GameState):GameState {
   const completions=new Map<number,number>();
   const completed=(id:number)=>completions.set(id,(completions.get(id)??0)+1);
   const audit=(item:Item,event:"produced"|"consumed"|"sold"|"demolished",quantity=1)=>{if(s.materialLedger)s.materialLedger[item][event]+=quantity;};
+  // Preserve the exact v0.3 state shape until electronics are first introduced.
+  const tracksPower=Boolean(s.power||s.entities.some(e=>e.kind==="coal_generator"||e.kind==="circuit_fabricator"));
   // Site-wide power is based solely on beginning-of-tick stored fuel.
   const power=s.power??{tick:0,supply:0,demand:0,served:0,demandCovered:false,
     unpoweredProcessingTicks:0,coalBurned:0,lastServedFabricatorId:0,history:[]};
-  s.power=power;
+  if(tracksPower)s.power=power;
   const generators=s.entities.filter(e=>e.kind==="coal_generator");
   const fueled=generators.filter(e=>(e.fuelTicksRemaining??0)>0);
   const supply=fueled.length*POWER_CANDIDATE.generatorSupply;
@@ -185,9 +187,11 @@ export function tick(state:GameState):GameState {
   }
   const powerTick={tick:s.tick,supply,demand,served,demandCovered:demand>0&&served===demand,
     unpoweredProcessingTicks:deficient,coalBurned};
-  Object.assign(power,powerTick);
-  power.history.push(powerTick);
-  if(power.history.length>60)power.history.shift();
+  if(tracksPower){
+    Object.assign(power,powerTick);
+    power.history.push(powerTick);
+    if(power.history.length>60)power.history.shift();
+  }
   // Phase 4: accounting and progression; capital expenditure is intentionally excluded.
   s.balanceCents+=revenueCents-costCents;
   if(s.totalRevenueCents!==undefined)s.totalRevenueCents+=revenueCents;

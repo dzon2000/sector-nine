@@ -1,4 +1,4 @@
-import {REVENUE,STEP,recipeFor,stats,emptySales,type DiagnosticEntityTick,type Entity,type GameState,type Item} from "../domain/model";
+import {REVENUE,STEP,recipeFor,stats,emptySales,POWER_CANDIDATE,type DiagnosticEntityTick,type Entity,type GameState,type Item} from "../domain/model";
 import {recordDiagnostics} from "../game/diagnostics";
 import {recordMissionTick} from "../game/missionMetrics";
 import {updateMission} from "../game/missions";
@@ -8,7 +8,8 @@ function output(e:Entity):Item|null{return e.kind==="conveyor"?e.belt:e.output;}
 function clear(e:Entity){if(e.kind==="conveyor")e.belt=null;else e.output=null;}
 function directionTo(e:Entity):[number,number]{const [x,y]=STEP[e.direction];return [e.x+x,e.y+y];}
 function accepts(target:Entity,source:Entity,item:Item):boolean{
-  if(target.kind==="iron_mine"||target.kind==="coal_mine")return false;
+  if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(target.kind))return false;
+  if(target.kind==="coal_generator")return item==="coal" && (target.inputBuffers?.coal??0)<4;
   const recipe=recipeFor(target.kind);
   if(recipe)return (recipe.input[item]??0)>0&&(target.inputBuffers?.[item]??0)<4&&
     !(source.x===target.x+STEP[target.direction][0]&&source.y===target.y+STEP[target.direction][1]);
@@ -24,15 +25,36 @@ export function tick(state:GameState):GameState {
   const completions=new Map<number,number>();
   const completed=(id:number)=>completions.set(id,(completions.get(id)??0)+1);
   const audit=(item:Item,event:"produced"|"consumed"|"sold"|"demolished",quantity=1)=>{if(s.materialLedger)s.materialLedger[item][event]+=quantity;};
+  // Site-wide power is based solely on beginning-of-tick stored fuel.
+  const power=s.power??{tick:0,supply:0,demand:0,served:0,demandCovered:false,
+    unpoweredProcessingTicks:0,coalBurned:0,lastServedFabricatorId:0,history:[]};
+  s.power=power;
+  const generators=s.entities.filter(e=>e.kind==="coal_generator");
+  const fueled=generators.filter(e=>(e.fuelTicksRemaining??0)>0);
+  const supply=fueled.length*POWER_CANDIDATE.generatorSupply;
+  for(const generator of fueled)generator.fuelTicksRemaining!--;
+  const requesting=s.entities.filter(e=>e.kind==="circuit_fabricator"&&e.cycle!==null&&e.cycle>0&&e.output===null)
+    .sort((a,b)=>a.id-b.id);
+  const firstAfter=requesting.findIndex(e=>e.id>power.lastServedFabricatorId);
+  const start=firstAfter<0?0:firstAfter;
+  const servedIds=new Set<number>();
+  for(let i=0;i<Math.min(supply,requesting.length);i++){
+    const id=requesting[(start+i)%requesting.length].id;
+    servedIds.add(id);
+    power.lastServedFabricatorId=id;
+  }
+  const demand=requesting.length;
+  const served=servedIds.size;
+  const deficient=demand-served;
   // Phase 1: finish due cycles; output cannot be replaced if occupied.
   for(const e of s.entities){
-    if(e.kind==="iron_mine"||e.kind==="coal_mine"){
+    if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind)){
       if(e.output===null){
-        e.cycle=(e.cycle??(e.kind==="coal_mine"?3:2))-1;
-        if(e.cycle===0){e.output=e.kind==="coal_mine"?"coal":"iron_ore";e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;completed(e.id);audit(e.output!,"produced");costCents+=e.kind==="coal_mine"?80:60;}
+        e.cycle=(e.cycle??({coal_mine:3,iron_mine:2,copper_mine:3,silicon_extractor:4} as const)[e.kind as "coal_mine"|"iron_mine"|"copper_mine"|"silicon_extractor"])-1;
+        if(e.cycle===0){e.output=({coal_mine:"coal",iron_mine:"iron_ore",copper_mine:"copper_ore",silicon_extractor:"silicon"} as const)[e.kind as "coal_mine"|"iron_mine"|"copper_mine"|"silicon_extractor"];e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;completed(e.id);audit(e.output!,"produced");costCents+=({coal_mine:80,iron_mine:60,copper_mine:70,silicon_extractor:90} as const)[e.kind as "coal_mine"|"iron_mine"|"copper_mine"|"silicon_extractor"];}
       }
-    }else if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle!==null){
-      if(e.cycle>0)e.cycle--;
+    }else if(recipeFor(e.kind)&&e.cycle!==null){
+      if(e.cycle>0&&(e.kind!=="circuit_fabricator"||servedIds.has(e.id)))e.cycle--;
       if(e.cycle===0&&e.output===null){
         const recipe=recipeFor(e.kind)!;
         for(const [item,qty] of Object.entries(e.reservedInputs??recipe.input))audit(item as Item,"consumed",qty);
@@ -127,14 +149,14 @@ export function tick(state:GameState):GameState {
     }
     if(e.kind==="sell_terminal")e.status="waiting_for_inputs";
     else if(e.kind==="conveyor")e.status=e.belt?"working":"waiting_for_inputs";
-    else if(e.kind==="iron_mine"||e.kind==="coal_mine")e.status=e.output?"blocked_output":"working";
+    else if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind))e.status=e.output?"blocked_output":"working";
     else e.status=e.cycle===0||e.output?"blocked_output":e.cycle!==null?"working":"waiting_for_inputs";
   }
   // Exactly one mutually exclusive machine status per completed active tick.
   const observations:Record<string,DiagnosticEntityTick>={};
   for(const e of s.entities){
     let status:DiagnosticEntityTick["status"]="idle";
-    if(e.kind==="iron_mine"||e.kind==="coal_mine"){
+    if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind)){
       status=e.output!==null?"output_blocked":"working";
     }else if(recipeFor(e.kind)){
       if(e.output!==null)status="output_blocked";

@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {createGame,DEFINITIONS,ITEMS,REVENUE,stockOnHand,type GameState} from "../../src/domain/model";
+import {createGame,DEFINITIONS,ITEMS,REVENUE,stockOnHand,type GameState,type Item} from "../../src/domain/model";
 import {place,setPause} from "../../src/game/commands";
 import {runTicks,tick} from "../../src/simulation/engine";
 
@@ -24,10 +24,10 @@ function seed(s:any,kind:string,stock:Record<string,number>){
   return e;
 }
 function conservation(s:any){
-  const physical=stockOnHand(s.entities);
+  const physical=stockOnHand(s.entities) as Record<Item,number>;
   for(const item of ITEMS as readonly string[]){
     const l=s.materialLedger[item];
-    expect(l.opening+l.produced-l.consumed-l.sold-l.demolished-(l.burned??0),item).toBe(physical[item]);
+    expect(l.opening+l.produced-l.consumed-l.sold-l.demolished-(l.burned??0),item).toBe(physical[item as Item]);
   }
 }
 describe("v0.4 WP1 headless power and electronics — red-first contracts",()=>{
@@ -121,7 +121,7 @@ describe("v0.4 WP1 headless power and electronics — red-first contracts",()=>{
     const restored=JSON.parse(JSON.stringify(second));
     const shuffled=JSON.parse(JSON.stringify(second));
     shuffled.entities.reverse();
-    expect(runTicks(restored,6).power).toEqual(runTicks(shuffled,6).power);
+    expect((runTicks(restored,6) as any).power).toEqual((runTicks(shuffled,6) as any).power);
     expect(runTicks(restored,6).entities.sort((x:any,y:any)=>x.id-y.id))
       .toEqual(runTicks(shuffled,6).entities.sort((x:any,y:any)=>x.id-y.id));
     conservation(second);

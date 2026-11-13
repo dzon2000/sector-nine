@@ -32,10 +32,10 @@ export function validateSave(value:unknown):GameState{
   for(const e of s.entities){
     if(!Number.isSafeInteger(e.id)||!Number.isInteger(e.x)||!Number.isInteger(e.y)||
       e.x<0||e.x>=12||e.y<0||e.y>=12||!["N","E","S","W"].includes(e.direction)||
-      !["iron_mine","coal_mine","furnace","assembler","advanced_furnace","conveyor","sell_terminal"].includes(e.kind)||
+      !["iron_mine","coal_mine","furnace","assembler","advanced_furnace","conveyor","sell_terminal","copper_mine","silicon_extractor","circuit_fabricator","coal_generator"].includes(e.kind)||
       !Number.isInteger(e.oreInput)||e.oreInput<0||e.oreInput>4||
       (e.cycle!==null&&(!Number.isInteger(e.cycle)||e.cycle<0))||
-      ![null,"iron_ore","iron_ingot","coal","gear","steel"].includes(e.output)||![null,"iron_ore","iron_ingot","coal","gear","steel"].includes(e.belt)
+      !(e.output===null||ITEMS.includes(e.output))||!(e.belt===null||ITEMS.includes(e.belt))
     )throw Error("Invalid entity in save. Data preserved.");
     const key=e.x+","+e.y;if(spots.has(key))throw Error("Overlapping entities in save. Data preserved.");spots.add(key);
   }
@@ -95,6 +95,18 @@ export function validateSave(value:unknown):GameState{
        !Number.isSafeInteger(n.mission.soldGear)||n.mission.soldGear<0||
        !Number.isSafeInteger(n.mission.soldSteel)||n.mission.soldSteel<0)
       throw Error("Invalid v2 mission or narrative state. Data preserved.");
+    // WP1 additive engine fields: zero-fill only newly introduced item keys for
+    // v1-v3 snapshots. Existing sales/stock are not interpreted as new sales.
+    const electronics=["copper_ore","silicon","circuit"] as const;
+    if(n.sales&&n.materialLedger){
+      for(const item of electronics){
+        if(!(item in n.sales))n.sales[item]=0;
+        if(!(item in n.materialLedger))n.materialLedger[item]={opening:0,produced:0,consumed:0,sold:0,demolished:0,burned:0};
+      }
+      for(const item of ITEMS)if(n.materialLedger[item]&&n.materialLedger[item].burned===undefined){
+        n.materialLedger[item].burned=0;
+      }
+    }
     if(!n.sales||typeof n.sales!=="object"||Array.isArray(n.sales)||
        !n.materialLedger||typeof n.materialLedger!=="object"||Array.isArray(n.materialLedger)||
        !Number.isSafeInteger(n.totalRevenueCents)||!Number.isSafeInteger(n.totalCostCents)||
@@ -111,9 +123,9 @@ export function validateSave(value:unknown):GameState{
       if(!Number.isSafeInteger(n.sales[item])||n.sales[item]<0)throw Error("Invalid v2 sales history. Data preserved.");
       const ledger=n.materialLedger[item];
       if(!ledger||typeof ledger!=="object"||Array.isArray(ledger))throw Error("Invalid v2 material audit. Data preserved.");
-      const fields=["opening","produced","consumed","sold","demolished"] as const;
-      if(ledger.opening===undefined&&Object.keys(ledger).length===4){
-        const opening=stock[item]-ledger.produced+ledger.consumed+ledger.sold+ledger.demolished;
+      const fields=["opening","produced","consumed","sold","demolished","burned"] as const;
+      if(ledger.opening===undefined&&Object.keys(ledger).length===5){
+        const opening=stock[item]-ledger.produced+ledger.consumed+ledger.sold+ledger.demolished+(ledger.burned??0);
         ledger.opening=opening;
       }
       if(Object.keys(ledger).length!==fields.length||Object.keys(ledger).some(key=>!fields.includes(key as typeof fields[number])))
@@ -129,7 +141,7 @@ export function validateSave(value:unknown):GameState{
         if(!inventory||typeof inventory!=="object"||Array.isArray(inventory))
           throw Error("Invalid v2 inventory. Data preserved.");
         for(const [item,quantity] of Object.entries(inventory)){
-          if(!ITEMS.includes(item as Item)||!recipe?.input[item as Item]||
+          if(!ITEMS.includes(item as Item)||!(recipe?.input[item as Item]||(e.kind==="coal_generator"&&inventory===e.inputBuffers&&item==="coal"))||
              !Number.isSafeInteger(quantity)||quantity<0||quantity>4)
             throw Error("Invalid v2 inventory type or quantity. Data preserved.");
         }
@@ -153,6 +165,7 @@ export function validateSave(value:unknown):GameState{
         throw Error("Invalid v3 mission metrics. Data preserved.");
       for(let i=0;i<metrics.salesTicks.length;i++){
         const event=metrics.salesTicks[i];
+        if(event?.sales&&typeof event.sales==="object")for(const item of ["copper_ore","silicon","circuit"] as const)if(!(item in event.sales))event.sales[item]=0;
         if(!event||typeof event!=="object"||!Number.isSafeInteger(event.tick)||
            event.tick<=metrics.activatedAtTick||event.tick>n.tick||
            (i>0&&event.tick!==metrics.salesTicks[i-1].tick+1)||
@@ -189,6 +202,7 @@ export function validateSave(value:unknown):GameState{
   const diagnosticEntities=new Set(n.entities.map(e=>String(e.id)));
   for(let i=0;i<history.samples.length;i++){
     const sample=history.samples[i];
+    if(sample?.terminalSales&&typeof sample.terminalSales==="object")for(const item of ["copper_ore","silicon","circuit"] as const)if(!(item in sample.terminalSales))sample.terminalSales[item]=0;
     if(!sample||typeof sample!=="object"||Array.isArray(sample)||
        Object.keys(sample).length!==3||!Number.isSafeInteger(sample.tick)||
        sample.tick<1||sample.tick>n.tick||

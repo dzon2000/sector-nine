@@ -226,6 +226,45 @@ export function validateSave(value:unknown):GameState{
   }
   if(history.samples.length&&history.samples.at(-1)!.tick!==n.tick)
     throw Error("Stale v3 diagnostic history. Data preserved.");
+  // WP1 headless power snapshots are additive; full v4 schema migration is WP2.
+  const safe=(v:unknown):v is number=>Number.isSafeInteger(v)&&(v as number)>=0;
+  for(const entity of n.entities){
+    if(entity.kind==="coal_generator"){
+      if(!safe(entity.fuelTicksRemaining)||entity.fuelTicksRemaining>12||
+        !entity.inputBuffers||Object.keys(entity.inputBuffers).some(item=>item!=="coal"))
+        throw Error("Invalid generator fuel state. Save preserved.");
+    }else if(entity.fuelTicksRemaining!==undefined){
+      throw Error("Invalid non-generator fuel state. Save preserved.");
+    }
+  }
+  if(n.power!==undefined){
+    const p=n.power;
+    if(!p||typeof p!=="object"||
+       !safe(p.tick)||p.tick!==n.tick||
+       !safe(p.supply)||!safe(p.demand)||!safe(p.served)||
+       !safe(p.unpoweredProcessingTicks)||!safe(p.coalBurned)||
+       !safe(p.lastServedFabricatorId)||p.lastServedFabricatorId>=n.nextId||
+       typeof p.demandCovered!=="boolean"||
+       p.served>p.demand||p.served>p.supply||
+       p.unpoweredProcessingTicks!==p.demand-p.served||
+       p.demandCovered!==(p.demand>0&&p.demand===p.served)||
+       !Array.isArray(p.history)||p.history.length>60)
+      throw Error("Invalid power allocation state. Save preserved.");
+    for(let i=0;i<p.history.length;i++){
+      const t=p.history[i];
+      if(!t||!safe(t.tick)||t.tick<1||t.tick>n.tick||
+         (i>0&&t.tick!==p.history[i-1].tick+1)||
+         !safe(t.supply)||!safe(t.demand)||!safe(t.served)||
+         !safe(t.unpoweredProcessingTicks)||!safe(t.coalBurned)||
+         typeof t.demandCovered!=="boolean"||
+         t.served>t.demand||t.served>t.supply||
+         t.unpoweredProcessingTicks!==t.demand-t.served||
+         t.demandCovered!==(t.demand>0&&t.demand===t.served))
+        throw Error("Invalid power tick history. Save preserved.");
+    }
+    if(p.history.length && p.history[p.history.length-1].tick!==n.tick)
+      throw Error("Stale power history. Save preserved.");
+  }
   return n;
 }
 // All writes and deletes share one queue. Capture snapshots before enqueueing.

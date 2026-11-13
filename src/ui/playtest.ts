@@ -10,6 +10,9 @@ export type PlaytestCommandEvent = PlaytestCommand & {tick:number;elapsedMs:numb
 export interface PlaytestTransition {tick:number;from:MissionId;to:MissionId}
 export interface PlaytestSession {
   active:boolean;
+  /** Optional only for recordings created before provenance support. */
+  schemaVersion?:GameState["schemaVersion"];
+  missionRuleVersion?:2|3;
   startedAt:number;
   lastObservedAt:number;
   lastTick:number;
@@ -34,6 +37,8 @@ export function isPlaytestSession(value:unknown):value is PlaytestSession{
   if(!value||typeof value!=="object"||Array.isArray(value))return false;
   const v=value as Record<string,unknown>;
   const safe=(field:string)=>Number.isSafeInteger(v[field])&&(v[field] as number)>=0;
+  if((v.schemaVersion!==undefined && ![1,2,3].includes(v.schemaVersion as number))||
+    (v.missionRuleVersion!==undefined && v.missionRuleVersion!==2 && v.missionRuleVersion!==3))return false;
   if(typeof v.active!=="boolean"||typeof v.lastPaused!=="boolean"||
     !["unclassified","planning","waiting"].includes(String(v.activity))||
     !["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(String(v.lastMission)))return false;
@@ -70,7 +75,8 @@ function elapsed(s:PlaytestSession,now:number):PlaytestSession{
   return next;
 }
 export function startPlaytest(game:GameState,now:number):PlaytestSession{
-  return {active:true,startedAt:now,lastObservedAt:now,lastTick:game.tick,lastMission:game.mission.activeId,
+  return {active:true,schemaVersion:game.schemaVersion,missionRuleVersion:game.missionRuleVersion,
+    startedAt:now,lastObservedAt:now,lastTick:game.tick,lastMission:game.mission.activeId,
     lastPaused:game.paused||game.introOpen,activity:"unclassified",
     wallMs:0,pausedMs:0,planningMs:0,waitingMs:0,unclassifiedMs:0,activeTicks:0,
     commands:{place:0,turn:0,demolish:0,research:0},commandEvents:[],
@@ -120,6 +126,7 @@ export function finishPlaytest(session:PlaytestSession,game:GameState,now:number
 }
 export function buildPlaytestReport(s:PlaytestSession){
   return {format:"sector-nine-playtest-v1" as const,
+    schemaVersion:s.schemaVersion,missionRuleVersion:s.missionRuleVersion,
     activeTicks:s.activeTicks,wallMs:s.wallMs,pausedMs:s.pausedMs,
     planningMs:s.planningMs,waitingMs:s.waitingMs,unclassifiedMs:s.unclassifiedMs,
     commands:{...s.commands},commandEvents:s.commandEvents.map(e=>({...e})),

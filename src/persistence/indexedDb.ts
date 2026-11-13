@@ -237,6 +237,8 @@ export function validateSave(value:unknown):GameState{
       throw Error("Invalid non-generator fuel state. Save preserved.");
     }
   }
+  if(n.entities.some(e=>e.kind==="coal_generator"||e.kind==="circuit_fabricator")&&!n.power)
+    throw Error("Missing power allocation state. Save preserved.");
   if(n.power!==undefined){
     const p=n.power;
     if(!p||typeof p!=="object"||

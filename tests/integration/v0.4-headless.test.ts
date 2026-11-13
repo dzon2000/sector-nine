@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {createGame,DEFINITIONS,ITEMS,REVENUE,stockOnHand,type GameState,type Item} from "../../src/domain/model";
-import {place,setPause} from "../../src/game/commands";
+import {place,remove,setPause} from "../../src/game/commands";
 import {runTicks,tick} from "../../src/simulation/engine";
 import {validateSave} from "../../src/persistence/indexedDb";
 
@@ -246,5 +246,73 @@ describe("v0.4 WP1 transport, fair supply and strict persistence boundaries",()=
     const cursor=structuredClone(a);
     cursor.power!.lastServedFabricatorId=-1;
     expect(()=>validateSave(cursor)).toThrow(/power|cursor/i);
+  });
+});
+
+describe("v0.4 WP1 fuel and arbitration boundary regressions",()=>{
+  it("spends last existing fuel tick before accepting same-tick coal into next-tick supply",()=>{
+    const f=factory();
+    f.add("coal_generator",4,6,"N");
+    f.add("conveyor",4,7,"N");
+    const s:any=f.state;
+    entity(s,"coal_generator").fuelTicksRemaining=1;
+    entity(s,"conveyor").belt="coal";
+    s.materialLedger.coal.opening=1;
+    let a=tick(s) as any;
+    expect(a.power).toMatchObject({supply:1,demand:0,served:0,demandCovered:false,coalBurned:1});
+    expect(entity(a,"coal_generator").fuelTicksRemaining).toBe(12);
+    expect(entity(a,"coal_generator").inputBuffers.coal).toBe(0);
+    expect(entity(a,"conveyor").belt).toBeNull();
+    conservation(a);
+    a=tick(a) as any;
+    expect(a.power.supply).toBe(1);
+    expect(entity(a,"coal_generator").fuelTicksRemaining).toBe(11);
+    const paused=setPause(a,true);
+    expect(tick(paused)).toEqual(paused);
+  });
+  it("resumes an input-reserved fabricator from the exact frozen cycle after power becomes available",()=>{
+    const f=factory();
+    f.add("circuit_fabricator",6,6);
+    const s:any=f.state;
+    seed(s,"circuit_fabricator",{copper_ore:2,silicon:1});
+    let a=runTicks(s,4) as any;
+    expect(entity(a,"circuit_fabricator").cycle).toBe(6);
+    expect(entity(a,"circuit_fabricator").reservedInputs).toEqual({copper_ore:2,silicon:1});
+    const added=place(a,"coal_generator",4,6,"N");
+    expect(added.ok).toBe(true);
+    a=added.state as any;
+    entity(a,"coal_generator").inputBuffers={coal:1};
+    a.materialLedger.coal.opening++;
+    a=tick(a) as any;
+    expect(a.power.supply).toBe(0);
+    expect(entity(a,"circuit_fabricator").cycle).toBe(6);
+    a=runTicks(a,3) as any;
+    expect(entity(a,"circuit_fabricator").cycle).toBe(3);
+    const restored=validateSave(JSON.parse(JSON.stringify(a)));
+    expect(runTicks(restored,3)).toEqual(runTicks(a,3));
+    const done=runTicks(a,3) as any;
+    expect(entity(done,"circuit_fabricator").output).toBe("circuit");
+    conservation(done);
+  });
+  it("keeps fair cursor stable after a requesting consumer is removed",()=>{
+    const f=factory();
+    f.add("coal_generator",4,6);
+    for(const x of [6,7,8])f.add("circuit_fabricator",x,6);
+    const s:any=f.state;
+    seed(s,"coal_generator",{coal:1});
+    for(const e of s.entities.filter((e:any)=>e.kind==="circuit_fabricator")){
+      e.cycle=6;e.reservedInputs={copper_ore:2,silicon:1};
+      s.materialLedger.copper_ore.opening+=2;s.materialLedger.silicon.opening++;
+    }
+    let a=runTicks(s,3) as any; // charge, grant to first, grant to second
+    const ids=a.entities.filter((e:any)=>e.kind==="circuit_fabricator").map((e:any)=>e.id).sort((x:number,y:number)=>x-y);
+    expect(a.power.lastServedFabricatorId).toBe(ids[1]);
+    const removed=remove(a,ids[1],true);
+    expect(removed.ok).toBe(true);
+    a=tick(removed.state) as any;
+    expect(a.power.lastServedFabricatorId).toBe(ids[2]);
+    expect(a.power).toMatchObject({demand:2,served:1,unpoweredProcessingTicks:1});
+    conservation(a);
+    expect(validateSave(JSON.parse(JSON.stringify(a)))).toEqual(a);
   });
 });

@@ -40,6 +40,29 @@ describe("WP5 optional local-only playtest protocol",()=>{
     expect(recording.usedDeposits).toEqual(["iron:(2,2)","coal:(7,9)"]);
     expect(recording.commands.place).toBe(0);
   });
+  it("exports rule/schema provenance captured from actual game state for new and legacy missions",()=>{
+    const modern=state(60);
+    modern.mission.activeId="M6";
+    modern.missionRuleVersion=3;
+    const report=buildPlaytestReport(finishPlaytest(startPlaytest(modern,1000),modern,2000));
+    expect(report).toMatchObject({format:"sector-nine-playtest-v1",schemaVersion:3,missionRuleVersion:3});
+    const legacy=state(60);
+    legacy.mission.activeId="M7";
+    legacy.missionRuleVersion=2;
+    expect(buildPlaytestReport(startPlaytest(legacy,1000))).toMatchObject({
+      schemaVersion:3,missionRuleVersion:2
+    });
+  });
+  it("retains compatibility with pre-provenance local sessions and their v1 exports",()=>{
+    const old=JSON.parse(JSON.stringify(startPlaytest(state(),1000))) as PlaytestSession;
+    delete old.schemaVersion;
+    delete old.missionRuleVersion;
+    const resumed=resumePlaytest(old,state(0),3000);
+    const report=buildPlaytestReport(resumed);
+    expect(report.format).toBe("sector-nine-playtest-v1");
+    expect(report.schemaVersion).toBeUndefined();
+    expect(report.missionRuleVersion).toBeUndefined();
+  });
   it("counts successful commands only and keeps the actual event type",()=>{
     let s=startPlaytest(state(),100);
     s=recordPlaytestCommand(s,{kind:"place",entityKind:"furnace",x:5,y:5},200);

@@ -168,6 +168,12 @@ export function validateSave(value:unknown):GameState{
     }
     if(n.missionRuleVersion===2 && metrics!==null)
       throw Error("Legacy missions cannot have v3 metric state. Data preserved.");
+    // A new-rule active M6/M7 without measurement history can never advance.
+    // Reject the corrupted snapshot rather than silently loading a softlocked game.
+    // Legacy active M6/M7 intentionally keep null metrics and cumulative goals.
+    if(n.missionRuleVersion===3 && (n.mission.activeId==="M6"||n.mission.activeId==="M7") &&
+      metrics==null)
+      throw Error("Active v3 mission metrics are missing. Save preserved.");
   }else{
     // v1 already upgraded to the v2 shape; keep active v2 M6/M7 cumulative rules.
     n.missionRuleVersion=["M6","M7"].includes(n.mission.activeId)?2:3;

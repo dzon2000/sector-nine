@@ -2,6 +2,7 @@ import {describe,expect,it} from "vitest";
 import {createGame,DEFINITIONS,ITEMS,REVENUE,stockOnHand,type GameState,type Item} from "../../src/domain/model";
 import {place,setPause} from "../../src/game/commands";
 import {runTicks,tick} from "../../src/simulation/engine";
+import {validateSave} from "../../src/persistence/indexedDb";
 
 function factory(){
   let s:any=createGame();
@@ -140,5 +141,99 @@ describe("v0.4 WP1 headless power and electronics — red-first contracts",()=>{
     expect(tick(paused)).toEqual(paused);
     expect(entity(a,"circuit_fabricator").reservedInputs).toEqual({copper_ore:2,silicon:1});
     conservation(a);
+  });
+});
+
+describe("v0.4 WP1 transport, fair supply and strict persistence boundaries",()=>{
+  it("physically sells copper and silicon at the single terminal and accounts for every item",()=>{
+    const f=factory();
+    f.add("copper_mine",8,2);
+    f.add("silicon_extractor",8,9);
+    for(const [x,y,d] of [[9,2,"S"],[9,3,"S"],[9,4,"S"],[9,5,"E"],[9,9,"E"],[10,9,"N"],[10,8,"N"],[10,7,"N"],[10,6,"N"]] as const){
+      f.add("conveyor",x,y,d);
+    }
+    const s=runTicks(f.state,120) as any;
+    expect(s.materialLedger.copper_ore.sold).toBeGreaterThan(0);
+    expect(s.materialLedger.silicon.sold).toBeGreaterThan(0);
+    expect(s.materialLedger.circuit.sold).toBe(0);
+    expect(s.totalRevenueCents).toBe(
+      s.materialLedger.copper_ore.sold*REVENUE.copper_ore+
+      s.materialLedger.silicon.sold*REVENUE.silicon
+    );
+    for(const sample of s.diagnostics.samples)
+      expect(Object.values(sample.terminalSales).reduce((a:number,b:any)=>a+b,0)).toBeLessThanOrEqual(1);
+    conservation(s);
+  });
+  it("requires physical coal travel before generator fueling; never credits a coal sale",()=>{
+    const f=factory();
+    f.add("coal_mine",7,9,"N");
+    f.add("conveyor",7,8,"N");
+    f.add("conveyor",7,7,"N");
+    f.add("coal_generator",7,6,"N");
+    const s=runTicks(f.state,35) as any;
+    expect(s.materialLedger.coal.produced).toBeGreaterThan(0);
+    expect(s.materialLedger.coal.burned).toBeGreaterThan(0);
+    expect(s.materialLedger.coal.sold).toBe(0);
+    expect(s.power.history.some((t:any)=>t.supply>0)).toBe(true);
+    conservation(s);
+  });
+  it("aggregates two generators and serves only two of three continuous requests",()=>{
+    const f=factory();
+    f.add("coal_generator",4,6);
+    f.add("coal_generator",5,6);
+    for(const x of [6,7,8])f.add("circuit_fabricator",x,6);
+    const s:any=f.state;
+    for(const g of s.entities.filter((e:any)=>e.kind==="coal_generator")){
+      g.inputBuffers={coal:1};s.materialLedger.coal.opening++;
+    }
+    for(const e of s.entities.filter((e:any)=>e.kind==="circuit_fabricator")){
+      e.cycle=6;e.reservedInputs={copper_ore:2,silicon:1};
+      s.materialLedger.copper_ore.opening+=2;
+      s.materialLedger.silicon.opening++;
+    }
+    let a=tick(s) as any;
+    expect(a.power.supply).toBe(0);
+    a=tick(a);
+    expect(a.power).toMatchObject({supply:2,demand:3,served:2,unpoweredProcessingTicks:1,demandCovered:false});
+    expect(a.power.lastServedFabricatorId).toBeGreaterThan(0);
+    conservation(a);
+    expect(validateSave(JSON.parse(JSON.stringify(a)))).toEqual(a);
+  });
+  it("finishes blocked cycle only after output is transferred, without extra power or duplicate consumption",()=>{
+    const f=factory();
+    f.add("circuit_fabricator",6,6,"E");
+    f.add("conveyor",7,6,"E");
+    const s:any=f.state;
+    const e=entity(s,"circuit_fabricator");
+    e.output="circuit";e.cycle=0;e.reservedInputs={copper_ore:2,silicon:1};
+    s.materialLedger.circuit.opening++;
+    s.materialLedger.copper_ore.opening+=2;
+    s.materialLedger.silicon.opening++;
+    let a=tick(s) as any;
+    expect(entity(a,"circuit_fabricator").output).toBeNull();
+    expect(entity(a,"circuit_fabricator").cycle).toBe(0);
+    expect(a.materialLedger.circuit.produced).toBe(0);
+    expect(a.power.demand).toBe(0);
+    a=tick(a);
+    expect(entity(a,"circuit_fabricator").output).toBe("circuit");
+    expect(a.materialLedger.circuit.produced).toBe(1);
+    expect(a.materialLedger.copper_ore.consumed).toBe(2);
+    expect(a.materialLedger.silicon.consumed).toBe(1);
+    expect(a.totalCostCents).toBe(305); // one belt transfer + one circuit completion
+    conservation(a);
+    const restored=validateSave(JSON.parse(JSON.stringify(a)));
+    expect(runTicks(restored,20)).toEqual(runTicks(a,20));
+  });
+  it("rejects negative generator fuel counters and invalid allocation cursors on load",()=>{
+    const f=factory();
+    f.add("coal_generator",4,6);
+    const a=tick(f.state);
+    expect(validateSave(JSON.parse(JSON.stringify(a)))).toEqual(a);
+    const negative=structuredClone(a);
+    entity(negative,"coal_generator").fuelTicksRemaining=-1;
+    expect(()=>validateSave(negative)).toThrow(/fuel|power/i);
+    const cursor=structuredClone(a);
+    cursor.power!.lastServedFabricatorId=-1;
+    expect(()=>validateSave(cursor)).toThrow(/power|cursor/i);
   });
 });

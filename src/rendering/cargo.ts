@@ -2,10 +2,10 @@ import {recipeFor,type Entity,type Item} from "../domain/model";
 
 /** Short distinct labels, readable without relying on cargo color. */
 export const CARGO_GLYPHS:Record<Item,string>={
-  iron_ore:"Or",iron_ingot:"In",coal:"Co",gear:"Ge",steel:"St"
+  iron_ore:"Or",iron_ingot:"In",coal:"Co",gear:"Ge",steel:"St",copper_ore:"Cu",silicon:"Si",circuit:"Ci"
 };
 export const CARGO_COLORS:Record<Item,number>={
-  iron_ore:0xd5aa75,iron_ingot:0xffd27f,coal:0xb8c2d3,gear:0xc8b0f3,steel:0x9be3dd
+  iron_ore:0xd5aa75,iron_ingot:0xffd27f,coal:0xb8c2d3,gear:0xc8b0f3,steel:0x9be3dd,copper_ore:0xd5aa75,silicon:0xb8c2d3,circuit:0xc8b0f3
 };
 
 /** Labels include missing input types (0/4), and reserved stock stays visible. */

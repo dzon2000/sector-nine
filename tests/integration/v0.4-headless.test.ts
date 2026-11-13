@@ -225,6 +225,16 @@ describe("v0.4 WP1 transport, fair supply and strict persistence boundaries",()=
     const restored=validateSave(JSON.parse(JSON.stringify(a)));
     expect(runTicks(restored,20)).toEqual(runTicks(a,20));
   });
+  it("initializes power state at first electronic construction and rejects missing active power snapshots",()=>{
+    const f=factory();
+    f.add("coal_generator",4,6);
+    const placed=f.state;
+    expect(placed.power).toMatchObject({tick:placed.tick,supply:0,demand:0,served:0,lastServedFabricatorId:0,history:[]});
+    expect(validateSave(JSON.parse(JSON.stringify(placed)))).toEqual(placed);
+    const corrupt:any=structuredClone(placed);
+    delete corrupt.power;
+    expect(()=>validateSave(corrupt)).toThrow(/power/i);
+  });
   it("rejects negative generator fuel counters and invalid allocation cursors on load",()=>{
     const f=factory();
     f.add("coal_generator",4,6);

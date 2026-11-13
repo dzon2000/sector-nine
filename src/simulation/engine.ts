@@ -94,7 +94,7 @@ export function tick(state:GameState):GameState {
     visiting.add(r.source.id);
     let possible=false;
     if(r.target.kind==="sell_terminal")possible=true;
-    else if(["furnace","assembler","advanced_furnace"].includes(r.target.kind))possible=accepts(r.target,r.source,r.item);
+    else if(recipeFor(r.target.kind)||r.target.kind==="coal_generator")possible=accepts(r.target,r.source,r.item);
     else if(r.target.kind==="conveyor"){
       if(r.target.belt===null)possible=true;
       else{
@@ -116,7 +116,7 @@ export function tick(state:GameState):GameState {
     const t=r.target;
     s.arbiters[String(t.id)]=r.source.id;
     if(t.kind==="conveyor"){t.belt=r.item;costCents+=5;}
-    else if(recipeFor(t.kind)){
+    else if(recipeFor(t.kind)||t.kind==="coal_generator"){
       t.inputBuffers={...(t.inputBuffers??{}),[r.item]:(t.inputBuffers?.[r.item]??0)+1};
       if(t.kind==="furnace")t.oreInput=t.inputBuffers.iron_ore??0; // Legacy read-only mirror for v0.1-compatible snapshots.
     }
@@ -134,9 +134,19 @@ export function tick(state:GameState):GameState {
   }
   // Capture genuine movement outcomes after arbitration, before new cycles begin.
   const diagnosticDepartures=new Set(transfers.map(r=>r.source.id));
+  // Coal physically transferred this tick can fuel only later active ticks.
+  let coalBurned=0;
+  for(const e of generators){
+    if((e.fuelTicksRemaining??0)===0 && (e.inputBuffers?.coal??0)>0){
+      e.inputBuffers!.coal=(e.inputBuffers!.coal??0)-1;
+      e.fuelTicksRemaining=POWER_CANDIDATE.fuelTicksPerCoal;
+      if(s.materialLedger)s.materialLedger.coal.burned=(s.materialLedger.coal.burned??0)+1;
+      coalBurned++;
+    }
+  }
   // Phase 3: start any processor when its typed inputs satisfy its declarative recipe.
   for(const e of s.entities){
-    if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle===null&&e.output===null){
+    if(recipeFor(e.kind)&&e.cycle===null&&e.output===null){
       const recipe=recipeFor(e.kind)!;
       const inventory={...(e.inputBuffers??{})};
       if(Object.entries(recipe.input).every(([item,qty])=>(inventory[item as Item]??0)>=qty)){
@@ -150,6 +160,7 @@ export function tick(state:GameState):GameState {
     if(e.kind==="sell_terminal")e.status="waiting_for_inputs";
     else if(e.kind==="conveyor")e.status=e.belt?"working":"waiting_for_inputs";
     else if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind))e.status=e.output?"blocked_output":"working";
+    else if(e.kind==="coal_generator")e.status=(e.fuelTicksRemaining??0)>0?"working":"waiting_for_inputs";
     else e.status=e.cycle===0||e.output?"blocked_output":e.cycle!==null?"working":"waiting_for_inputs";
   }
   // Exactly one mutually exclusive machine status per completed active tick.
@@ -158,6 +169,8 @@ export function tick(state:GameState):GameState {
     let status:DiagnosticEntityTick["status"]="idle";
     if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind)){
       status=e.output!==null?"output_blocked":"working";
+    }else if(e.kind==="coal_generator"){
+      status=(e.fuelTicksRemaining??0)>0?"working":"input_starved";
     }else if(recipeFor(e.kind)){
       if(e.output!==null)status="output_blocked";
       else if(e.cycle!==null)status="working";
@@ -170,6 +183,11 @@ export function tick(state:GameState):GameState {
         !diagnosticDepartures.has(e.id)?1:0
     };
   }
+  const powerTick={tick:s.tick,supply,demand,served,demandCovered:demand>0&&served===demand,
+    unpoweredProcessingTicks:deficient,coalBurned};
+  Object.assign(power,powerTick);
+  power.history.push(powerTick);
+  if(power.history.length>60)power.history.shift();
   // Phase 4: accounting and progression; capital expenditure is intentionally excluded.
   s.balanceCents+=revenueCents-costCents;
   if(s.totalRevenueCents!==undefined)s.totalRevenueCents+=revenueCents;

@@ -316,3 +316,38 @@ describe("v0.4 WP1 fuel and arbitration boundary regressions",()=>{
     expect(validateSave(JSON.parse(JSON.stringify(a)))).toEqual(a);
   });
 });
+
+describe("v0.4 WP1 accounting and compatibility contract",()=>{
+  it("physically sells one fuel-powered circuit through the terminal and charges exactly once",()=>{
+    const f=factory();
+    f.add("coal_generator",7,6);
+    f.add("circuit_fabricator",8,5,"E");
+    f.add("conveyor",9,5,"E");
+    const s:any=f.state;
+    seed(s,"coal_generator",{coal:1});
+    seed(s,"circuit_fabricator",{copper_ore:2,silicon:1});
+    const initial=s.balanceCents;
+    const end=runTicks(s,12) as any;
+    expect(end.materialLedger.circuit.produced).toBe(1);
+    expect(end.materialLedger.circuit.sold).toBe(1);
+    expect(end.sales.circuit).toBe(1);
+    expect(end.totalRevenueCents).toBe(3000);
+    expect(end.totalCostCents).toBe(305); // processing + one conveyor transfer
+    expect(end.balanceCents).toBe(initial+3000-305);
+    expect(end.materialLedger.coal.burned).toBe(1);
+    conservation(end);
+    expect(validateSave(JSON.parse(JSON.stringify(end)))).toEqual(end);
+  });
+  it("leaves legacy machines unpowered and preserves original economic state shape",()=>{
+    const f=factory();
+    f.add("iron_mine",3,5,"E");
+    f.add("furnace",5,5,"E");
+    f.add("conveyor",4,5,"E");
+    f.add("conveyor",6,5,"E");
+    const s=runTicks(f.state,30);
+    expect(s.power).toBeUndefined();
+    expect(s.totalOreProduced).toBeGreaterThan(0);
+    expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s);
+    conservation(s);
+  });
+});

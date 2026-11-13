@@ -116,7 +116,6 @@ export function createGame():GameState {
   return { schemaVersion:3,missionRuleVersion:3,missionMetrics:null,diagnostics:{samples:[]},width:12,height:12,tick:0,paused:true,balanceCents:30000,
     sales:emptySales(),materialLedger:emptyLedger(),totalRevenueCents:0,totalCostCents:0,
     coalDeposits:COAL_DEPOSITS.map(d=>({...d})),technologies:{coal_extraction:false,mechanical_components:false,advanced_smelting:false},
-    power:{tick:0,supply:0,demand:0,served:0,demandCovered:false,unpoweredProcessingTicks:0,coalBurned:0,lastServedFabricatorId:0,history:[]},
     nextId:2,arbiters:{},rollingEvents:[],lastEvent:{tick:0,revenueCents:0,costCents:0},
     totalOreProduced:0,totalIngotProduced:0,
     entities:[{id:1,kind:"sell_terminal",x:10,y:5,direction:"W",output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs"}],

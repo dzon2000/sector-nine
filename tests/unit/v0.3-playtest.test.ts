@@ -94,7 +94,7 @@ describe("WP5 optional local-only playtest protocol",()=>{
     const next=state(1);
     next.mission.activeId="M6";
     next.diagnostics={samples:[{tick:1,entities:{"2":{status:"input_starved",completedUnits:0,conveyorMoves:0,conveyorStalledTicks:0},
-      "3":{status:"output_blocked",completedUnits:0,conveyorMoves:0,conveyorStalledTicks:0}},terminalSales:{iron_ore:0,iron_ingot:0,coal:0,gear:0,steel:0}}]};
+      "3":{status:"output_blocked",completedUnits:0,conveyorMoves:0,conveyorStalledTicks:0}},terminalSales:{iron_ore:0,iron_ingot:0,coal:0,gear:0,steel:0,copper_ore:0,silicon:0,circuit:0}}]};
     s=advancePlaytest(s,next,2000);
     expect(s.missionTransitions).toEqual([{tick:1,from:"M1",to:"M6"}]);
     expect(s.inputStarvedEntityTicks).toBe(1);

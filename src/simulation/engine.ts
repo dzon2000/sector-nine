@@ -1,4 +1,6 @@
-import {REVENUE,STEP,recipeFor,stats,type Entity,type GameState,type Item} from "../domain/model";
+import {REVENUE,STEP,recipeFor,stats,emptySales,type DiagnosticEntityTick,type Entity,type GameState,type Item} from "../domain/model";
+import {recordDiagnostics} from "../game/diagnostics";
+import {recordMissionTick} from "../game/missionMetrics";
 import {updateMission} from "../game/missions";
 type Request={source:Entity;target:Entity;item:Item};
 function at(s:GameState,x:number,y:number){return s.entities.find(e=>e.x===x&&e.y===y);}
@@ -18,20 +20,23 @@ export function tick(state:GameState):GameState {
   const s:GameState=structuredClone(state);
   s.tick++;
   let revenueCents=0,costCents=0;
+  const tickSales=emptySales();
+  const completions=new Map<number,number>();
+  const completed=(id:number)=>completions.set(id,(completions.get(id)??0)+1);
   const audit=(item:Item,event:"produced"|"consumed"|"sold"|"demolished",quantity=1)=>{if(s.materialLedger)s.materialLedger[item][event]+=quantity;};
   // Phase 1: finish due cycles; output cannot be replaced if occupied.
   for(const e of s.entities){
     if(e.kind==="iron_mine"||e.kind==="coal_mine"){
       if(e.output===null){
         e.cycle=(e.cycle??(e.kind==="coal_mine"?3:2))-1;
-        if(e.cycle===0){e.output=e.kind==="coal_mine"?"coal":"iron_ore";e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;audit(e.output!,"produced");costCents+=e.kind==="coal_mine"?80:60;}
+        if(e.cycle===0){e.output=e.kind==="coal_mine"?"coal":"iron_ore";e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;completed(e.id);audit(e.output!,"produced");costCents+=e.kind==="coal_mine"?80:60;}
       }
     }else if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle!==null){
       if(e.cycle>0)e.cycle--;
       if(e.cycle===0&&e.output===null){
         const recipe=recipeFor(e.kind)!;
         for(const [item,qty] of Object.entries(e.reservedInputs??recipe.input))audit(item as Item,"consumed",qty);
-        e.output=recipe.output;e.cycle=null;e.reservedInputs={};audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
+        e.output=recipe.output;e.cycle=null;e.reservedInputs={};completed(e.id);audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
       }
     }
   }
@@ -80,6 +85,8 @@ export function tick(state:GameState):GameState {
     return possible;
   }
   for(const r of planned.values())canMove(r);
+  // Belt occupancy at the exact transfer boundary, before departures and arrivals.
+  const conveyorOccupiedAtTransfer=new Set(s.entities.filter(e=>e.kind==="conveyor"&&e.belt!==null).map(e=>e.id));
   // Depart all sources first, then arrive at destinations.
   const transfers=[...planned.values()].filter(r=>approved.has(r.source.id));
   for(const r of transfers)clear(r.source);
@@ -93,6 +100,7 @@ export function tick(state:GameState):GameState {
     }
     else if(t.kind==="sell_terminal"){
       revenueCents+=REVENUE[r.item];
+      tickSales[r.item]++;
       if(s.sales)s.sales[r.item]++;
       audit(r.item,"sold");
       if(r.item==="iron_ore")s.mission.soldOre++;
@@ -102,6 +110,8 @@ export function tick(state:GameState):GameState {
       else if(r.item==="steel"&&s.mission.activeId==="M7")s.mission.soldSteel=(s.mission.soldSteel??0)+1;
     }
   }
+  // Capture genuine movement outcomes after arbitration, before new cycles begin.
+  const diagnosticDepartures=new Set(transfers.map(r=>r.source.id));
   // Phase 3: start any processor when its typed inputs satisfy its declarative recipe.
   for(const e of s.entities){
     if(["furnace","assembler","advanced_furnace"].includes(e.kind)&&e.cycle===null&&e.output===null){
@@ -120,6 +130,24 @@ export function tick(state:GameState):GameState {
     else if(e.kind==="iron_mine"||e.kind==="coal_mine")e.status=e.output?"blocked_output":"working";
     else e.status=e.cycle===0||e.output?"blocked_output":e.cycle!==null?"working":"waiting_for_inputs";
   }
+  // Exactly one mutually exclusive machine status per completed active tick.
+  const observations:Record<string,DiagnosticEntityTick>={};
+  for(const e of s.entities){
+    let status:DiagnosticEntityTick["status"]="idle";
+    if(e.kind==="iron_mine"||e.kind==="coal_mine"){
+      status=e.output!==null?"output_blocked":"working";
+    }else if(recipeFor(e.kind)){
+      if(e.output!==null)status="output_blocked";
+      else if(e.cycle!==null)status="working";
+      else status="input_starved";
+    }
+    observations[String(e.id)]={
+      status,completedUnits:completions.get(e.id)??0,
+      conveyorMoves:e.kind==="conveyor"&&diagnosticDepartures.has(e.id)?1:0,
+      conveyorStalledTicks:e.kind==="conveyor"&&conveyorOccupiedAtTransfer.has(e.id)&&
+        !diagnosticDepartures.has(e.id)?1:0
+    };
+  }
   // Phase 4: accounting and progression; capital expenditure is intentionally excluded.
   s.balanceCents+=revenueCents-costCents;
   if(s.totalRevenueCents!==undefined)s.totalRevenueCents+=revenueCents;
@@ -127,6 +155,8 @@ export function tick(state:GameState):GameState {
   s.lastEvent={tick:s.tick,revenueCents,costCents};
   s.rollingEvents.push(s.lastEvent);
   if(s.rollingEvents.length>60)s.rollingEvents.shift();
+  recordMissionTick(s,tickSales);
+  recordDiagnostics(s,observations,tickSales);
   updateMission(s);
   return s;
 }

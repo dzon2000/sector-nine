@@ -104,7 +104,7 @@ describe("v0.2 save compatibility (AC-16, 17, 21)",()=>{
     old.nextId=4;old.tick=123;old.balanceCents=12345;
     old.mission.activeId="M3";
     const migrated:any=validateSave(old);
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(3);
     expect(migrated.tick).toBe(123);
     expect(migrated.balanceCents).toBe(12345);
     expect(migrated.entities.find((e:any)=>e.id===2)).toMatchObject({x:7,y:9,belt:"iron_ore"});
@@ -144,7 +144,7 @@ describe("v0.2 save compatibility (AC-16, 17, 21)",()=>{
     delete old.mission.soldCoal;delete old.mission.soldGear;delete old.mission.soldSteel;
     for(const entity of old.entities){delete entity.inputBuffers;delete entity.reservedInputs;}
     const migrated=validateSave(JSON.parse(JSON.stringify(old)));
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(3);
     expect(migrated.balanceCents).toBe(-235);
     expect(migrated.tick).toBe(409);
     expect(migrated.arbiters).toEqual(old.arbiters);

@@ -1,12 +1,13 @@
 import {stats,type GameState} from "../domain/model";
+import {activateMissionMetrics,missionWindow} from "./missionMetrics";
 export const MISSIONS={
  M1:{title:"Restore Extraction",hint:"Build an iron mine on a highlighted deposit. Rotate toward a delivery route and run the simulation."},
  M2:{title:"First Delivery",hint:"Deliver 10 iron ore to the terminal. Place conveyors, then rotate with R so their arrows lead toward the terminal."},
  M3:{title:"Added Value",hint:"Sell 20 iron ingots. Feed two ore into a furnace to make one ingot; orient its output toward the terminal."},
  M4:{title:"Prove Profitability",hint:"Maintain at least 50.00 Cr operating profit per rolling 60 ticks for 60 consecutive active ticks. Capital spending does not affect this metric."},
  M5:{title:"Below the Surface",hint:"Open Technology, purchase Coal Extraction (80 Cr), then mine at (7,9) or (5,9) and deliver 10 coal to the terminal."},
- M6:{title:"Mechanical Precision",hint:"Unlock Mechanical Components (120 Cr). Route 2 iron ingots into an assembler for each gear. Sell 8 gears. Technology costs are investments, not operating costs."},
- M7:{title:"The Old Foundry",hint:"Unlock Advanced Smelting (180 Cr) after selling 10 coal and 8 gears. Feed 2 iron ingots and 1 coal to each steel cycle; inspect separate input buffers and blocked outputs. Sell 8 steel."},
+ M6:{title:"Mechanical Precision",hint:"Unlock Mechanical Components (120 Cr). Supply an assembler with two iron ingots per gear. Deliver at least 9 gears in EVERY trailing 60 active ticks for 120 consecutive ticks. Inspect input-starved machines and blocked outputs; one furnace may not provide enough ingots."},
+ M7:{title:"The Old Foundry",hint:"Unlock Advanced Smelting (180 Cr). Keep TWO streams selling together: at least 7 gears, 7 steel and 175.00 Cr operating profit in every trailing 60 active ticks for 120 consecutive ticks. Steel needs 2 ingots plus 1 coal. Inspect starvation, blocked outputs and the mission HUD; keep a profitable route while rebuilding."},
  DONE:{title:"Foundry Restored",hint:"Steel production confirmed. Prometheus archive: sealed engineering records remain. Continue optimizing in sandbox mode."}
 } as const;
 export function updateMission(s:GameState):string|null {
@@ -26,13 +27,39 @@ export function updateMission(s:GameState):string|null {
     if(m.profitStreakTicks>=60){m.activeId="M5";return "Sector 9 is viable again. The old foundry blueprint has surfaced in the archive.";}
   }
   if(m.activeId==="M5"&&(m.soldCoal??0)>=10){
-    m.activeId="M6";return "Coal deliveries confirmed. Reconstruct mechanical assembly and sell eight gears.";
+    m.activeId="M6";
+    if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
+    return "Coal deliveries confirmed. Reconstruct mechanical assembly and increase sustained gear throughput.";
   }
-  if(m.activeId==="M6"&&(m.soldGear??0)>=8){
-    m.activeId="M7";return "Mechanical assembly verified. Rebuild the advanced foundry using iron ingots and coal.";
+  if(m.activeId==="M6"){
+    if(s.missionRuleVersion===2){
+      if((m.soldGear??0)<8)return null;
+    }else{
+      const window=missionWindow(s);
+      if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
+      s.missionMetrics.lastEvaluatedTick=s.tick;
+      s.missionMetrics.streakTicks=window.sales.gear>=9?s.missionMetrics.streakTicks+1:0;
+      if(s.missionMetrics.streakTicks<120)return null;
+    }
+    m.activeId="M7";
+    if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
+    return "Mechanical assembly verified. Restore the foundry while maintaining two profitable product streams.";
   }
-  if(m.activeId==="M7"&&s.technologies?.advanced_smelting&&(m.soldSteel??0)>=8){
-    m.activeId="DONE";return "Steel deliveries verified. A sealed Prometheus engineering archive awaits future investigation.";
+  if(m.activeId==="M7"){
+    if(s.missionRuleVersion===2){
+      if(!s.technologies?.advanced_smelting||(m.soldSteel??0)<8)return null;
+    }else{
+      const window=missionWindow(s);
+      if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
+      s.missionMetrics.lastEvaluatedTick=s.tick;
+      const qualifies=Boolean(s.technologies?.advanced_smelting)&&
+        window.sales.gear>=7&&window.sales.steel>=7&&window.profitCents>=17500;
+      s.missionMetrics.streakTicks=qualifies?s.missionMetrics.streakTicks+1:0;
+      if(s.missionMetrics.streakTicks<120)return null;
+    }
+    m.activeId="DONE";
+    if(s.missionRuleVersion===3)s.missionMetrics=null;
+    return "Sustained foundry operations confirmed. A sealed Prometheus engineering archive awaits future investigation.";
   }
   return null;
 }

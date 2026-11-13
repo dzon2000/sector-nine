@@ -19,7 +19,7 @@ function transaction<T>(db:IDBDatabase,mode:IDBTransactionMode,action:(store:IDB
 export function validateSave(value:unknown):GameState{
   if(!value||typeof value!=="object")throw Error("Save is missing or corrupt.");
   const s=value as GameState;
-  if(s.schemaVersion!==1&&s.schemaVersion!==2)throw Error("Unsupported save schema. Export or reset your save manually.");
+  if(s.schemaVersion!==1&&s.schemaVersion!==2&&s.schemaVersion!==3)throw Error("Unsupported save schema. Export or reset your save manually.");
   if(s.width!==12||s.height!==12||!Number.isSafeInteger(s.tick)||s.tick<0||
     !Number.isSafeInteger(s.balanceCents)||!Array.isArray(s.entities)||!Array.isArray(s.rollingEvents)||
     (!s.arbiters||typeof s.arbiters!=="object"||Array.isArray(s.arbiters)||Object.entries(s.arbiters).some(([key,value])=>!Number.isSafeInteger(Number(key))||Number(key)<1||!Number.isSafeInteger(value)||value<0))||!s.mission||!Number.isSafeInteger(s.nextId)||
@@ -69,7 +69,7 @@ export function validateSave(value:unknown):GameState{
     const opening=stockOnHand(n.entities);
     for(const item of ITEMS)n.materialLedger![item].opening=opening[item];
   }
-  if(n.schemaVersion===2){
+  if(n.schemaVersion===2||n.schemaVersion===3){
     // Earlier v0.2 development snapshots predate the Foundry interlude fields.
     // Upgrade only absent fields; explicit invalid values are still rejected.
     if(n.foundryStorySeen===undefined){
@@ -138,6 +138,80 @@ export function validateSave(value:unknown):GameState{
         throw Error("Inconsistent furnace legacy buffer and typed inventory. Data preserved.");
     }
   }
+  // Validate the complete v3 window before any migration or saved state is accepted.
+  if(n.schemaVersion===3){
+    if(n.missionRuleVersion!==2&&n.missionRuleVersion!==3)
+      throw Error("Invalid v3 mission rule version. Data preserved.");
+    const metrics=n.missionMetrics;
+    if(metrics!==null){
+      if(!metrics||typeof metrics!=="object"||Array.isArray(metrics)||
+         !Number.isSafeInteger(metrics.activatedAtTick)||metrics.activatedAtTick<0||metrics.activatedAtTick>n.tick||
+         !Number.isSafeInteger(metrics.streakTicks)||metrics.streakTicks<0||
+         (metrics.lastEvaluatedTick!==undefined&&(!Number.isSafeInteger(metrics.lastEvaluatedTick)||
+           metrics.lastEvaluatedTick<=metrics.activatedAtTick||metrics.lastEvaluatedTick>n.tick))||
+         !Array.isArray(metrics.salesTicks)||metrics.salesTicks.length>60)
+        throw Error("Invalid v3 mission metrics. Data preserved.");
+      for(let i=0;i<metrics.salesTicks.length;i++){
+        const event=metrics.salesTicks[i];
+        if(!event||typeof event!=="object"||!Number.isSafeInteger(event.tick)||
+           event.tick<=metrics.activatedAtTick||event.tick>n.tick||
+           (i>0&&event.tick!==metrics.salesTicks[i-1].tick+1)||
+           !event.sales||typeof event.sales!=="object"||Array.isArray(event.sales)||
+           Object.keys(event.sales).length!==ITEMS.length||
+           Object.keys(event.sales).some(key=>!ITEMS.includes(key as Item))||
+           ITEMS.some(item=>!Number.isSafeInteger(event.sales[item])||event.sales[item]<0))
+          throw Error("Invalid v3 terminal-sale history. Data preserved.");
+      }
+      if(metrics.salesTicks.length &&
+         metrics.salesTicks[metrics.salesTicks.length-1].tick!==n.tick)
+        throw Error("Stale v3 terminal-sale history. Data preserved.");
+    }
+    if(n.missionRuleVersion===2 && metrics!==null)
+      throw Error("Legacy missions cannot have v3 metric state. Data preserved.");
+    // A new-rule active M6/M7 without measurement history can never advance.
+    // Reject the corrupted snapshot rather than silently loading a softlocked game.
+    // Legacy active M6/M7 intentionally keep null metrics and cumulative goals.
+    if(n.missionRuleVersion===3 && (n.mission.activeId==="M6"||n.mission.activeId==="M7") &&
+      metrics==null)
+      throw Error("Active v3 mission metrics are missing. Save preserved.");
+  }else{
+    // v1 already upgraded to the v2 shape; keep active v2 M6/M7 cumulative rules.
+    n.missionRuleVersion=["M6","M7"].includes(n.mission.activeId)?2:3;
+    n.missionMetrics=null;
+    n.schemaVersion=3;
+  }
+  // Diagnostics are bounded, simulation-derived v3 state. Older saves have no samples.
+  if(n.diagnostics===undefined)n.diagnostics={samples:[]};
+  const history=n.diagnostics;
+  if(!history||typeof history!=="object"||Array.isArray(history)||
+     Object.keys(history).length!==1||!Array.isArray(history.samples)||history.samples.length>60)
+    throw Error("Invalid v3 diagnostic history. Data preserved.");
+  const diagnosticEntities=new Set(n.entities.map(e=>String(e.id)));
+  for(let i=0;i<history.samples.length;i++){
+    const sample=history.samples[i];
+    if(!sample||typeof sample!=="object"||Array.isArray(sample)||
+       Object.keys(sample).length!==3||!Number.isSafeInteger(sample.tick)||
+       sample.tick<1||sample.tick>n.tick||
+       (i>0&&sample.tick!==history.samples[i-1].tick+1)||
+       !sample.entities||typeof sample.entities!=="object"||Array.isArray(sample.entities)||
+       !sample.terminalSales||typeof sample.terminalSales!=="object"||
+       Array.isArray(sample.terminalSales)||Object.keys(sample.terminalSales).length!==ITEMS.length||
+       Object.keys(sample.terminalSales).some(key=>!ITEMS.includes(key as Item))||
+       ITEMS.some(item=>!Number.isSafeInteger(sample.terminalSales[item])||sample.terminalSales[item]<0))
+      throw Error("Invalid v3 diagnostic sample. Data preserved.");
+    for(const [id,entry] of Object.entries(sample.entities)){
+      if(!diagnosticEntities.has(id)||!entry||typeof entry!=="object"||Array.isArray(entry)||
+         Object.keys(entry).length!==4||
+         !["working","input_starved","output_blocked","idle"].includes(entry.status)||
+         !Number.isSafeInteger(entry.completedUnits)||entry.completedUnits<0||
+         !Number.isSafeInteger(entry.conveyorMoves)||entry.conveyorMoves<0||entry.conveyorMoves>1||
+         !Number.isSafeInteger(entry.conveyorStalledTicks)||entry.conveyorStalledTicks<0||
+         entry.conveyorStalledTicks>1||entry.conveyorMoves+entry.conveyorStalledTicks>1)
+        throw Error("Invalid v3 entity diagnostic sample. Data preserved.");
+    }
+  }
+  if(history.samples.length&&history.samples.at(-1)!.tick!==n.tick)
+    throw Error("Stale v3 diagnostic history. Data preserved.");
   return n;
 }
 // All writes and deletes share one queue. Capture snapshots before enqueueing.

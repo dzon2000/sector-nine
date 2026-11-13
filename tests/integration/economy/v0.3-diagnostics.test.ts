@@ -133,6 +133,7 @@ describe("WP4 authoritative 60-active-tick diagnostic counters",()=>{
     const s=createGame();
     delete s.diagnostics;
     s.mission.activeId="M6";
+    s.missionMetrics={activatedAtTick:s.tick,salesTicks:[],streakTicks:0};
     s.paused=false;
     const n=validateSave(s);
     expect(n.diagnostics).toEqual({samples:[]});

@@ -112,6 +112,28 @@ describe("WP1 mission measurement foundation",()=>{
     }
   });
 
+  it("rejects new-rule active M6/M7 saves with null or missing measurement state instead of silently softlocking",()=>{
+    for(const id of ["M6","M7"] as const){
+      const valid=createGame();
+      valid.mission.activeId=id;
+      valid.missionRuleVersion=3;
+      valid.missionMetrics=null;
+      expect(()=>validateSave(valid)).toThrow(/mission metrics/i);
+      const missing=structuredClone(valid);
+      delete missing.missionMetrics;
+      expect(()=>validateSave(missing)).toThrow(/mission metrics/i);
+    }
+  });
+
+  it("continues accepting legacy v2-rule M6/M7 with null measurement state",()=>{
+    for(const id of ["M6","M7"] as const){
+      const legacy=createGame();legacy.mission.activeId=id;legacy.missionRuleVersion=2;
+      legacy.missionMetrics=null;
+      expect(validateSave(legacy).missionMetrics).toBeNull();
+      expect(validateSave(legacy).missionRuleVersion).toBe(2);
+    }
+  });
+
   it("does not advance while paused and rejects corrupt v3 rolling metric state",()=>{
     let s=activeMission("M6");
     s=runTicks(s,60);

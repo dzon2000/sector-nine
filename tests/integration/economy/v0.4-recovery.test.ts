@@ -61,7 +61,7 @@ function oldResearch(t:Trace,id:TechnologyId){
   t.legacyResearch+=t.state.balanceCents-r.state.balanceCents;
   t.state=r.state;
 }
-function projectedResearch(t:Trace,label:ChapterTechnologyId,feeCents:number){
+function purchaseChapterResearch(t:Trace,label:ChapterTechnologyId,feeCents:number){
   finance(t,feeCents);
   const purchase=purchaseTechnology(t.state,label);
   expect(purchase.ok,purchase.message).toBe(true);
@@ -113,8 +113,8 @@ function realV03Done():Trace {
   audit(t);
   return t;
 }
-describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic recovery",()=>{
-  it("reuses a no-injection v0.3 DONE layout for M8 and M9 with explicit candidate research debits",()=>{
+describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
+  it("pays all research and completes physical M8–M10 after an engine-generated v0.3 DONE save",()=>{
     const t=realV03Done();
     const done=validateSave(JSON.parse(JSON.stringify(t.state)));
     expect(done.mission.activeId).toBe("DONE");
@@ -131,7 +131,7 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     expect(t.state.mission.activeId).toBe("M8");
     // M8: preserve the profitable steel line while replacing ONE abandoned
     // gear-output conveyor with copper mining. Keep upper route to terminal.
-    projectedResearch(t,"resource_surveying",8000);
+    purchaseChapterResearch(t,"resource_surveying",8000);
     demolish(t,8,2);
     build(t,["copper_mine",8,2,"E"],["silicon_extractor",8,9,"E"],
       ["conveyor",9,9,"E"],["conveyor",10,9,"E"],
@@ -152,8 +152,8 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
 
     // M9: existing steel revenue keeps financing construction. Reconfigure
     // copper/silicon paths without creating a resource or teleporting inventory.
-    projectedResearch(t,"circuit_fabrication",12000);
-    projectedResearch(t,"industrial_power",10000);
+    purchaseChapterResearch(t,"circuit_fabrication",12000);
+    purchaseChapterResearch(t,"industrial_power",10000);
     demolish(t,10,3);
     build(t,["circuit_fabricator",10,3,"S"]);
     rotate(t,8,2); // copper E -> S
@@ -175,9 +175,8 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     observe(t,"M9 physical post-activation circuits");
     audit(t);
 
-    // Provisional M10 is not yet a production mission (WP2). Evaluate its
-    // intended post-activation rolling-window rule against real terminal events.
-    // This deliberately does not change any threshold or inject stock.
+    // Check that the initially under-capacity single-fabricator M10 layout
+    // fails real rolling-window qualification before expanding the factory.
     const m10StartTick=t.state.tick;
     const initialCircuitSales=t.state.sales!.circuit;
     let probeState=structuredClone(t.state);
@@ -213,8 +212,8 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
       maxCircuitsPer60:maxCircuitWindow,maxSteelPer60:maxSteelWindow,
       maxDemandCoveredPer60:maxCoveredWindow,
       qualifyingWindows,bestQualifyingStreak,
-      candidate:{circuitsPer60:11,steelPer60:5,demandCoveredTicksPer60:57,streak:60},
-      warning:"WP2 mission engine not implemented; evaluation uses recorded real physical events"
+      approved:{circuitsPer60:11,producedCircuitsPer60:11,steelPer60:5,demandCoveredTicksPer60:57,streak:60},
+      note:"Real engine M10 mission stays incomplete with under-capacity single-fabricator production"
     }));
     audit(t);
     // Real economic recovery: finance and explicitly demolish the legacy/M9
@@ -278,7 +277,7 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     expect(terminalPeak).toBeLessThanOrEqual(1);
     expect(peakDemand).toBeGreaterThanOrEqual(2);
     expect(t.state.balanceCents).toBeGreaterThan(0);
-    observe(t,"M10 candidate physically qualified");
+    observe(t,"M10 physical mission completed");
     audit(t);
     console.info("V04-OPTION-A-RECOVERY "+JSON.stringify({
       startedFromRealV03DoneAt:done.tick,previousM9At:m10StartTick,

@@ -1,12 +1,16 @@
 import {describe,expect,it} from "vitest";
 import {createGame} from "../../src/domain/model";
 import {startPlaytest,advancePlaytest,annotatePlaytest,resumePlaytest,finishPlaytest,buildPlaytestReport,isPlaytestSession} from "../../src/ui/playtest";
-import {resolveBuildCommit} from "../../src/ui/buildProvenance";
+import {resolveBuildCommit,trustedCiBuildCommit} from "../../src/ui/buildProvenance";
 const SHA="b".repeat(40);
 const game=()=>{const s=createGame();s.paused=false;s.introOpen=false;return s;};
 describe("WP5 provenance, player-declared waiting and power samples — RED",()=>{
  it("accepts exact trusted CI commit and fails closed on untrusted or malformed values",()=>{
    expect(resolveBuildCommit(SHA)).toBe(SHA);
+   expect(trustedCiBuildCommit("true",SHA)).toBe(SHA);
+   expect(trustedCiBuildCommit("false",SHA)).toBeNull();
+   expect(trustedCiBuildCommit(undefined,SHA)).toBeNull();
+   expect(trustedCiBuildCommit("true","invalid")).toBeNull();
    for(const input of [null,undefined,"","v0.4","main","b".repeat(39),"B".repeat(40),"f".repeat(41),0])
      expect(resolveBuildCommit(input)).toBeNull();
  });

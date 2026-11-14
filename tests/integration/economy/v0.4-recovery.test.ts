@@ -231,7 +231,12 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     observe(t,"rebuilt physical M10");
     audit(t);
     const m10BuiltAt=t.state.tick;
-    t.state=runTicks(t.state,360);
+    t.state=runTicks(t.state,60);
+    const interrupted=validateSave(JSON.parse(JSON.stringify(t.state)));
+    expect(interrupted.mission.activeId).toBe("M10");
+    expect(interrupted.chapterII?.metrics?.salesTicks.length).toBe(60);
+    expect(runTicks(interrupted,20)).toEqual(runTicks(t.state,20));
+    t.state=runTicks(interrupted,300);
     const trail:{circuit:number;steel:number;covered:boolean;produced:number}[]=[];
     let winningStreak=0,bestExpandedStreak=0,qualifyingExpandedWindows=0,peakCircuits60=0,peakSteel60=0;
     let guardedStreak=0,maxGuardedStreak=0;
@@ -264,6 +269,12 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     }
     expect(bestExpandedStreak).toBeGreaterThanOrEqual(60);
     expect(maxGuardedStreak).toBeGreaterThanOrEqual(60);
+    expect(t.state.mission.activeId).toBe("DONE");
+    expect(t.state.chapterII?.completed).toBe(true);
+    expect(t.state.chapterII?.foundryCompleted).toBe(true);
+    expect(t.state.schemaVersion).toBe(4);
+    expect(t.state.missionRuleVersion).toBe(4);
+    expect(t.state.chapterII?.metrics).toBeNull();
     expect(terminalPeak).toBeLessThanOrEqual(1);
     expect(peakDemand).toBeGreaterThanOrEqual(2);
     expect(t.state.balanceCents).toBeGreaterThan(0);

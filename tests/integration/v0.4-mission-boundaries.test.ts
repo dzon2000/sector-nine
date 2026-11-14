@@ -99,7 +99,11 @@ describe("WP2 exact M10 thresholds and active-tick restore",()=>{
       s=>{s.chapterII!.completed=true;},
       s=>{s.missionRuleVersion=2;},
       s=>{delete (s as any).chapterII;},
-      s=>{delete s.technologies!.industrial_power;}
+      s=>{delete s.technologies!.industrial_power;},
+      s=>{s.copperDeposits![0].x=7;},
+      s=>{s.siliconDeposits=[];},
+      s=>{s.technologies!.resource_surveying=false;},
+      s=>{s.technologies!.circuit_fabrication=false;}
     ];
     for(const mutate of edits){
       const copy=structuredClone(good);mutate(copy);

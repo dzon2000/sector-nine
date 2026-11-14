@@ -41,8 +41,8 @@ for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[1280,600]] as co
      const right=document.querySelector(".inspector") as HTMLElement;
      const top=board.top,missionTop=mission.top;
      left.scrollTop=100;right.scrollTop=100;
-     return {left:left.scrollTop,right:right.scrollTop,boardShift:Math.abs(board.top-top),
-       missionShift:Math.abs(mission.top-missionTop),pageScroll:window.scrollY};
+     return {left:left.scrollTop,right:right.scrollTop,boardShift:Math.abs(document.querySelector('[data-testid="factory-board"]')!.getBoundingClientRect().top-top),
+       missionShift:Math.abs(document.querySelector('[data-testid="mission-hud"]')!.getBoundingClientRect().top-missionTop),pageScroll:window.scrollY};
    });
    expect(scrollCheck.left).toBeGreaterThan(0);
    expect(scrollCheck.right).toBeGreaterThan(0);

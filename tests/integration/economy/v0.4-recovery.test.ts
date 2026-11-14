@@ -1,7 +1,8 @@
 import {describe,expect,it} from "vitest";
 import {begin,place,remove,turn} from "../../../src/game/commands";
 import {createGame,DEFINITIONS,ITEMS,stockOnHand,type Direction,type GameState,type Kind} from "../../../src/domain/model";
-import {purchaseTechnology,type TechnologyId} from "../../../src/game/technologies";
+import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
+import {beginChapterII} from "../../../src/game/chapterTwo";
 import {tick,runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
 import {physicalM10} from "./v0.4-option-a-layout";
@@ -60,15 +61,15 @@ function oldResearch(t:Trace,id:TechnologyId){
   t.legacyResearch+=t.state.balanceCents-r.state.balanceCents;
   t.state=r.state;
 }
-function projectedResearch(t:Trace,label:string,feeCents:number){
+function projectedResearch(t:Trace,label:ChapterTechnologyId,feeCents:number){
   finance(t,feeCents);
-  // WP2 has not implemented v4 research. This is an explicit conservative
-  // PROJECTION DEBIT, not a claim that research was purchased/unlocked.
-  t.state=structuredClone(t.state);
-  t.state.balanceCents-=feeCents;
+  const purchase=purchaseTechnology(t.state,label);
+  expect(purchase.ok,purchase.message).toBe(true);
+  expect(t.state.balanceCents-purchase.state.balanceCents).toBe(feeCents);
+  t.state=purchase.state;
   t.estimatedNewResearch+=feeCents;
   t.minCash=Math.min(t.minCash,t.state.balanceCents);
-  observe(t,"projected research fee: "+label);
+  observe(t,"paid Chapter II research: "+label);
 }
 function audit(t:Trace){
   const s=t.state;
@@ -124,6 +125,10 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     console.info("V04-WP3-DONE-BASE "+JSON.stringify({tick:t.state.tick,cashCents:t.state.balanceCents,
       copperCandidateOccupied:occupied.some(([,x,y])=>x===8&&y===2),
       siliconCandidateOccupied:occupied.some(([,x,y])=>x===8&&y===9),occupied}));
+    const chapter=beginChapterII(t.state);
+    expect(chapter.ok,chapter.message).toBe(true);
+    t.state=chapter.state;
+    expect(t.state.mission.activeId).toBe("M8");
     // M8: preserve the profitable steel line while replacing ONE abandoned
     // gear-output conveyor with copper mining. Keep upper route to terminal.
     projectedResearch(t,"resource_surveying",8000);
@@ -141,6 +146,7 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     expect(t.state.sales!.copper_ore-m8Start.copper_ore).toBeGreaterThanOrEqual(10);
     expect(t.state.sales!.silicon-m8Start.silicon).toBeGreaterThanOrEqual(10);
     expect(t.state.sales!.steel).toBeGreaterThan(done.sales!.steel);
+    expect(t.state.mission.activeId).toBe("M9");
     observe(t,"M8 physical post-activation sales");
     audit(t);
 
@@ -164,6 +170,7 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     }
     expect(t.state.sales!.circuit-m9Start.circuit).toBeGreaterThanOrEqual(4);
     expect(t.state.materialLedger!.coal.burned).toBeGreaterThan(0);
+    expect(t.state.mission.activeId).toBe("M10");
     expect(t.state.sales!.steel).toBeGreaterThan(done.sales!.steel);
     observe(t,"M9 physical post-activation circuits");
     audit(t);
@@ -264,19 +271,19 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     audit(t);
     console.info("V04-OPTION-A-RECOVERY "+JSON.stringify({
       startedFromRealV03DoneAt:done.tick,previousM9At:m10StartTick,
-      projectedResearchFeesCents:t.estimatedNewResearch,
+      paidResearchFeesCents:t.estimatedNewResearch,
       financedTicks,rebuiltAtTick:m10BuiltAt,fullLayoutPriceCents:targetCost,
       constructionCount:physicalM10.length,minCashCents:t.minCash,
       bestExpandedStreak,maxGuardedStreak,qualifyingExpandedWindows,peakCircuits60,peakSteel60,
       peakDemand,terminalPeak,finalTick:t.state.tick,cashCents:t.state.balanceCents,
-      caveat:"synthetic v0.3 300Cr engine campaign, proposed research fees debited but WP2 research not implemented"
+      caveat:"synthetic engine-generated v0.3 DONE continuation with real paid WP2 research and construction"
     }));
     console.info("V04-WP3-RECOVERY "+JSON.stringify({
       authenticHumanSave:false,source:"actual v0.3 300-Cr engine campaign",
       finalTick:t.state.tick,fromDoneTick:done.tick,
       cashCents:t.state.balanceCents,minCashCents:t.minCash,
       capitalCents:t.capital,refundCents:t.refund,legacyResearchCents:t.legacyResearch,
-      projectedUnimplementedNewResearchFeesCents:t.estimatedNewResearch,
+      paidNewResearchFeesCents:t.estimatedNewResearch,
       m8Ticks,m9Ticks,remainingSteelRoute:true,sales:t.state.sales,notes:t.notes}));
   },45000);
 });

@@ -14,6 +14,7 @@ const entry=()=>{
   const opened=beginChapterII(s);
   expect(opened.ok).toBe(true);
   const n=opened.state;
+  n.technologies={...n.technologies!,resource_surveying:true,circuit_fabrication:true,industrial_power:true};
   n.mission.activeId="M10";
   n.chapterII!.metrics=newChapterMetrics(n.tick);
   return n;

@@ -37,7 +37,7 @@ export const RECIPES: Record<RecipeId,Recipe> = {
 };
 export type Kind = "iron_mine" | "coal_mine" | "furnace" | "assembler" | "advanced_furnace" | "conveyor" | "sell_terminal" | "copper_mine" | "silicon_extractor" | "circuit_fabricator" | "coal_generator" | "splitter";
 export type Status = "working" | "waiting_for_inputs" | "blocked_output" | "paused";
-export type MissionId = "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "DONE";
+export type MissionId = "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8" | "M9" | "M10" | "DONE";
 export interface Entity {
   id: number; kind: Kind; x: number; y: number; direction: Direction;
   output: Item | null; belt: Item | null; oreInput: number;
@@ -63,6 +63,9 @@ export interface DiagnosticTick {
 }
 export interface DiagnosticHistory { samples:DiagnosticTick[]; }
 export interface MissionSaleTick { tick:number; sales:Record<Item,number>; }
+export interface ChapterTick { tick:number; sales:Record<Item,number>; producedCircuits:number; demandCovered:boolean; }
+export interface ChapterMetrics { activatedAtTick:number; salesTicks:ChapterTick[]; streakTicks:number; lastEvaluatedTick?:number; }
+export interface ChapterIIState { foundryCompleted:boolean; started:boolean; completed:boolean; storySeen:boolean; metrics:ChapterMetrics|null; }
 export interface MissionMetrics {
   activatedAtTick:number;
   salesTicks:MissionSaleTick[];
@@ -73,13 +76,14 @@ export interface PowerTick { tick:number; supply:number; demand:number; served:n
 export interface PowerState extends PowerTick { lastServedFabricatorId:number; history:PowerTick[]; }
 export const POWER_CANDIDATE={fuelTicksPerCoal:12,generatorSupply:1,fabricatorDemand:1} as const;
 export interface GameState {
-  schemaVersion: 1 | 2 | 3; width: 12; height: 12; tick: number; paused: boolean;
+  schemaVersion: 1 | 2 | 3 | 4; width: 12; height: 12; tick: number; paused: boolean;
   balanceCents: number; entities: Entity[]; nextId: number;
-  missionRuleVersion?:2|3;
+  missionRuleVersion?:2|3|4;
   missionMetrics?:MissionMetrics|null;
   diagnostics?:DiagnosticHistory;
   /** WP1 headless-only additive state; full schema migration belongs to WP2. */
   power?:PowerState;
+  chapterII?:ChapterIIState;
   arbiters: Record<string, number>;
   rollingEvents: Accounting[]; lastEvent: Accounting;
   totalOreProduced: number; totalIngotProduced: number;
@@ -90,7 +94,7 @@ export interface GameState {
   sales?: Record<Item,number>;
   materialLedger?: MaterialLedger;
   totalRevenueCents?:number; totalCostCents?:number;
-  technologies?: Record<"coal_extraction"|"mechanical_components"|"advanced_smelting",boolean>;
+  technologies?: Record<"coal_extraction"|"mechanical_components"|"advanced_smelting"|"resource_surveying"|"circuit_fabrication"|"industrial_power",boolean>;
 }
 export const DEPOSITS = [{x:3,y:5},{x:2,y:2},{x:2,y:9}] as const;
 export const COAL_DEPOSITS = [{x:7,y:9},{x:5,y:9}] as const;
@@ -104,7 +108,7 @@ export const DEFINITIONS = {
   advanced_furnace: { price:18000, label:"Advanced Furnace" },
   furnace: { price:8000, label:"Furnace" },
   conveyor: { price:500, label:"Conveyor" },
-  splitter: {price:900,label:"Splitter (experimental)"},
+  splitter: {price:900,label:"Splitter"},
   sell_terminal: { price:0, label:"Sales Terminal" },
   copper_mine: {price:7500,label:"Copper Mine"},
   silicon_extractor: {price:8500,label:"Silicon Extractor"},

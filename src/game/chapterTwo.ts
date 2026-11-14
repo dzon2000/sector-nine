@@ -18,7 +18,7 @@ export function beginChapterII(state:GameState):ChapterCommandResult {
   s.chapterII={foundryCompleted:true,started:true,completed:false,storySeen:false,
     metrics:newChapterMetrics(s.tick)};
   s.mission.activeId="M8";
-  s.technologies={...s.technologies,resource_surveying:s.technologies?.resource_surveying??false,
+  s.technologies={...s.technologies!,resource_surveying:s.technologies!.resource_surveying??false,
     circuit_fabrication:s.technologies?.circuit_fabrication??false,
     industrial_power:s.technologies?.industrial_power??false};
   return {ok:true,message:"Chapter II started: Unregistered Materials.",state:s};

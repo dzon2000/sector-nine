@@ -75,7 +75,7 @@ describe("WP2 exact M10 thresholds and active-tick restore",()=>{
     for(let i=0;i<75;i++)step(s,i);
     expect(s.chapterII!.metrics!.streakTicks).toBe(16);
     // a whole 60-tick period without new production loses the recent-production window
-    for(let i=75;i<135;i++)step(s,i,{produced:0});
+    for(let i=75;i<135;i++)step(s,i,{produced:0,covered:false});
     expect(s.mission.activeId).toBe("M10");
     expect(s.chapterII!.metrics!.streakTicks).toBe(0);
     for(let i=135;i<330 && s.mission.activeId==="M10";i++)step(s,i);

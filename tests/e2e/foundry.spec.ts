@@ -51,7 +51,9 @@ test("WP5 coal palette, deposits and typed inspector are usable (AC-01, 02, 14)"
   await expect(page.getByRole("button",{name:/Coal Mine/})).not.toContainText("Locked");
   await expect(page.getByText("(7,9) · (5,9)",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:/Coal Mine/}).click();
-  await page.getByTestId("factory-board").locator("canvas").click({position:{x:7*44+22,y:9*44+22}});
+  const board=page.getByTestId("factory-board");
+  const bounds=await board.boundingBox();if(!bounds)throw Error("Board absent");
+  await board.locator("canvas").click({position:{x:7.5*bounds.width/12,y:9.5*bounds.height/12}});
   await expect(page.getByRole("heading",{name:"Coal Mine"})).toBeVisible();
   await expect(page.getByText("Below the Surface")).toBeVisible();
 });

@@ -19,13 +19,13 @@ function transaction<T>(db:IDBDatabase,mode:IDBTransactionMode,action:(store:IDB
 export function validateSave(value:unknown):GameState{
   if(!value||typeof value!=="object")throw Error("Save is missing or corrupt.");
   const s=value as GameState;
-  if(s.schemaVersion!==1&&s.schemaVersion!==2&&s.schemaVersion!==3)throw Error("Unsupported save schema. Export or reset your save manually.");
+  if(s.schemaVersion!==1&&s.schemaVersion!==2&&s.schemaVersion!==3&&s.schemaVersion!==4)throw Error("Unsupported save schema. Export or reset your save manually.");
   if(s.width!==12||s.height!==12||!Number.isSafeInteger(s.tick)||s.tick<0||
     !Number.isSafeInteger(s.balanceCents)||!Array.isArray(s.entities)||!Array.isArray(s.rollingEvents)||
     (!s.arbiters||typeof s.arbiters!=="object"||Array.isArray(s.arbiters)||Object.entries(s.arbiters).some(([key,value])=>!Number.isSafeInteger(Number(key))||Number(key)<1||!Number.isSafeInteger(value)||value<0))||!s.mission||!Number.isSafeInteger(s.nextId)||
     !Number.isSafeInteger(s.totalOreProduced)||!Number.isSafeInteger(s.totalIngotProduced)||
     !Number.isSafeInteger(s.mission.soldOre)||!Number.isSafeInteger(s.mission.soldIngot)||
-    !Number.isSafeInteger(s.mission.profitStreakTicks)||!["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(s.mission.activeId)||
+    !Number.isSafeInteger(s.mission.profitStreakTicks)||!["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(s.mission.activeId)||
     typeof s.paused!=="boolean"||typeof s.introSeen!=="boolean"||typeof s.introOpen!=="boolean"||
     typeof s.tutorialEnabled!=="boolean"||s.rollingEvents.length>60)throw Error("Save validation failed. Your data has not been overwritten.");
   const spots=new Set<string>();
@@ -77,7 +77,7 @@ export function validateSave(value:unknown):GameState{
     const opening=stockOnHand(n.entities);
     for(const item of ITEMS)n.materialLedger![item].opening=opening[item];
   }
-  if(n.schemaVersion===2||n.schemaVersion===3){
+  if(n.schemaVersion===2||n.schemaVersion===3||n.schemaVersion===4){
     // Earlier v0.2 development snapshots predate the Foundry interlude fields.
     // Upgrade only absent fields; explicit invalid values are still rejected.
     if(n.foundryStorySeen===undefined){
@@ -88,6 +88,7 @@ export function validateSave(value:unknown):GameState{
     if(n.mission.soldGear===undefined)n.mission.soldGear=0;
     if(n.mission.soldSteel===undefined)n.mission.soldSteel=0;
     const technologyNames=["coal_extraction","mechanical_components","advanced_smelting"];
+    if(n.schemaVersion===4)technologyNames.push("resource_surveying","circuit_fabrication","industrial_power");
     const tech=n.technologies;
     if(!tech||typeof tech!=="object"||Array.isArray(tech)||
        Object.keys(tech).length!==technologyNames.length||
@@ -195,6 +196,50 @@ export function validateSave(value:unknown):GameState{
     if(n.missionRuleVersion===3 && (n.mission.activeId==="M6"||n.mission.activeId==="M7") &&
       metrics==null)
       throw Error("Active v3 mission metrics are missing. Save preserved.");
+  }else if(n.schemaVersion===4){
+    if(n.missionRuleVersion!==4 || !n.chapterII ||
+      typeof n.chapterII!=="object" || Array.isArray(n.chapterII) ||
+      Object.keys(n.chapterII).length!==5 ||
+      typeof n.chapterII.foundryCompleted!=="boolean" ||
+      typeof n.chapterII.started!=="boolean" ||
+      typeof n.chapterII.completed!=="boolean" ||
+      typeof n.chapterII.storySeen!=="boolean" ||
+      n.chapterII.foundryCompleted!==true || n.chapterII.started!==true ||
+      !["M8","M9","M10","DONE"].includes(n.mission.activeId) ||
+      n.missionMetrics!==null ||
+      (n.chapterII.completed !== (n.mission.activeId==="DONE")))
+      throw Error("Invalid v4 Chapter II or mission rules. Save preserved.");
+    const metrics=n.chapterII.metrics;
+    if(n.mission.activeId==="DONE"){
+      if(metrics!==null)throw Error("Completed v4 mission cannot retain active metrics. Save preserved.");
+    }else{
+      if(!metrics || typeof metrics!=="object" || Array.isArray(metrics) ||
+        Object.keys(metrics).some(key=>!["activatedAtTick","salesTicks","streakTicks","totals","lastEvaluatedTick"].includes(key)) ||
+        !Number.isSafeInteger(metrics.activatedAtTick) || metrics.activatedAtTick<0 || metrics.activatedAtTick>n.tick ||
+        !Number.isSafeInteger(metrics.streakTicks) || metrics.streakTicks<0 || metrics.streakTicks>60 ||
+        (metrics.lastEvaluatedTick!==undefined && (!Number.isSafeInteger(metrics.lastEvaluatedTick) ||
+          metrics.lastEvaluatedTick<=metrics.activatedAtTick || metrics.lastEvaluatedTick>n.tick)) ||
+        !Array.isArray(metrics.salesTicks) || metrics.salesTicks.length>60 ||
+        !metrics.totals || typeof metrics.totals!=="object" || Array.isArray(metrics.totals) ||
+        Object.keys(metrics.totals).length!==ITEMS.length ||
+        ITEMS.some(item=>!Number.isSafeInteger(metrics.totals![item]) || metrics.totals![item]<0))
+        throw Error("Invalid v4 mission metrics. Save preserved.");
+      for(let i=0;i<metrics.salesTicks.length;i++){
+        const e=metrics.salesTicks[i];
+        if(!e || typeof e!=="object" || Array.isArray(e) ||
+          Object.keys(e).length!==4 || !Number.isSafeInteger(e.tick) ||
+          e.tick<=metrics.activatedAtTick || e.tick>n.tick ||
+          (i>0 && e.tick!==metrics.salesTicks[i-1].tick+1) ||
+          !e.sales || typeof e.sales!=="object" || Array.isArray(e.sales) ||
+          Object.keys(e.sales).length!==ITEMS.length ||
+          ITEMS.some(item=>!Number.isSafeInteger(e.sales[item])||e.sales[item]<0) ||
+          !Number.isSafeInteger(e.producedCircuits) || e.producedCircuits<0 ||
+          typeof e.demandCovered!=="boolean")
+          throw Error("Invalid v4 mission sale/production history. Save preserved.");
+      }
+      if(metrics.salesTicks.length && metrics.salesTicks.at(-1)!.tick!==n.tick)
+        throw Error("Stale v4 mission window. Save preserved.");
+    }
   }else{
     // v1 already upgraded to the v2 shape; keep active v2 M6/M7 cumulative rules.
     n.missionRuleVersion=["M6","M7"].includes(n.mission.activeId)?2:3;

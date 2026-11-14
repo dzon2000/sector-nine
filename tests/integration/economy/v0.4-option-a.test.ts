@@ -70,6 +70,21 @@ describe("WP3 Option A experimental splitter: RED-before-implementation",()=>{
    expect(runTicks(validateSave(JSON.parse(JSON.stringify(s))),10).entities.sort((a,b)=>a.id-b.id))
      .toEqual(runTicks(shuffled,10).entities.sort((a,b)=>a.id-b.id));
  });
+ it("charges one ordinary five-cent movement for a successful splitter-to-belt transfer, none while blocked",()=>{
+   const f=make();f.add("splitter",5,5,"E");f.add("conveyor",6,5,"E");
+   let s:any=f.state;
+   const splitter=s.entities.find((e:any)=>e.kind==="splitter");
+   splitter.belt="copper_ore";
+   s.materialLedger.copper_ore.opening++;
+   const cash=s.balanceCents;
+   s=tick(s);
+   expect(s.lastEvent.costCents).toBe(5);
+   expect(s.balanceCents).toBe(cash-5);
+   expect(s.materialLedger.copper_ore.sold).toBe(0);
+   s=tick(s);
+   expect(s.lastEvent.costCents).toBe(0);
+   conserved(s);
+ });
  it("rejects lost or invalid splitter cursor without silently changing saved routing",()=>{
    const f=make();f.add("splitter",5,5,"E");
    const original=f.state;

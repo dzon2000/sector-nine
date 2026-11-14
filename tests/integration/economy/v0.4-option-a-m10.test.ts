@@ -71,3 +71,39 @@ describe("WP3 experimental Option A M10 full physical 12x12",()=>{
    expect(runTicks(saved,120)).toEqual(runTicks(s,120));
  },30000);
 });
+
+describe("WP3 Option A M10 failing physical controls",()=>{
+  it.each([
+    ["single fabricator","circuit_fabricator",9,8],
+    ["single generator","coal_generator",7,8],
+    ["steel line absent","advanced_furnace",3,4],
+    ["first coal supply absent","coal_mine",7,9]
+  ] as const)("%s does not qualify for the 60-window M10 streak",(_label,kind,x,y)=>{
+    let s=build();
+    const target=s.entities.find(e=>e.kind===kind&&e.x===x&&e.y===y)!;
+    const removed=remove(s,target.id,true);
+    expect(removed.ok).toBe(true);
+    s=runTicks(removed.state,360);
+    const {measured}=measure(s,180);
+    expect(measured.maxStreak).toBeLessThan(60);
+  },30000);
+  it("without circuit power demand, stockpiled terminal circuits cannot fake M10 stability",()=>{
+    let s=build();
+    for(const e of [...s.entities].filter(e=>e.kind==="circuit_fabricator"||
+      e.kind==="copper_mine"||e.kind==="silicon_extractor")){
+      const removed=remove(s,e.id,true);
+      expect(removed.ok).toBe(true);
+      s=removed.state;
+    }
+    // Add old opening-stock circuits in outgoing belts only. These are not
+    // produced in the current mission; every unit is tracked as opening stock.
+    for(const e of s.entities.filter(e=>e.kind==="conveyor"&&
+      ((e.x===9&&e.y>=4&&e.y<=7)||(e.x===11&&e.y>=0&&e.y<=5)))){
+      e.belt="circuit";
+      s.materialLedger!.circuit.opening++;
+    }
+    const {measured}=measure(s,180);
+    expect(measured.maxStreak).toBe(0);
+    expect(measured.maxCircuits).toBeGreaterThan(0);
+  },30000);
+});

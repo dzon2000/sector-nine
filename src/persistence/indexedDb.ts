@@ -1,4 +1,4 @@
-import {COAL_DEPOSITS,ITEMS,emptyLedger,emptySales,stockOnHand,recipeFor,type GameState,type Item} from "../domain/model";
+import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,emptyLedger,emptySales,stockOnHand,recipeFor,type GameState,type Item} from "../domain/model";
 const DATABASE="sector-nine-v0.1";
 const STORE="snapshots";
 function openDb():Promise<IDBDatabase>{
@@ -213,6 +213,22 @@ export function validateSave(value:unknown):GameState{
       n.missionMetrics!==null ||
       (n.chapterII.completed !== (n.mission.activeId==="DONE")))
       throw Error("Invalid v4 Chapter II or mission rules. Save preserved.");
+    for(const [deposits,reference,label] of [
+      [n.copperDeposits,COPPER_DEPOSITS,"copper"],
+      [n.siliconDeposits,SILICON_DEPOSITS,"silicon"]
+    ] as const){
+      if(!Array.isArray(deposits)||deposits.length!==reference.length||
+        deposits.some((d,i)=>!d||typeof d!=="object"||
+          Object.keys(d).length!==2||d.x!==reference[i].x||d.y!==reference[i].y))
+        throw Error("Invalid v4 "+label+" deposit metadata. Save preserved.");
+    }
+    if(["M9","M10","DONE"].includes(n.mission.activeId) &&
+       n.technologies?.resource_surveying!==true)
+      throw Error("Invalid v4 Chapter II research history. Save preserved.");
+    if(["M10","DONE"].includes(n.mission.activeId) &&
+       (n.technologies?.circuit_fabrication!==true||
+        n.technologies?.industrial_power!==true))
+      throw Error("Invalid v4 Chapter II research history. Save preserved.");
     const metrics=n.chapterII.metrics;
     if(n.mission.activeId==="DONE"){
       if(metrics!==null)throw Error("Completed v4 mission cannot retain active metrics. Save preserved.");

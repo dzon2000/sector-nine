@@ -17,7 +17,7 @@ const M9:Built[]=[
 ];
 function factory(layout:readonly Built[]):GameState {
   let s=createGame();
-  s.mission.activeId="DONE";s.technologies!.coal_extraction=true;
+  s.mission.activeId="DONE";s.technologies={...s.technologies!,coal_extraction:true,resource_surveying:true,circuit_fabrication:true,industrial_power:true};
   s.balanceCents=1000000; // isolated fixture capital, NEVER a recoverable-campaign claim
   for(const [kind,x,y,direction] of layout){
     const result=place(s,kind,x,y,direction);

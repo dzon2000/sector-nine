@@ -1,6 +1,6 @@
 import type {GameState} from "../domain/model";
 
-export type TechnologyId="coal_extraction"|"mechanical_components"|"advanced_smelting";
+export type TechnologyId="coal_extraction"|"mechanical_components"|"advanced_smelting"|"resource_surveying"|"circuit_fabrication"|"industrial_power";
 export type TechnologyState="locked"|"available"|"unlocked";
 
 export interface TechnologyDefinition {
@@ -12,10 +12,13 @@ export interface TechnologyDefinition {
 export const TECHNOLOGIES:Record<TechnologyId,TechnologyDefinition>={
   coal_extraction:{id:"coal_extraction",label:"Coal Extraction",unlocks:"Coal Mine",costCents:8000},
   mechanical_components:{id:"mechanical_components",label:"Mechanical Components",unlocks:"Mechanical Assembler",costCents:12000},
-  advanced_smelting:{id:"advanced_smelting",label:"Advanced Smelting",unlocks:"Advanced Furnace",costCents:18000}
+  advanced_smelting:{id:"advanced_smelting",label:"Advanced Smelting",unlocks:"Advanced Furnace",costCents:18000},
+  resource_surveying:{id:"resource_surveying",label:"Resource Surveying",unlocks:"Copper Mine, Silicon Extractor",costCents:8000},
+  circuit_fabrication:{id:"circuit_fabrication",label:"Circuit Fabrication",unlocks:"Circuit Fabricator, Splitter",costCents:12000},
+  industrial_power:{id:"industrial_power",label:"Industrial Power",unlocks:"Coal Generator",costCents:10000}
 };
 export const TECHNOLOGY_ORDER:readonly TechnologyId[]=[
-  "coal_extraction","mechanical_components","advanced_smelting"
+  "coal_extraction","mechanical_components","advanced_smelting","resource_surveying","circuit_fabrication","industrial_power"
 ];
 
 export interface TechnologyStatus {
@@ -48,6 +51,11 @@ export function technologyStatus(state:GameState,id:TechnologyId):TechnologyStat
   } else if(id==="mechanical_components"){
     require("Complete M4 (Restore Profitability)",completedM4(state));
     require(`Sell 20 iron ingots (${Math.min(20,ingots)}/20)`,ingots>=20);
+  } else if(id==="resource_surveying"){
+    require("Begin Chapter II after restoring the foundry",state.chapterII?.started===true&&state.chapterII.foundryCompleted);
+  } else if(id==="circuit_fabrication"||id==="industrial_power"){
+    require("Complete M8",state.chapterII?.started===true&&["M9","M10","DONE"].includes(state.mission.activeId));
+    require("Own Resource Surveying",state.technologies?.resource_surveying===true);
   } else {
     require("Own Coal Extraction",state.technologies?.coal_extraction===true);
     require("Own Mechanical Components",state.technologies?.mechanical_components===true);

@@ -1,7 +1,7 @@
-# ADR-0004 — Deterministic Electronics and Site-Wide Power (Draft)
+# ADR-0004 — Deterministic Electronics and Site-Wide Power (Accepted)
 
 **Date:** 2026-11-13
-**Status:** proposed; numerical values and deposit coordinates unapproved until WP3 owner sign-off
+**Status:** ACCEPTED — 2026-11-14 product-owner Option A numerical and mission-rule approval; implementation validated in WP3.
 **Specification:** [v0.4 First Signal](../specifications/v0.4.md)
 **Backlog:** [v0.4 TDD tasks](../implementation/v0.4-tasks.md)
 
@@ -9,9 +9,9 @@
 
 Chapter II adds copper, silicon and circuits without changing historical factory economics or the 12×12 terrain. A circuit fabricator consumes two physical copper ore and one physical silicon per circuit. A coal generator accepts coal through ordinary directional transport and distributes abstract site-wide power. Only circuit fabricators require power in v0.4. No cables, adjacency topology, batteries or offline simulation.
 
-The following **phase contract is a proposed implementation decision**, to be tested headlessly in WP1 and approved alongside final parameters at WP3. All work occurs within a single deterministic `tick`, never React, real time or rendering.
+The following phase contract is the accepted deterministic tick contract, validated headlessly in WP1 and physically in WP3. All work occurs within a single deterministic `tick`, never React, real time or rendering.
 
-## Proposed authoritative active-tick contract
+## Authoritative active-tick contract
 
 1. **Precondition:** paused ticks do nothing. Clone prior state and advance integer tick once. Record available generators' *beginning-of-tick* stored fuel and fabricators' existing active cycles.
 2. **Power availability:** a generator with positive carry-over `fuelTicksRemaining` supplies its full rated capacity. Decrement its fuel counter once for this powered tick, irrespective of consumer usage. Do **not** consume new coal at this stage. A generator with no prior fuel contributes zero.
@@ -25,9 +25,9 @@ The following **phase contract is a proposed implementation decision**, to be te
 
 **Fairness:** persisted cursor is an allocation policy, not an electricity scheduler tied to entity ordering. When capacity is one and two fabricators request continuously, allocation alternates across ticks; object order and UI refresh cannot influence results. With multiple generators, aggregate only generators fueled at tick start; each contributes its rated capacity for that tick, capped by the requesting consumer count when assigning grants. A generator does not select a particular fabricator. The policy must be validated against changing requesting sets, deletion/recreation, zero-supply/zero-demand ticks, one/two/three generators, and save/reload.
 
-## M10 interpretation (draft)
+## M10 interpretation (accepted amendment)
 
-A mission tick is **demand-covered** only if at least one circuit fabricator requested a processing unit *and every such request was served* (`demand > 0 && served === demand`). A tick with `demand = 0` counts as **not covered**, never as available capacity. A post-activation trailing 60 **active-tick** window must be complete before evaluation. For each evaluated tick, candidate thresholds are sales of at least 11 circuits and 5 steel within that window, and at least 57 demand-covered ticks out of the same 60. A qualifying window increments the consecutive streak by one; a failed window resets it; candidate streak threshold 60. Recorded terminal sales, not produced or stockpiled units, count. Paused/offline time never advances any window. Preserve the rolling window, activation epoch, evaluation guard and streak on reload. WP3 must prove physically possible layouts and that stockpile-only sales cannot bypass sustained-production intent. **Anti-stockpile challenge:** prefill circuit and steel outputs/paths or otherwise stage saleable inventory before activation; maintain some unrelated or deliberately ineffective powered processing demand, then run at least a complete 60-tick window plus 60 evaluated streak ticks. Verify mission cannot complete from old stock alone, even when sale windows overlap. If the candidate threshold rule permits the shortcut, stop and propose an explicit, approved *new-mission-only* change instead of silently adding a recent-production condition.
+A mission tick is **demand-covered** only if at least one circuit fabricator requested a processing unit *and every such request was served* (`demand > 0 && served === demand`). A tick with `demand = 0` counts as **not covered**, never as available capacity. A post-activation trailing 60 **active-tick** window must be complete before evaluation. For each evaluated tick, approved thresholds are sales of at least 11 circuits, **physical production of at least 11 circuits**, and sales of at least 5 steel within that window, and at least 57 demand-covered ticks out of the same 60. A qualifying window increments the consecutive streak by one; a failed window resets it; candidate streak threshold 60. Recorded terminal sales AND separately recorded physical circuit completions count; old stock can contribute to sales but not to the production requirement. Paused/offline time never advances any window. Preserve the rolling window, activation epoch, evaluation guard and streak on reload. WP3 must prove physically possible layouts and that stockpile-only sales cannot bypass sustained-production intent. **Anti-stockpile challenge:** prefill circuit and steel outputs/paths or otherwise stage saleable inventory before activation; maintain some unrelated or deliberately ineffective powered processing demand, then run at least a complete 60-tick window plus 60 evaluated streak ticks. Verify mission cannot complete from old stock alone, even when sale windows overlap. WP3 demonstrated a 63-window bypass under sales-only rules; the owner approved the additional 11-circuit production condition on 2026-11-14, validated with 241 legitimate windows and zero false adversarial windows.
 
 ## Compatibility and exclusions
 
@@ -45,12 +45,12 @@ Defer cable topology, wires/wafers, batteries, energy distribution loss, old-mac
 6. With coal input delivered on the same tick as last old fuel consumption, verify no double-powered tick. With paused tick/save/reload, verify identical fuel, cursor, diagnostic counters and output.
 7. Feed coal exclusively through physical conveyor/mine paths; burn counted once in the ledger without terminal income, with cash and material balance preserved.
 
-## Candidate experiments (not a release commitment)
+## Historical WP0 candidate experiments (superseded by approved Option A)
 
 - Copper deposit candidate A `(8,2)`; silicon candidate A `(8,9)`. Alternate B copper `(5,2)`, silicon `(9,9)`. Existing iron: `(3,5),(2,2),(2,9)`; coal `(7,9),(5,9)`; terminal `(10,5)`. Candidates are merely unoccupied *terrain locations in an empty base map*, not proof of constructibility or recoverability from occupied v0.3 DONE layouts.
-- Provisional model for WP1 probes only: copper extractor 1 ore/3 active ticks, silicon extractor 1 silicon/4 ticks; circuit 2 copper + 1 silicon per 6 **powered processing** ticks; generator 1 unit/tick, 12 powered ticks/coal. Economic prices/operating costs and research fees are stated in the WP0 baseline report and require WP3 physical tests.
+- Historical WP0 proposal (rejected as infeasible): copper extractor 1 ore/3 active ticks, silicon extractor 1 silicon/4 ticks; circuit 2 copper + 1 silicon per 6 **powered processing** ticks; generator 1 unit/tick, 12 powered ticks/coal. Economic prices/operating costs and research fees are stated in the WP0 baseline report and require WP3 physical tests.
 - Power and transport timing above, arbitration fairness and demand coverage remain subject to falsification by real-engine boundary tests.
 
 ## Validation and decision
 
-WP1 implements red-first isolated engine tests; WP3 constructs physical M8/M9/M10 factories, tests upper bounds, failing fixtures, transfer contention and capital recovery from genuine v0.3 DONE state. No numerical/coordinate freeze or WP2 progression before explicit owner approval of the tested set. Any modification to old economics or incompatible migration is a stop condition.
+WP1 implements red-first isolated engine tests; WP3 constructs physical M8/M9/M10 factories, tests upper bounds, failing fixtures, transfer contention and capital recovery from genuine v0.3 DONE state. Numerical/coordinate freeze was explicitly authorized 2026-11-14. The approved values and the new-M10-only production guard are normative in [v0.4 specification](../specifications/v0.4.md) and [ADR-0005](0005-directional-splitter.md); do not retune them in WP2. Any modification to old economics or incompatible migration is a stop condition.

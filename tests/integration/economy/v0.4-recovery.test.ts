@@ -173,15 +173,16 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     // This deliberately does not change any threshold or inject stock.
     const m10StartTick=t.state.tick;
     const initialCircuitSales=t.state.sales!.circuit;
+    let probeState=structuredClone(t.state);
     const recent:{circuits:number;steel:number;covered:boolean}[]=[];
     let maxCircuitWindow=0,maxSteelWindow=0,maxCoveredWindow=0;
     let bestQualifyingStreak=0,streak=0,qualifyingWindows=0;
     for(let i=0;i<240;i++){
-      const before={...t.state.sales!};
-      t.state=tick(t.state);
-      recent.push({circuits:t.state.sales!.circuit-before.circuit,
-        steel:t.state.sales!.steel-before.steel,
-        covered:t.state.power?.demandCovered===true});
+      const before={...probeState.sales!};
+      probeState=tick(probeState);
+      recent.push({circuits:probeState.sales!.circuit-before.circuit,
+        steel:probeState.sales!.steel-before.steel,
+        covered:probeState.power?.demandCovered===true});
       if(recent.length>60)recent.shift();
       if(recent.length!==60)continue;
       const circuitCount=recent.reduce((sum,e)=>sum+e.circuits,0);
@@ -195,12 +196,12 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
       if(qualifies)qualifyingWindows++;
       bestQualifyingStreak=Math.max(bestQualifyingStreak,streak);
     }
-    const actualM10CircuitSales=t.state.sales!.circuit-initialCircuitSales;
+    const actualM10CircuitSales=probeState.sales!.circuit-initialCircuitSales;
     expect(actualM10CircuitSales).toBeLessThan(44);
     expect(maxSteelWindow).toBeGreaterThanOrEqual(5);
     expect(bestQualifyingStreak).toBeLessThan(60);
     console.info("V04-WP3-M10-PROBE "+JSON.stringify({
-      startTick:m10StartTick,endTick:t.state.tick,
+      startTick:m10StartTick,endTick:probeState.tick,
       actualCircuitSales240:actualM10CircuitSales,
       maxCircuitsPer60:maxCircuitWindow,maxSteelPer60:maxSteelWindow,
       maxDemandCoveredPer60:maxCoveredWindow,

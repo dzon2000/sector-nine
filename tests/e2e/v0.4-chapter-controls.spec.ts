@@ -59,7 +59,7 @@ test("WP4 Chapter II construction controls support physical deposit placement an
  await board.click({position:{x,y}});
  await expect(page.getByRole("heading",{name:"Copper Mine"})).toBeVisible();
  await expect(page.getByTestId("cash")).toHaveText("145.00 Cr");
- await page.getByRole("button",{name:"Inspect"}).click();
+ await page.getByRole("button",{name:"Inspect",exact:true}).click();
  await board.click({position:{x,y}});
  await expect(page.getByTestId("selected-facing")).toHaveText("E");
 });

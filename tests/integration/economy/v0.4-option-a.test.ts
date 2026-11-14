@@ -70,4 +70,17 @@ describe("WP3 Option A experimental splitter: RED-before-implementation",()=>{
    expect(runTicks(validateSave(JSON.parse(JSON.stringify(s))),10).entities.sort((a,b)=>a.id-b.id))
      .toEqual(runTicks(shuffled,10).entities.sort((a,b)=>a.id-b.id));
  });
+ it("rejects lost or invalid splitter cursor without silently changing saved routing",()=>{
+   const f=make();f.add("splitter",5,5,"E");
+   const original=f.state;
+   expect(validateSave(JSON.parse(JSON.stringify(original)))).toEqual(original);
+   for(const bad of [-1,2,null,undefined,"forward"]){
+     const corrupted:any=structuredClone(original);
+     const e=corrupted.entities.find((x:any)=>x.kind==="splitter");
+     if(bad===undefined)delete e.splitterNext;
+     else e.splitterNext=bad;
+     expect(()=>validateSave(corrupted)).toThrow(/splitter/i);
+   }
+ });
+
 });

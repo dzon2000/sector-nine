@@ -64,7 +64,7 @@ export interface DiagnosticTick {
 export interface DiagnosticHistory { samples:DiagnosticTick[]; }
 export interface MissionSaleTick { tick:number; sales:Record<Item,number>; }
 export interface ChapterTick { tick:number; sales:Record<Item,number>; producedCircuits:number; demandCovered:boolean; }
-export interface ChapterMetrics { activatedAtTick:number; salesTicks:ChapterTick[]; streakTicks:number; lastEvaluatedTick?:number; }
+export interface ChapterMetrics { activatedAtTick:number; salesTicks:ChapterTick[]; streakTicks:number; totals?:Record<Item,number>; lastEvaluatedTick?:number; }
 export interface ChapterIIState { foundryCompleted:boolean; started:boolean; completed:boolean; storySeen:boolean; metrics:ChapterMetrics|null; }
 export interface MissionMetrics {
   activatedAtTick:number;

@@ -225,15 +225,18 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
     audit(t);
     const m10BuiltAt=t.state.tick;
     t.state=runTicks(t.state,360);
-    const trail:{circuit:number;steel:number;covered:boolean}[]=[];
+    const trail:{circuit:number;steel:number;covered:boolean;produced:number}[]=[];
     let winningStreak=0,bestExpandedStreak=0,qualifyingExpandedWindows=0,peakCircuits60=0,peakSteel60=0;
+    let guardedStreak=0,maxGuardedStreak=0;
     let terminalPeak=0,peakDemand=0;
     for(let i=0;i<300;i++){
       const prior={...t.state.sales!};
+      const beforeProduced=t.state.materialLedger!.circuit.produced;
       t.state=tick(t.state);
       trail.push({circuit:t.state.sales!.circuit-prior.circuit,
         steel:t.state.sales!.steel-prior.steel,
-        covered:t.state.power?.demandCovered===true});
+        covered:t.state.power?.demandCovered===true,
+        produced:t.state.materialLedger!.circuit.produced-beforeProduced});
       if(trail.length>60)trail.shift();
       peakDemand=Math.max(peakDemand,t.state.power?.demand??0);
       terminalPeak=Math.max(terminalPeak,Object.values(t.state.diagnostics!.samples.at(-1)!.terminalSales)
@@ -242,14 +245,18 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
       const circuit=trail.reduce((sum,e)=>sum+e.circuit,0);
       const steel=trail.reduce((sum,e)=>sum+e.steel,0);
       const covered=trail.filter(e=>e.covered).length;
+      const produced=trail.reduce((sum,e)=>sum+e.produced,0);
       peakCircuits60=Math.max(peakCircuits60,circuit);
       peakSteel60=Math.max(peakSteel60,steel);
       const qualifies=circuit>=11&&steel>=5&&covered>=57;
       winningStreak=qualifies?winningStreak+1:0;
       if(qualifies)qualifyingExpandedWindows++;
       bestExpandedStreak=Math.max(bestExpandedStreak,winningStreak);
+      guardedStreak=qualifies&&produced>=11?guardedStreak+1:0;
+      maxGuardedStreak=Math.max(maxGuardedStreak,guardedStreak);
     }
     expect(bestExpandedStreak).toBeGreaterThanOrEqual(60);
+    expect(maxGuardedStreak).toBeGreaterThanOrEqual(60);
     expect(terminalPeak).toBeLessThanOrEqual(1);
     expect(peakDemand).toBeGreaterThanOrEqual(2);
     expect(t.state.balanceCents).toBeGreaterThan(0);
@@ -260,7 +267,7 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
       projectedResearchFeesCents:t.estimatedNewResearch,
       financedTicks,rebuiltAtTick:m10BuiltAt,fullLayoutPriceCents:targetCost,
       constructionCount:physicalM10.length,minCashCents:t.minCash,
-      bestExpandedStreak,qualifyingExpandedWindows,peakCircuits60,peakSteel60,
+      bestExpandedStreak,maxGuardedStreak,qualifyingExpandedWindows,peakCircuits60,peakSteel60,
       peakDemand,terminalPeak,finalTick:t.state.tick,cashCents:t.state.balanceCents,
       caveat:"synthetic v0.3 300Cr engine campaign, proposed research fees debited but WP2 research not implemented"
     }));

@@ -59,4 +59,8 @@ test("WP4 #7 mobile fallback exposes side panels via accessible toggles",async({
  await expect(page.getByRole("button",{name:/Construction panel/})).toBeVisible();
  await page.getByRole("button",{name:/Construction panel/}).click();
  await expect(page.getByRole("heading",{name:"Construction"})).toBeVisible();
+ await page.keyboard.press("Tab");
+ await expect(page.getByRole("button",{name:/Inspector panel/})).toBeFocused();
+ await page.keyboard.press("Enter");
+ await expect(page.getByRole("heading",{name:"Inspector"})).toBeVisible();
 });

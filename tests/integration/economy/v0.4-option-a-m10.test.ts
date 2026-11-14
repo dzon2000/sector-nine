@@ -60,6 +60,31 @@ describe("WP3 experimental Option A M10 full physical 12x12",()=>{
    checkStock(s);
    expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s);
  });
+ it("qualifies from cold empty inventories after full post-activation windows, without warm-up credit",()=>{
+   let s=build();
+   const activation=s.tick;
+   const window:{circuit:number;steel:number;covered:boolean}[]=[];
+   let streak=0,completedAt:number|null=null;
+   for(let i=0;i<420;i++){
+     const before={...s.sales!};
+     s=tick(s);
+     window.push({circuit:s.sales!.circuit-before.circuit,
+       steel:s.sales!.steel-before.steel,covered:s.power?.demandCovered===true});
+     if(window.length>60)window.shift();
+     if(window.length<60){expect(streak).toBe(0);continue;}
+     const circuits=window.reduce((sum,e)=>sum+e.circuit,0);
+     const steel=window.reduce((sum,e)=>sum+e.steel,0);
+     const covered=window.filter(e=>e.covered).length;
+     const qualifies=circuits>=11&&steel>=5&&covered>=57;
+     streak=qualifies?streak+1:0;
+     if(streak===60){completedAt=s.tick;break;}
+   }
+   expect(completedAt).not.toBeNull();
+   expect(completedAt!).toBeGreaterThanOrEqual(activation+119);
+   console.info("V04-OPTION-A-M10-COLD "+JSON.stringify({activationTick:activation,completedAtTick:completedAt,
+     elapsedActiveTicks:completedAt!-activation,streak,stockpiledInputs:false}));
+   checkStock(s);
+ },30000);
  it("sustains M10 physical sales and covered power demand for sixty consecutive qualifying trailing windows",()=>{
    const warm=runTicks(build(),360);
    const {s,measured}=measure(warm,300);

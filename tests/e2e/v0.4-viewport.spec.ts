@@ -2,6 +2,13 @@ import {test,expect,type Page} from "@playwright/test";
 async function launch(page:Page){
  await page.goto("/");await page.getByRole("button",{name:"Begin Operations"}).click();
  await page.getByRole("button",{name:/Technology \+/}).click();
+ await page.getByRole("button",{name:/Conveyor/}).click();
+ const board=page.getByTestId("factory-board");
+ const bounds=await board.boundingBox();if(!bounds)throw Error("Map missing");
+ const coords={x:4.5*bounds.width/12,y:4.5*bounds.height/12};
+ await board.click({position:coords});
+ await page.getByRole("button",{name:"Inspect",exact:true}).click();
+ await board.click({position:coords});
  await page.getByRole("button",{name:/Local playtest/}).click();
 }
 for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[1280,600]] as const){

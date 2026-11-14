@@ -8,6 +8,13 @@ export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:
   if(kind==="furnace"&&["M1","M2"].includes(s.mission.activeId))return {ok:false,message:"Complete M2 to unlock the furnace.",state:s};
   const technology=({coal_mine:"coal_extraction",assembler:"mechanical_components",advanced_furnace:"advanced_smelting"} as const)[kind as "coal_mine"|"assembler"|"advanced_furnace"];
   if(technology&&!s.technologies?.[technology])return {ok:false,message:"Technology not unlocked.",state:s};
+  const chapterTech=({
+    copper_mine:"resource_surveying",silicon_extractor:"resource_surveying",
+    circuit_fabricator:"circuit_fabrication",splitter:"circuit_fabrication",
+    coal_generator:"industrial_power"
+  } as const)[kind as "copper_mine"|"silicon_extractor"|"circuit_fabricator"|"splitter"|"coal_generator"];
+  if(chapterTech && !s.technologies?.[chapterTech])
+    return {ok:false,message:"Chapter II technology not unlocked.",state:s};
   if(kind==="copper_mine"&&!COPPER_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Copper mines require a copper deposit.",state:s};
   if(kind==="silicon_extractor"&&!SILICON_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Silicon extractors require a silicon deposit.",state:s};
   if(kind==="coal_mine"&&!COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Coal mines require a coal deposit.",state:s};

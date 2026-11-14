@@ -1,3 +1,14 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-export default defineConfig({ plugins: [react()], test: { environment: "node", include: ["tests/**/*.test.ts"] } });
+import {resolveBuildCommit} from "./src/ui/buildProvenance";
+
+/** GitHub Actions supplies GITHUB_SHA for the exact checked-out build commit.
+ * A local build, untrusted environment, or invalid SHA embeds JSON null.
+ * A build made at one SHA always retains that SHA in shipped JavaScript.
+ */
+const commit=process.env.GITHUB_ACTIONS==="true"?resolveBuildCommit(process.env.GITHUB_SHA):null;
+export default defineConfig({
+  plugins: [react()],
+  define: {__SEKTOR9_BUILD_COMMIT__:JSON.stringify(commit)},
+  test: { environment: "node", include: ["tests/**/*.test.ts"] }
+});

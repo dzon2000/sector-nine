@@ -12,7 +12,7 @@ export interface PlaytestSession {
   active:boolean;
   /** Optional only for recordings created before provenance support. */
   schemaVersion?:GameState["schemaVersion"];
-  missionRuleVersion?:2|3;
+  missionRuleVersion?:2|3|4;
   startedAt:number;
   lastObservedAt:number;
   lastTick:number;
@@ -37,11 +37,11 @@ export function isPlaytestSession(value:unknown):value is PlaytestSession{
   if(!value||typeof value!=="object"||Array.isArray(value))return false;
   const v=value as Record<string,unknown>;
   const safe=(field:string)=>Number.isSafeInteger(v[field])&&(v[field] as number)>=0;
-  if((v.schemaVersion!==undefined && ![1,2,3].includes(v.schemaVersion as number))||
-    (v.missionRuleVersion!==undefined && v.missionRuleVersion!==2 && v.missionRuleVersion!==3))return false;
+  if((v.schemaVersion!==undefined && ![1,2,3,4].includes(v.schemaVersion as number))||
+    (v.missionRuleVersion!==undefined && v.missionRuleVersion!==2 && v.missionRuleVersion!==3 && v.missionRuleVersion!==4))return false;
   if(typeof v.active!=="boolean"||typeof v.lastPaused!=="boolean"||
     !["unclassified","planning","waiting"].includes(String(v.activity))||
-    !["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(String(v.lastMission)))return false;
+    !["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(String(v.lastMission)))return false;
   for(const field of ["startedAt","lastObservedAt","lastTick","wallMs","pausedMs","planningMs",
     "waitingMs","unclassifiedMs","activeTicks","inputStarvedEntityTicks","outputBlockedEntityTicks"])
     if(!safe(field))return false;
@@ -59,8 +59,8 @@ export function isPlaytestSession(value:unknown):value is PlaytestSession{
     !Number.isSafeInteger(x.elapsedMs)||x.elapsedMs<0))return false;
   if(v.missionTransitions.some(x=>!x||typeof x!=="object"||
     !Number.isSafeInteger(x.tick)||x.tick<0||
-    !["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(x.from)||
-    !["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(x.to)))return false;
+    !["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(x.from)||
+    !["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(x.to)))return false;
   return true;
 }
 /** All durations are explicitly classified by prior known state; no subjective inference. */

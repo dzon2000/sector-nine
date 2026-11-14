@@ -61,3 +61,17 @@ test("WP4 #5 scaled board and placement tool do not rotate existing object",asyn
  await page.mouse.click(scaled.x,scaled.y);
  await expect(page.getByTestId("selected-facing")).toHaveText("N");
 });
+
+test("WP4 #5 pointer cancellation, keyboard R and rotation while simulation runs",async({page})=>{
+ const p=await ready(page);
+ await page.mouse.move(p.x,p.y);await page.mouse.down();
+ await page.mouse.move(p.x-26,p.y,{steps:4});
+ await page.getByTestId("factory-board").dispatchEvent("pointercancel",{pointerId:1});
+ await page.mouse.up();
+ await expect(page.getByTestId("selected-facing")).toHaveText("E");
+ await page.keyboard.press("r");
+ await expect(page.getByTestId("selected-facing")).toHaveText("S");
+ await drag(page,p,-26,0);
+ await expect(page.getByTestId("selected-facing")).toHaveText("W");
+ await expect(page.getByText(/Tick \d+ · RUNNING/)).toBeVisible();
+});

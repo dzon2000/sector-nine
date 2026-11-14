@@ -38,6 +38,19 @@ export function turn(s:GameState,id:number):CommandResult {
   if(!e||e.kind==="sell_terminal")return {ok:false,message:"Cannot rotate this object.",state:s};
   e.direction=rotate(e.direction);return {ok:true,message:"Object rotated.",state:n};
 }
+/** Direct orientation is a single command regardless of previous facing. */
+export function face(s:GameState,id:number,direction:Direction):CommandResult {
+  const entity=s.entities.find(e=>e.id===id);
+  if(!entity||entity.kind==="sell_terminal")
+    return {ok:false,message:"Cannot rotate this object.",state:s};
+  if(!["N","E","S","W"].includes(direction))
+    return {ok:false,message:"Invalid facing.",state:s};
+  if(entity.direction===direction)
+    return {ok:false,message:"Facing unchanged.",state:s};
+  const next=copy(s);
+  next.entities.find(e=>e.id===id)!.direction=direction;
+  return {ok:true,message:"Object oriented "+direction+".",state:next};
+}
 export function remove(s:GameState,id:number,confirmed=false):CommandResult {
   const e=s.entities.find(e=>e.id===id);
   if(!e||e.kind==="sell_terminal")return {ok:false,message:"Sales terminal cannot be removed.",state:s};

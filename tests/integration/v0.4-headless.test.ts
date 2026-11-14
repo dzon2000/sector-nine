@@ -8,6 +8,7 @@ function factory(){
   let s:any=createGame();
   s.mission.activeId="DONE";
   s.balanceCents=1000000;
+  s.technologies={...s.technologies,resource_surveying:true,circuit_fabrication:true,industrial_power:true};
   s.paused=false;
   const add=(kind:string,x:number,y:number,direction:"N"|"E"|"S"|"W"="E")=>{
     const r=place(s,kind as any,x,y,direction);

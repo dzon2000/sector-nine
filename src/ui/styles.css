@@ -35,8 +35,8 @@ body{overflow:hidden}
 .workspace>aside{min-height:0;min-width:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:12px}
 .workspace .center{min-height:0;min-width:0;overflow:hidden;justify-content:center}
 .center .board-title{flex:0 0 auto;width:min(100%,528px);margin:4px 0 8px;letter-spacing:0}
-.center .board{width:min(100%,528px,calc(100dvh - 275px));height:auto;
-  flex:0 1 auto;aspect-ratio:1/1;max-height:100%;touch-action:none}
+.center .board{width:min(100%,528px,calc(100dvh - 320px));height:auto;
+  flex:none;aspect-ratio:1/1;max-height:100%;touch-action:none}
 .center .board canvas{width:100%;height:100%;aspect-ratio:1/1}
 .center .tip{flex:0 0 auto;max-width:90%;text-align:center;margin:6px 0 0;line-height:1.3}
 .app>footer{flex:0 0 auto;min-height:110px;max-height:min(24dvh,190px);
@@ -63,7 +63,7 @@ body{overflow:hidden}
   .mobile-panel-actions{display:flex;gap:8px;justify-content:center;padding:4px 8px;flex:0 0 auto}
   .mobile-panel-actions button{padding:5px 12px}
   .app>footer{grid-template-columns:minmax(0,1fr) minmax(100px,180px);padding:6px 10px;max-height:27dvh}
-  .center .board{width:min(100%,528px,calc(100dvh - 330px))}
+  .center .board{width:min(100%,528px,calc(100dvh - 360px))}
   .app>header{flex-wrap:wrap;gap:6px;padding:6px 10px}
   .brand{font-size:18px}.kpis{gap:8px}.kpis strong{font-size:12px}
   .kpis>div{font-size:9px}
@@ -72,6 +72,6 @@ body{overflow:hidden}
   .app>header{max-height:120px;overflow:hidden}
   .app>footer{max-height:30dvh;min-height:120px;grid-template-columns:minmax(0,1fr) 105px;gap:8px}
   .app>footer .mission-hud-actions button{padding:5px;font-size:11px}
-  .center .board{width:min(100%,calc(100dvh - 365px),528px)}
+  .center .board{width:min(100%,calc(100dvh - 395px),528px)}
   .center .tip{font-size:10px}
 }

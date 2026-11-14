@@ -3,6 +3,11 @@ import {resolveBuildCommit} from "./buildProvenance";
 
 /** Local UI/test-harness-only timing. Never called by the deterministic simulation. */
 export type PlaytestActivity="unclassified"|"planning"|"waiting"|"waiting_mission";
+function extractionDeposit(kind:Kind,x:number,y:number):string|null {
+  const name=({iron_mine:"iron",coal_mine:"coal",copper_mine:"copper",
+    silicon_extractor:"silicon"} as Partial<Record<Kind,string>>)[kind];
+  return name?`${name}:(${x},${y})`:null;
+}
 export type PlaytestCommand=
   | {kind:"place";entityKind:Kind;x:number;y:number}
   | {kind:"turn"|"demolish";entityKind?:Kind;x:number;y:number}
@@ -96,8 +101,8 @@ export function startPlaytest(game:GameState,now:number,buildCommit:string|null=
     wallMs:0,pausedMs:0,planningMs:0,waitingMs:0,waitingForMissionMs:0,
     poweredTicks:0,unpoweredTicks:0,unclassifiedMs:0,activeTicks:0,
     commands:{place:0,turn:0,demolish:0,research:0},commandEvents:[],
-    usedDeposits:game.entities.filter(e=>e.kind==="iron_mine"||e.kind==="coal_mine")
-      .map(e=>`${e.kind==="iron_mine"?"iron":"coal"}:(${e.x},${e.y})`),
+    usedDeposits:game.entities.map(e=>extractionDeposit(e.kind,e.x,e.y))
+      .filter((d):d is string=>d!==null),
     inputStarvedEntityTicks:0,outputBlockedEntityTicks:0,missionTransitions:[]};
 }
 export function annotatePlaytest(session:PlaytestSession,activity:PlaytestActivity,now:number):PlaytestSession{
@@ -131,9 +136,9 @@ export function recordPlaytestCommand(session:PlaytestSession,command:PlaytestCo
   if(!session.active)return session;
   const s=elapsed(session,now);
   const usedDeposits=[...s.usedDeposits];
-  if(command.kind==="place" && (command.entityKind==="iron_mine"||command.entityKind==="coal_mine")){
-    const deposit=`${command.entityKind==="iron_mine"?"iron":"coal"}:(${command.x},${command.y})`;
-    if(!usedDeposits.includes(deposit))usedDeposits.push(deposit);
+  if(command.kind==="place"){
+    const deposit=extractionDeposit(command.entityKind,command.x,command.y);
+    if(deposit&&!usedDeposits.includes(deposit))usedDeposits.push(deposit);
   }
   return {...s,commands:{...s.commands,[command.kind]:s.commands[command.kind]+1},
     commandEvents:[...s.commandEvents,{...command,tick:s.lastTick,elapsedMs:s.wallMs}],usedDeposits};

@@ -61,7 +61,7 @@ export function diagnosticHint(state:GameState,id:number):string{
   if(entity.kind==="coal_generator"){
     const fuel=entity.fuelTicksRemaining??0;
     if(fuel===0)return "Generator fuel depleted. Route physical coal into its input; fuel powers subsequent active ticks.";
-    return "Generator active: "+fuel+" fuel ticks remaining. Inspect site-wide power demand and supply.";
+    return "Generator active: fuel remaining "+fuel+"/12 powered ticks. Inspect site-wide power demand and supply.";
   }
   // A running fabricator with an existing cycle is waiting for actual power,
   // not missing recipe inputs; preserve stronger output-blocked diagnostics.
@@ -71,7 +71,8 @@ export function diagnosticHint(state:GameState,id:number):string{
       " processing requests served. Supply fueled generators; inspect coal input.";
   }
   const recipe=recipeFor(entity.kind);
-  if(current?.status==="input_starved" && recipe){
+  if((current?.status==="input_starved"||
+    (entity.kind==="circuit_fabricator"&&current===undefined&&entity.cycle===null)) && recipe){
     const missing=Object.entries(recipe.input).filter(([item,needed])=>
       (entity.inputBuffers?.[item as Item]??0)<needed);
     if(missing.length)return "Missing "+missing.map(([item])=>item.replaceAll("_"," ")).join(" and ")+". Route enough inputs to start a cycle.";

@@ -1,16 +1,16 @@
-# ADR-0005 — Experimental Directional Splitter for First Signal
+# ADR-0005 — Deterministic Directional Splitter for First Signal
 
-**Status:** PROPOSED — Option A investigation authorized on 2026-11-14; **not approved/frozen**.
-**Scope:** WP3 physical economic validation only. No WP2 progression, game UI, PR merge or release.
+**Status:** ACCEPTED — approved 2026-11-14 together with complete WP3 Option A numerical set and M10 production guard.
+**Scope:** WP2 headless progression and save migration authorized next; UI, PR merge and release separately gated.
 **Related:** [ADR-0004](0004-electronics-and-power.md), [WP3 amendment evidence](../validation/v0.4-option-a.md), [original WP3 report](../validation/v0.4-economy.md).
 
 ## Problem
 
 With one candidate copper deposit extracting one ore per three ticks, total copper production is 20/60; eleven circuits consume 22 ore/60. The old conveyor transport has one fixed directional output and cannot distribute a single ore stream across two fabricators while preserving per-item physical movement. M10's approved *design intent* is an expanded, genuinely powered electronics line rather than a threshold that a lone fabricator can satisfy.
 
-## Experimental design: splitter (new type, not approved content)
+## Accepted design: splitter
 
-- Candidate price **900 cents (9.00 Cr)**. Uses ordinary single-slot `belt: Item|null`; never stores extra or duplicates cargo.
+- Approved price **900 cents (9.00 Cr)**. Uses ordinary single-slot `belt: Item|null`; never stores extra or duplicates cargo.
 - Facing direction F determines two legal outputs: **F (forward)** and **clockwise(F)**. Input can arrive from adjacent machines under existing target occupancy/arbitration semantics.
 - A persistent `splitterNext: 0|1` determines the preferred outlet (0 forward, 1 clockwise).
 - On each active tick, a nonempty splitter proposes **at most one** transfer, preferring its saved outlet. If that destination is not immediately accepting, attempt the other. If neither is accepting, retain the item and cursor, with no movement or operating cost.
@@ -19,11 +19,11 @@ With one candidate copper deposit extracting one ore per three ticks, total copp
 - Rotation changes which two tiles are legal outputs but does not reset cursor, contents or ID. Demolition explicitly destroys any held material through the existing ledger, with 75% normal price refund.
 - Save snapshots retain `splitterNext`. `validateSave` rejects missing/invalid cursor, nonempty non-belt inventory, incompatible cycle/output fields, or a splitter cursor attached to another kind. The WP2 full v4 schema migration is explicitly deferred.
 
-## Provisional extraction adjustment
+## Approved extraction adjustment
 
 **Copper Mine: 1 ore / 2 active ticks instead of 1 / 3**, while the existing provisional 70-cent operating cost per produced ore remains unchanged. Upper steady-state supply becomes 30 ore/60 ticks, enough for up to 15 circuits/60 at the approved 2:1 circuit ingredient ratio. This changes **only** new copper extraction, not the prior iron/coal/gear/steel economy.
 
-The other new-system candidates remain as in [WP0](../validation/v0.4-wp0-baseline.md): silicon 1/4 ticks, circuit 2 copper + 1 silicon / 6 powered processing ticks, generator 1 unit/tick, 12 ticks/coal, copper/silicon sites (8,2)/(8,9), original terminal (10,5), candidate new equipment and research fees, and M8/M9/M10 thresholds. All remain provisional.
+The other new-system approved parameters are recorded in [v0.4 specification](../specifications/v0.4.md); former candidates are recorded in [WP0](../validation/v0.4-wp0-baseline.md): silicon 1/4 ticks, circuit 2 copper + 1 silicon / 6 powered processing ticks, generator 1 unit/tick, 12 ticks/coal, copper/silicon sites (8,2)/(8,9), original terminal (10,5), candidate new equipment and research fees, and M8/M9/M10 thresholds. The complete Option A parameter set and deposit coordinates are frozen by owner approval.
 
 ## Physical validation requirements before sign-off
 
@@ -39,7 +39,7 @@ The other new-system candidates remain as in [WP0](../validation/v0.4-wp0-baseli
 - A 12×12 physically viable design may be expensive in board operations; one validated proof requires roughly 73 post-demolition placements. It is not necessarily an enjoyable UI experience.
 - The prototype preserves conservative transfer rules for blocked outputs; more sophisticated predictive chain scheduling is out of scope.
 - Current WP1 `place()` does not enforce future Chapter II unlocks. Propose exposing Splitter after **Circuit Fabrication** in WP2, but this is a separate progression decision, not implemented.
-- **Confirmed:** four pre-activation circuits routed during M10 plus one real powered under-capacity fabricator yield **63 consecutive sales-only qualifying windows**. An additional **new-mission-only circuit production-window condition (>=11 newly produced circuits/60 active ticks)** eliminates the bypass (0 qualifying windows) while preserving 241 qualifying windows for the legitimate dual-fabricator factory, including the funded recovery. This is test-only WP3 validation, **not an approved or implemented WP2 mission rule**. Do not change old mission rules.
+- **Confirmed:** four pre-activation circuits routed during M10 plus one real powered under-capacity fabricator yield **63 consecutive sales-only qualifying windows**. An additional **new-mission-only circuit production-window condition (>=11 newly produced circuits/60 active ticks)** eliminates the bypass (0 qualifying windows) while preserving 241 qualifying windows for the legitimate dual-fabricator factory, including the funded recovery. This is test-only WP3 validation, **approved for WP2, but not yet implemented in the mission engine**. Do not change old mission rules.
 - The new kind is mapped to a placeholder renderer glyph solely to keep the TypeScript build exhaustive; WP4/WP5 own actual interaction and presentation.
 
-**Disposition:** ADR remains proposed pending owner review. Keep WP2, old economy, map expansion, merges and release blocked.
+**Disposition:** Approved numerical/mechanical contract. WP2 authorized; keep old economy changes, map expansion, WP4+, merges and release blocked.

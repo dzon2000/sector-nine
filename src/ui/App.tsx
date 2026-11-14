@@ -4,6 +4,8 @@ import {MISSIONS} from "../game/missions";
 import {entityDiagnostics,terminalDiagnostics,diagnosticHint} from "../game/diagnostics";
 import {missionWindow} from "../game/missionMetrics";
 import {beginChapterII,chapterWindow} from "../game/chapterTwo";
+import {CHAPTER_TRANSMISSIONS,availableTransmissions,type ChapterTransmissionId} from "../game/chapterNarrative";
+import {BUILD_COMMIT} from "./buildProvenance";
 import {TECHNOLOGIES,TECHNOLOGY_ORDER,CHAPTER_TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type AnyTechnologyId} from "../game/technologies";
 import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
 import {tick} from "../simulation/engine";
@@ -32,6 +34,8 @@ export default function App(){
   const [panel,setPanel]=useState(0);
   const [help,setHelp]=useState(false);
   const [replayFoundry,setReplayFoundry]=useState(false);
+  const [transmission,setTransmission]=useState<ChapterTransmissionId|null>(null);
+  const [transmissionPage,setTransmissionPage]=useState(0);
   const [showTechnology,setShowTechnology]=useState(false);
   const [mobilePanel,setMobilePanel]=useState<"construction"|"inspector"|null>(null);
   const [foundryPanel,setFoundryPanel]=useState(0);
@@ -147,6 +151,13 @@ export default function App(){
     setMessage(result.message);if(result.ok){persist(result.state,{kind:"place",entityKind:tool,x,y});setSelected(result.state.nextId-1);}
   };
   const closeFoundry=()=>{const s=latest.current;if(!s)return;const n=structuredClone(s);n.foundryStorySeen=true;persist(n);setReplayFoundry(false);setFoundryPanel(0);};
+  const openTransmission=(id:ChapterTransmissionId)=>{setTransmission(id);setTransmissionPage(0);};
+  const closeTransmission=()=>{
+    if(transmission==="opening"&&latest.current?.chapterII?.started&&!latest.current.chapterII.storySeen){
+      const next=structuredClone(latest.current);next.chapterII!.storySeen=true;persist(next);
+    }
+    setTransmission(null);setTransmissionPage(0);
+  };
   const buyTechnology=(id:AnyTechnologyId)=>{
     const current=latest.current;if(!current)return;
     const status=technologyStatus(current,id);
@@ -159,11 +170,14 @@ export default function App(){
   const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)void saveGame(s).catch(e=>setError(String(e)));};
   const fresh=async()=>{if(resetting.current||!window.confirm("Factory Reset? All progress and your save will be permanently deleted."))return;
     resetting.current=true;
-    try{await eraseGame();savePlaytest(null);setShowPlaytest(false);const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+    try{await eraseGame();savePlaytest(null);setShowPlaytest(false);const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
   if(error)return <main className="error"><h1>Save error</h1><p role="alert">{error}</p><p>Stored data has not been overwritten. Export or back up your IndexedDB data before resetting.</p><button onClick={()=>void fresh()}>Factory Reset</button></main>;
   if(!game)return null;
   const kpi=stats(game),mission=MISSIONS[game.mission.activeId];
+  const narrativeAvailable=availableTransmissions(game);
+  const activeTransmission=transmission&&narrativeAvailable.includes(transmission)?CHAPTER_TRANSMISSIONS[transmission]:null;
+  const chapterCompleted=game.chapterII?.started&&game.chapterII.completed&&game.mission.activeId==="DONE";
   const legacyObjective=game.missionRuleVersion===2&&
     (game.mission.activeId==="M6"||game.mission.activeId==="M7");
   const objectiveHint=legacyObjective?
@@ -270,22 +284,24 @@ export default function App(){
         {showPlaytest&&<div id="playtest-controls">
           <p>Opt-in. Data stays in this browser; no server telemetry. Export a JSON report when finished.</p>
           {!playtest?.active&&<button data-testid="start-playtest" onClick={()=>{
-            savePlaytest(startPlaytest(latest.current!,Date.now()));
+            savePlaytest(startPlaytest(latest.current!,Date.now(),BUILD_COMMIT));
           }}>{playtest?"Start new recording":"Start recording"}</button>}
           {playtest?.active&&<button data-testid="stop-playtest" onClick={()=>{
             savePlaytest(finishPlaytest(playtestRef.current!,latest.current!,Date.now()));
           }}>Stop recording</button>}
           {playtest&&<>
             <p data-testid="playtest-status">{playtest.active?"Recording":"Stopped"} · Active ticks: {playtest.activeTicks} · Wall time: {(playtest.wallMs/1000).toFixed(1)} s</p>
-            <p>Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s</p>
+            <p>Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s · Waiting for mission/stability: {((playtest.waitingForMissionMs??0)/1000).toFixed(1)} s</p>
+            <p>Power: {playtest.poweredTicks??0} fully powered ticks · {playtest.unpoweredTicks??0} underpowered ticks (observed nonzero demand only)</p>
+            <p>Recorded build: {playtest.buildCommit??"unverified local build"} · Schema at start: {playtest.schemaVersion??"legacy"} · Rules at start: {playtest.missionRuleVersion??"legacy"}</p>
             <p>Commands: placed {playtest.commands.place}, rotated {playtest.commands.turn}, demolished {playtest.commands.demolish}, researched {playtest.commands.research}</p>
             {playtest.active&&<fieldset aria-label="Playtest time annotation">
               <legend>Classify current unpaused time (manual annotation)</legend>
-              {(["unclassified","planning","waiting"] as PlaytestActivity[]).map(activity=>
+              {(["unclassified","planning","waiting","waiting_mission"] as PlaytestActivity[]).map(activity=>
                 <label key={activity}><input type="radio" name="playtest-activity"
                   checked={playtest.activity===activity} onChange={()=>
                     savePlaytest(annotatePlaytest(playtestRef.current!,activity,Date.now()))}/>
-                  {activity==="waiting"?"Waiting for credits":activity==="planning"?"Planning / routing":"Unclassified"}
+                  {activity==="waiting"?"Waiting for credits":activity==="waiting_mission"?"Waiting for mission/stability":activity==="planning"?"Planning / routing":"Unclassified"}
                 </label>)}
             </fieldset>}
             <button data-testid="export-playtest" onClick={exportPlaytest}>Export local JSON report</button>
@@ -296,9 +312,16 @@ export default function App(){
       {selectedEntity?.kind==="coal_generator"&&<p>Fuel: {selectedEntity.fuelTicksRemaining??0}/12 powered ticks · Coal input: {selectedEntity.inputBuffers?.coal??0}</p>}
       {selectedEntity?.kind==="splitter"&&<p>Next outlet: {selectedEntity.splitterNext===0?"forward":"clockwise"} · Cargo: {selectedEntity.belt??"empty"}</p>}
       {game.power&&<section aria-label="Power diagnostics" data-testid="power-diagnostics" className="diagnostic-panel"><h3>Site-wide power</h3><p>Supply: {game.power.supply} · Demand: {game.power.demand} · Served: {game.power.served}</p><p>Unpowered processing: {game.power.unpoweredProcessingTicks} ticks · Burned coal: {game.power.coalBurned}</p></section>}
+      {narrativeAvailable.length>0&&<section className="diagnostic-panel" aria-label="Prometheus transmissions" data-testid="chapter-transmissions">
+        <h3>Prometheus transmissions</h3>
+        <p>Read or replay unlocked messages at any time. Messages never interrupt production.</p>
+        {narrativeAvailable.map(id=><button key={id} onClick={()=>openTransmission(id)}>
+          {id==="opening"&&!game.chapterII?.storySeen?"Inspect Request":"Replay "+CHAPTER_TRANSMISSIONS[id].label}
+        </button>)}
+      </section>}
       <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>void fresh()}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>
       </aside></div>
-    <footer data-testid="mission-hud"><div className="mission-hud-objectives"><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{mission.title}</h2><p>{game.tutorialEnabled?objectiveHint:"Tutorial hints hidden."}</p>
+    <footer data-testid="mission-hud"><div className="mission-hud-objectives"><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{chapterCompleted?"First Signal Restored":mission.title}</h2><p>{game.tutorialEnabled?(chapterCompleted?"Prometheus archive: SECTOR 9 — SUBLEVEL 03. Continue optimizing your factory in sandbox mode.":objectiveHint):"Tutorial hints hidden."}</p>
       {throughputMission&&<section className="mission-throughput" aria-label="Mission throughput diagnostics" data-testid="mission-throughput">
         <h3>Live objective · trailing 60 active ticks</h3>
         <p>{currentWindow?"Complete 60-tick window":"Collecting mission-local window"}</p>
@@ -317,6 +340,17 @@ export default function App(){
         const result=beginChapterII(latest.current!);
         setMessage(result.message);if(result.ok){persist(result.state);setShowTechnology(true);}
       }}>Begin Chapter II</button>}<button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button></div></footer>
+    {activeTransmission&&!game.introOpen&&!help&&<div className="overlay" data-testid="chapter-transmission-overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Chapter II Transmission">
+      <small>{transmissionPage+1} / {activeTransmission.pages.length} · PROJECT PROMETHEUS</small>
+      <h1>{activeTransmission.pages[transmissionPage].heading}</h1>
+      <p>{activeTransmission.pages[transmissionPage].text}</p>
+      <div className="actions">
+        {transmissionPage>0&&<button onClick={()=>setTransmissionPage(p=>p-1)}>Previous Transmission</button>}
+        {transmissionPage<activeTransmission.pages.length-1&&<button onClick={()=>setTransmissionPage(p=>p+1)}>Next Transmission</button>}
+        <button onClick={closeTransmission}>Return to Factory</button>
+        <button onClick={closeTransmission}>Skip Transmission</button>
+      </div>
+    </section></div>}
     {foundryStoryOpen&&!game.introOpen&&!help&&<div className="overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Foundry Directive"><small>{foundryPanel+1} / 3 · PROMETHEUS ARCHIVE</small><h1>{FOUNDRY_NARRATIVE[foundryPanel][0]}</h1><p>{game.missionRuleVersion===2&&foundryPanel===2
     ?"Sell coal, manufacture gears, then synchronize iron ingots and coal to produce steel. The archive remains sealed until the foundry proves its capacity."
     :FOUNDRY_NARRATIVE[foundryPanel][1]}</p><div className="actions">{foundryPanel>0&&<button onClick={()=>setFoundryPanel(p=>p-1)}>Previous</button>}{foundryPanel<2&&<button onClick={()=>setFoundryPanel(p=>p+1)}>Next</button>}<button onClick={closeFoundry}>Close / Return</button><button onClick={closeFoundry}>Skip Directive</button></div></section></div>}

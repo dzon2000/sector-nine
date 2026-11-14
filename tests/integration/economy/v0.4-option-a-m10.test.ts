@@ -142,14 +142,22 @@ describe("WP3 Option A staged-inventory + real-demand adversary",()=>{
      expect(result.ok).toBe(true);
      s=result.state;
    }
+   for(const [x,y] of [[9,8],[9,9]] as const){
+     const added=place(s,"conveyor",x,y,"N");
+     expect(added.ok,added.message).toBe(true);
+     s=added.state;
+   }
    const buffered=s.entities.find(e=>e.kind==="conveyor"&&e.x===9&&e.y===6)!;
    const reoriented=turn(s,buffered.id); // N to E: disconnect retained old circuit stock
    expect(reoriented.ok).toBe(true);
    s=reoriented.state;
    const b=s.entities.find(e=>e.id===buffered.id)!;
    expect(b.direction).toBe("E");
-   b.belt="circuit";
-   s.materialLedger!.circuit.opening++;
+   for(const y of [6,7,8,9]){
+     const cargo=s.entities.find(e=>e.kind==="conveyor"&&e.x===9&&e.y===y)!;
+     cargo.belt="circuit";
+     s.materialLedger!.circuit.opening++;
+   }
    s=runTicks(s,360); // pre-activation old inventory cannot leave disconnected belt
    expect(s.entities.find(e=>e.id===buffered.id)!.belt).toBe("circuit");
    const oldStock=s.materialLedger!.circuit.opening;
@@ -183,7 +191,7 @@ describe("WP3 Option A staged-inventory + real-demand adversary",()=>{
      const qualifies=circuit>=11&&steel>=5&&covered>=57;
      streak=qualifies?streak+1:0;maxStreak=Math.max(maxStreak,streak);
    }
-   expect(oldStock).toBe(1);
+   expect(oldStock).toBe(4);
    expect(extraReleased).toBe(true);
    checkStock(s);
    console.info("V04-OPTION-A-STOCKPILE-ADVERSARY "+JSON.stringify({startingTick,

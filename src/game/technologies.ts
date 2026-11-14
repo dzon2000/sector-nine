@@ -1,15 +1,17 @@
 import type {GameState} from "../domain/model";
 
-export type TechnologyId="coal_extraction"|"mechanical_components"|"advanced_smelting"|"resource_surveying"|"circuit_fabrication"|"industrial_power";
+export type TechnologyId="coal_extraction"|"mechanical_components"|"advanced_smelting";
+export type ChapterTechnologyId="resource_surveying"|"circuit_fabrication"|"industrial_power";
+export type AnyTechnologyId=TechnologyId|ChapterTechnologyId;
 export type TechnologyState="locked"|"available"|"unlocked";
 
 export interface TechnologyDefinition {
-  id:TechnologyId;
+  id:AnyTechnologyId;
   label:string;
   unlocks:string;
   costCents:number;
 }
-export const TECHNOLOGIES:Record<TechnologyId,TechnologyDefinition>={
+export const TECHNOLOGIES:Record<AnyTechnologyId,TechnologyDefinition>={
   coal_extraction:{id:"coal_extraction",label:"Coal Extraction",unlocks:"Coal Mine",costCents:8000},
   mechanical_components:{id:"mechanical_components",label:"Mechanical Components",unlocks:"Mechanical Assembler",costCents:12000},
   advanced_smelting:{id:"advanced_smelting",label:"Advanced Smelting",unlocks:"Advanced Furnace",costCents:18000},
@@ -18,8 +20,10 @@ export const TECHNOLOGIES:Record<TechnologyId,TechnologyDefinition>={
   industrial_power:{id:"industrial_power",label:"Industrial Power",unlocks:"Coal Generator",costCents:10000}
 };
 export const TECHNOLOGY_ORDER:readonly TechnologyId[]=[
-  "coal_extraction","mechanical_components","advanced_smelting","resource_surveying","circuit_fabrication","industrial_power"
+  "coal_extraction","mechanical_components","advanced_smelting"
 ];
+
+export const CHAPTER_TECHNOLOGY_ORDER:readonly ChapterTechnologyId[]=["resource_surveying","circuit_fabrication","industrial_power"];
 
 export interface TechnologyStatus {
   status:TechnologyState;
@@ -34,7 +38,7 @@ function completedM4(state:GameState):boolean{
   // v0.2 missions M5-M7 also imply M4 was completed previously.
   return ["DONE","M5","M6","M7"].includes(state.mission.activeId);
 }
-export function technologyStatus(state:GameState,id:TechnologyId):TechnologyStatus {
+export function technologyStatus(state:GameState,id:AnyTechnologyId):TechnologyStatus {
   const tech=TECHNOLOGIES[id];
   const unlocked=state.technologies?.[id]===true;
   const ingots=state.sales?.iron_ingot??0;
@@ -69,7 +73,7 @@ export function technologyStatus(state:GameState,id:TechnologyId):TechnologyStat
 }
 
 export interface TechnologyPurchaseResult {ok:boolean;message:string;state:GameState;}
-export function purchaseTechnology(state:GameState,id:TechnologyId):TechnologyPurchaseResult {
+export function purchaseTechnology(state:GameState,id:AnyTechnologyId):TechnologyPurchaseResult {
   if(!Object.prototype.hasOwnProperty.call(TECHNOLOGIES,id)){
     return {ok:false,message:"Unknown technology.",state};
   }

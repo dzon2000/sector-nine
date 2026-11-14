@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {createGame,ITEMS,stockOnHand,type GameState} from "../../../src/domain/model";
-import {place,remove} from "../../../src/game/commands";
+import {place,remove,turn} from "../../../src/game/commands";
 import {runTicks,tick} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
 import {physicalM10} from "./v0.4-option-a-layout";
@@ -131,4 +131,64 @@ describe("WP3 Option A M10 failing physical controls",()=>{
     expect(measured.maxStreak).toBe(0);
     expect(measured.maxCircuits).toBeGreaterThan(0);
   },30000);
+});
+
+describe("WP3 Option A staged-inventory + real-demand adversary",()=>{
+ it("measures whether one delayed pre-activation circuit augments one working fabricator into a fake sustained streak",()=>{
+   let s=build();
+   for(const [kind,x,y] of [["circuit_fabricator",9,8],["conveyor",6,2]] as const){
+     const target=s.entities.find(e=>e.kind===kind&&e.x===x&&e.y===y)!;
+     const result=remove(s,target.id,true);
+     expect(result.ok).toBe(true);
+     s=result.state;
+   }
+   const buffered=s.entities.find(e=>e.kind==="conveyor"&&e.x===9&&e.y===6)!;
+   const reoriented=turn(s,buffered.id); // N to E: disconnect retained old circuit stock
+   expect(reoriented.ok).toBe(true);
+   s=reoriented.state;
+   const b=s.entities.find(e=>e.id===buffered.id)!;
+   expect(b.direction).toBe("E");
+   b.belt="circuit";
+   s.materialLedger!.circuit.opening++;
+   s=runTicks(s,360); // pre-activation old inventory cannot leave disconnected belt
+   expect(s.entities.find(e=>e.id===buffered.id)!.belt).toBe("circuit");
+   const oldStock=s.materialLedger!.circuit.opening;
+   const window:{circuit:number;steel:number;covered:boolean}[]=[];
+   let streak=0,maxStreak=0,extraReleased=false;
+   let maxCircuitWindow=0,maxCovered=0,saleTick:number|null=null;
+   const startingTick=s.tick;
+   for(let i=1;i<=240;i++){
+     if(i===60){
+       for(let n=0;n<3;n++){
+         const rotated=turn(s,buffered.id);
+         expect(rotated.ok).toBe(true);
+         s=rotated.state;
+       }
+       expect(s.entities.find(e=>e.id===buffered.id)!.direction).toBe("N");
+       extraReleased=true;
+     }
+     const before={...s.sales!};
+     s=tick(s);
+     if(extraReleased&&saleTick===null&&s.entities.find(e=>e.id===buffered.id)!.belt===null)
+       saleTick=s.tick; // first departure, final sale follows via shared terminal
+     window.push({circuit:s.sales!.circuit-before.circuit,steel:s.sales!.steel-before.steel,
+       covered:s.power?.demandCovered===true});
+     if(window.length>60)window.shift();
+     if(window.length<60)continue;
+     const circuit=window.reduce((a,e)=>a+e.circuit,0);
+     const steel=window.reduce((a,e)=>a+e.steel,0);
+     const covered=window.filter(e=>e.covered).length;
+     maxCircuitWindow=Math.max(maxCircuitWindow,circuit);
+     maxCovered=Math.max(maxCovered,covered);
+     const qualifies=circuit>=11&&steel>=5&&covered>=57;
+     streak=qualifies?streak+1:0;maxStreak=Math.max(maxStreak,streak);
+   }
+   expect(oldStock).toBe(1);
+   expect(extraReleased).toBe(true);
+   checkStock(s);
+   console.info("V04-OPTION-A-STOCKPILE-ADVERSARY "+JSON.stringify({startingTick,
+     stagedPreActivationCircuits:oldStock,releaseAtRelativeTick:60,firstBufferDepartureTick:saleTick,
+     maxCircuitWindow,maxCovered,maxStreak,missionStreakRequirement:60,
+     verdict:maxStreak>=60?"BYPASS POSSIBLE — needs WP2 mission-only recent-production guard":"NO BYPASS in this fixture"}));
+ },30000);
 });

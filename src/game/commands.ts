@@ -23,7 +23,7 @@ export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:
   if((kind==="coal_generator"||kind==="circuit_fabricator")&&!n.power)
     n.power={tick:n.tick,supply:0,demand:0,served:0,demandCovered:false,
       unpoweredProcessingTicks:0,coalBurned:0,lastServedFabricatorId:0,history:[]};
-  n.entities.push({id:n.nextId++,kind,x,y,direction,output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs",...(kind==="coal_generator"?{fuelTicksRemaining:0}:{})});
+  n.entities.push({id:n.nextId++,kind,x,y,direction,output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs",...(kind==="coal_generator"?{fuelTicksRemaining:0}:{}),...(kind==="splitter"?{splitterNext:0 as const}:{})});
   return {ok:true,message:`${DEFINITIONS[kind].label} constructed for ${(price/100).toFixed(2)} Cr.`,state:n};
 }
 export function turn(s:GameState,id:number):CommandResult {

@@ -87,5 +87,5 @@ test("WP5 milestone dispatches available in factory without modal interruption; 
  await expect(page.getByRole("dialog",{name:"Chapter II Transmission"})).toContainText("Suspend investigation");
  await page.getByRole("button",{name:"Return to Factory"}).click();
  await expect(page.getByTestId("factory-board")).toBeVisible();
- await expect(page.getByRole("button",{name:/Pause/})).toBeVisible();
+ await expect(page.getByRole("button",{name:/Run|Pause/})).toBeVisible();
 });

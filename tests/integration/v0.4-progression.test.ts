@@ -16,9 +16,10 @@ function injectEvents(s:GameState, events:{circuit?:number;steel?:number;produce
    // No engine state cheating: this isolated mission-rule contract calls
    // the same deterministic chapter observer as tick() with authoritative deltas.
    const {recordChapterTick}=requireChapter();
+   s.tick=step;
    recordChapterTick(s,sales({circuit:e.circuit??0,steel:e.steel??0}),
      e.produced??0, e.covered??false);
-   s.tick=step;updateMission(s);
+   updateMission(s);
  }
 }
 function requireChapter(){return {recordChapterTick:recordChapterTickImported};}
@@ -79,15 +80,14 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
    for(let i=0;i<9;i++)injectEvents(s,[{circuit:0}]);
    const {recordChapterTick}=requireChapter();
    for(let i=0;i<10;i++){
-     recordChapterTick(s,sales({copper_ore:1,silicon:1}),0,false);
-     s.tick++;updateMission(s);
+     s.tick++;recordChapterTick(s,sales({copper_ore:1,silicon:1}),0,false);updateMission(s);
    }
    expect(s.mission.activeId).toBe("M9");
    expect(technologyStatus(s,"circuit_fabrication").status).toBe("available");
    s=purchaseTechnology(s,"circuit_fabrication").state;
    s=purchaseTechnology(s,"industrial_power").state;
    expect(s.balanceCents).toBe(70000);
-   for(let i=0;i<4;i++){recordChapterTick(s,sales({circuit:1}),1,true);s.tick++;updateMission(s);}
+   for(let i=0;i<4;i++){s.tick++;recordChapterTick(s,sales({circuit:1}),1,true);updateMission(s);}
    expect(s.mission.activeId).toBe("M10");
    expect(s.chapterII?.metrics?.activatedAtTick).toBe(s.tick);
  });
@@ -95,8 +95,7 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
    let s=beginChapterII(done()).state;
    s.mission.activeId="M10";s.chapterII!.metrics={activatedAtTick:s.tick,salesTicks:[],streakTicks:0};
    const step=(circuits:number,steel:number,produced:number,covered=true)=>{
-     recordChapterTickImported(s,sales({circuit:circuits,steel}),produced,covered);
-     s.tick++;updateMission(s);
+     s.tick++;recordChapterTickImported(s,sales({circuit:circuits,steel}),produced,covered);updateMission(s);
    };
    for(let i=0;i<59;i++)step(i<11?1:0,i<5?1:0,i<11?1:0);
    expect(chapterWindow(s)).toBeNull();

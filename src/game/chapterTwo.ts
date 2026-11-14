@@ -1,4 +1,4 @@
-import {emptySales,type GameState,type Item,type ChapterMetrics} from "../domain/model";
+import {emptySales,COPPER_DEPOSITS,SILICON_DEPOSITS,type GameState,type Item,type ChapterMetrics} from "../domain/model";
 
 export type ChapterCommandResult={ok:boolean;message:string;state:GameState};
 
@@ -14,6 +14,8 @@ export function beginChapterII(state:GameState):ChapterCommandResult {
     return {ok:false,message:"Complete Chapter I before starting Chapter II.",state};
   const s=structuredClone(state);
   s.schemaVersion=4;
+  s.copperDeposits=COPPER_DEPOSITS.map(d=>({...d}));
+  s.siliconDeposits=SILICON_DEPOSITS.map(d=>({...d}));
   s.missionRuleVersion=4;
   s.chapterII={foundryCompleted:true,started:true,completed:false,storySeen:false,
     metrics:newChapterMetrics(s.tick)};

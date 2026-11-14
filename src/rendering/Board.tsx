@@ -4,7 +4,7 @@ import {DEPOSITS,COAL_DEPOSITS,STEP,type Direction,type GameState,type Kind} fro
 import {CARGO_GLYPHS,CARGO_COLORS,processorCargoSummary} from "./cargo";
 export type Tool="select"|"demolish"|"iron_mine"|"coal_mine"|"furnace"|"assembler"|"advanced_furnace"|"conveyor";
 const TILE=44;
-const fill:Record<Kind,number>={iron_mine:0xc58d53,coal_mine:0x676c79,furnace:0xd76446,assembler:0xc3a4e8,advanced_furnace:0xb64c4c,conveyor:0x508fa3,sell_terminal:0x68b98a,copper_mine:0xc58d53,silicon_extractor:0x676c79,circuit_fabricator:0xc3a4e8,coal_generator:0x508fa3};
+const fill:Record<Kind,number>={iron_mine:0xc58d53,coal_mine:0x676c79,furnace:0xd76446,assembler:0xc3a4e8,advanced_furnace:0xb64c4c,conveyor:0x508fa3,sell_terminal:0x68b98a,copper_mine:0xc58d53,silicon_extractor:0x676c79,circuit_fabricator:0xc3a4e8,coal_generator:0x508fa3,splitter:0x508fa3};
 export function Board({state,tool,direction,onTile,selectedId}:{state:GameState;tool:Tool;direction:Direction;onTile:(x:number,y:number)=>void;selectedId:number|null}){
   const element=useRef<HTMLDivElement>(null);
   const app=useRef<Application|null>(null);
@@ -44,7 +44,7 @@ export function Board({state,tool,direction,onTile,selectedId}:{state:GameState;
       const X=e.x*TILE,Y=e.y*TILE;
       const selected=e.id===selectedId;
       root.addChild(new Graphics().roundRect(X+4,Y+4,36,36,5).fill(fill[e.kind]).stroke({width:selected?3:1,color:selected?0xffffff:0x253a4a}));
-      const glyph:Record<Kind,string>={iron_mine:"M",coal_mine:"C",furnace:"F",assembler:"A",advanced_furnace:"S",conveyor:"B",sell_terminal:"$",copper_mine:"Cu",silicon_extractor:"Si",circuit_fabricator:"Ci",coal_generator:"G"};
+      const glyph:Record<Kind,string>={iron_mine:"M",coal_mine:"C",furnace:"F",assembler:"A",advanced_furnace:"S",conveyor:"B",sell_terminal:"$",copper_mine:"Cu",silicon_extractor:"Si",circuit_fabricator:"Ci",coal_generator:"G",splitter:"S"};
       const symbol=glyph[e.kind];
       const label=new Text({text:symbol,style:new TextStyle({fontSize:18,fontWeight:"bold",fill:0x101a27})});
       label.position.set(X+9,Y+10);root.addChild(label);

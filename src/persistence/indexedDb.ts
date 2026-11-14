@@ -87,14 +87,18 @@ export function validateSave(value:unknown):GameState{
     if(n.mission.soldCoal===undefined)n.mission.soldCoal=0;
     if(n.mission.soldGear===undefined)n.mission.soldGear=0;
     if(n.mission.soldSteel===undefined)n.mission.soldSteel=0;
-    const technologyNames=["coal_extraction","mechanical_components","advanced_smelting"];
-    if(n.schemaVersion===4)technologyNames.push("resource_surveying","circuit_fabrication","industrial_power");
+    const legacyNames=["coal_extraction","mechanical_components","advanced_smelting"];
+    const extraNames=["resource_surveying","circuit_fabrication","industrial_power"];
+    const technologyNames=[...legacyNames,...extraNames];
     const tech=n.technologies;
+    const keys=tech&&typeof tech==="object"&&!Array.isArray(tech)?Object.keys(tech):[];
     if(!tech||typeof tech!=="object"||Array.isArray(tech)||
-       Object.keys(tech).length!==technologyNames.length||
-       Object.keys(tech).some(key=>!technologyNames.includes(key))||
-       technologyNames.some(key=>typeof tech[key as keyof typeof tech]!=="boolean"))
-      throw Error("Invalid v2 technology state. Data preserved.");
+       !(keys.length===3&&n.schemaVersion!==4 || keys.length===6)||
+       (n.schemaVersion===4&&keys.length!==6)||
+       keys.some(key=>!technologyNames.includes(key))||
+       legacyNames.some(key=>typeof tech[key as keyof typeof tech]!=="boolean")||
+       extraNames.some(key=>(n.schemaVersion===4||key in tech)&&typeof tech[key as keyof typeof tech]!=="boolean"))
+      throw Error("Invalid v2/v4 technology state. Data preserved.");
     if(!Array.isArray(n.coalDeposits)||n.coalDeposits.length!==COAL_DEPOSITS.length||
        n.coalDeposits.some((d,i)=>!d||typeof d!=="object"||Object.keys(d).length!==2||
          d.x!==COAL_DEPOSITS[i].x||d.y!==COAL_DEPOSITS[i].y))

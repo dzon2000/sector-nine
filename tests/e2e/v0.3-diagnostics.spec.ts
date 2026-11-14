@@ -59,9 +59,9 @@ async function seedDiagnostics(page:Page,legacy=false){
   },legacy);
 }
 async function select(page:Page,x:number,y:number){
-  await page.getByTestId("factory-board").locator("canvas").click({
-    position:{x:x*44+22,y:y*44+22}
-  });
+  const board=page.getByTestId("factory-board");
+  const bounds=await board.boundingBox();if(!bounds)throw Error("Board absent");
+  await board.locator("canvas").click({position:{x:(x+.5)*bounds.width/12,y:(y+.5)*bounds.height/12}});
 }
 test("WP4 mission HUD, terminal and inspector show source-derived counters across reload",async({page})=>{
   await page.goto("/");

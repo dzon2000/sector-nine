@@ -2,9 +2,10 @@ import {useEffect,useRef,useState,type PointerEvent as ReactPointerEvent} from "
 import {Application,Container,Graphics,Text,TextStyle} from "pixi.js";
 import {DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,STEP,type Direction,type GameState,type Kind} from "../domain/model";
 import {CARGO_GLYPHS,CARGO_COLORS,processorCargoSummary} from "./cargo";
+import {STRUCTURE_GLYPHS} from "./structureVisuals";
 export type Tool="select"|"demolish"|"iron_mine"|"coal_mine"|"furnace"|"assembler"|"advanced_furnace"|"conveyor"|"copper_mine"|"silicon_extractor"|"circuit_fabricator"|"coal_generator"|"splitter";
 const TILE=44;
-const fill:Record<Kind,number>={iron_mine:0xc58d53,coal_mine:0x676c79,furnace:0xd76446,assembler:0xc3a4e8,advanced_furnace:0xb64c4c,conveyor:0x508fa3,sell_terminal:0x68b98a,copper_mine:0xc58d53,silicon_extractor:0x676c79,circuit_fabricator:0xc3a4e8,coal_generator:0x508fa3,splitter:0x508fa3};
+const fill:Record<Kind,number>={iron_mine:0xc58d53,coal_mine:0x676c79,furnace:0xd76446,assembler:0xc3a4e8,advanced_furnace:0xb64c4c,conveyor:0x508fa3,sell_terminal:0x68b98a,copper_mine:0xd69b57,silicon_extractor:0x8196b2,circuit_fabricator:0xbda0ed,coal_generator:0xdfc278,splitter:0x65c0b4};
 export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{state:GameState;tool:Tool;direction:Direction;onTile:(x:number,y:number)=>void;onDragRotate:(id:number,direction:Direction)=>void;selectedId:number|null}){
   const active=useRef<{id:number;pointerId:number;startX:number;startY:number;tileX:number;tileY:number;cancelled:boolean}|null>(null);
   const [preview,setPreview]=useState<{id:number;direction:Direction}|null>(null);
@@ -96,8 +97,7 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
       const X=e.x*TILE,Y=e.y*TILE;
       const selected=e.id===selectedId||e.id===preview?.id;
       root.addChild(new Graphics().roundRect(X+4,Y+4,36,36,5).fill(fill[e.kind]).stroke({width:selected?3:1,color:selected?0xffffff:0x253a4a}));
-      const glyph:Record<Kind,string>={iron_mine:"M",coal_mine:"C",furnace:"F",assembler:"A",advanced_furnace:"S",conveyor:"B",sell_terminal:"$",copper_mine:"Cu",silicon_extractor:"Si",circuit_fabricator:"Ci",coal_generator:"G",splitter:"S"};
-      const symbol=glyph[e.kind];
+      const symbol=STRUCTURE_GLYPHS[e.kind];
       const label=new Text({text:symbol,style:new TextStyle({fontSize:18,fontWeight:"bold",fill:0x101a27})});
       label.position.set(X+9,Y+10);root.addChild(label);
       if(e.kind!=="sell_terminal"){

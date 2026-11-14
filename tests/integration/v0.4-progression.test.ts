@@ -102,7 +102,7 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
    expect(s.mission.activeId).toBe("M10");
    step(0,0,0);
    expect(s.chapterII!.metrics!.streakTicks).toBe(1);
-   for(let i=0;i<59;i++)step(i<11?1:0,i<5?1:0,i<11?1:0);
+   for(let i=0;i<58;i++)step(i<11?1:0,i<5?1:0,i<11?1:0);
    expect(s.mission.activeId).toBe("M10");
    step(0,0,0);
    expect(s.mission.activeId).toBe("DONE");

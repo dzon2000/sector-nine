@@ -1,6 +1,7 @@
 import {REVENUE,STEP,recipeFor,stats,emptySales,POWER_CANDIDATE,type DiagnosticEntityTick,type Entity,type GameState,type Item} from "../domain/model";
 import {recordDiagnostics} from "../game/diagnostics";
 import {recordMissionTick} from "../game/missionMetrics";
+import {recordChapterTick} from "../game/chapterTwo";
 import {updateMission} from "../game/missions";
 type Request={source:Entity;target:Entity;item:Item};
 function at(s:GameState,x:number,y:number){return s.entities.find(e=>e.x===x&&e.y===y);}
@@ -22,6 +23,7 @@ export function tick(state:GameState):GameState {
   s.tick++;
   let revenueCents=0,costCents=0;
   const tickSales=emptySales();
+  const priorCircuitsProduced=s.materialLedger?.circuit.produced??0;
   const completions=new Map<number,number>();
   const completed=(id:number)=>completions.set(id,(completions.get(id)??0)+1);
   const audit=(item:Item,event:"produced"|"consumed"|"sold"|"demolished",quantity=1)=>{if(s.materialLedger)s.materialLedger[item][event]+=quantity;};
@@ -227,6 +229,8 @@ export function tick(state:GameState):GameState {
   s.rollingEvents.push(s.lastEvent);
   if(s.rollingEvents.length>60)s.rollingEvents.shift();
   recordMissionTick(s,tickSales);
+  recordChapterTick(s,tickSales,(s.materialLedger?.circuit.produced??0)-priorCircuitsProduced,
+    s.power?.demandCovered===true);
   recordDiagnostics(s,observations,tickSales);
   updateMission(s);
   return s;

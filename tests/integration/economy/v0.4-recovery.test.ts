@@ -4,6 +4,7 @@ import {createGame,DEFINITIONS,ITEMS,stockOnHand,type Direction,type GameState,t
 import {purchaseTechnology,type TechnologyId} from "../../../src/game/technologies";
 import {tick,runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
+import {physicalM10} from "./v0.4-option-a-layout";
 
 type Built=readonly [Exclude<Kind,"sell_terminal">,number,number,Direction];
 type Trace={state:GameState;capital:number;refund:number;legacyResearch:number;estimatedNewResearch:number;minCash:number;notes:{stage:string;tick:number;cash:number;minimumCash:number}[]};
@@ -208,6 +209,60 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
       warning:"WP2 mission engine not implemented; evaluation uses recorded real physical events"
     }));
     audit(t);
+    // Real economic recovery: finance and explicitly demolish the legacy/M9
+    // structures, then rebuild the validated full M10 12x12 layout. No starting
+    // capital injection, fake output stock, or hidden teleport of entities.
+    const targetCost=physicalM10.reduce((sum,[kind])=>sum+DEFINITIONS[kind].price,0);
+    const demolitionRefund=t.state.entities.filter(e=>e.kind!=="sell_terminal")
+      .reduce((sum,e)=>sum+Math.floor(DEFINITIONS[e.kind].price*0.75),0);
+    const financedTicks=finance(t,Math.max(0,targetCost-demolitionRefund+15000));
+    const priorLayout=t.state.entities.filter(e=>e.kind!=="sell_terminal").map(e=>[e.x,e.y] as const);
+    for(const [x,y] of priorLayout)demolish(t,x,y);
+    expect(t.state.entities.map(e=>e.kind)).toEqual(["sell_terminal"]);
+    build(t,...physicalM10);
+    observe(t,"rebuilt physical M10");
+    audit(t);
+    const m10BuiltAt=t.state.tick;
+    t.state=runTicks(t.state,360);
+    const trail:{circuit:number;steel:number;covered:boolean}[]=[];
+    let winningStreak=0,bestExpandedStreak=0,qualifyingExpandedWindows=0,peakCircuits60=0,peakSteel60=0;
+    let terminalPeak=0,peakDemand=0;
+    for(let i=0;i<300;i++){
+      const prior={...t.state.sales!};
+      t.state=tick(t.state);
+      trail.push({circuit:t.state.sales!.circuit-prior.circuit,
+        steel:t.state.sales!.steel-prior.steel,
+        covered:t.state.power?.demandCovered===true});
+      if(trail.length>60)trail.shift();
+      peakDemand=Math.max(peakDemand,t.state.power?.demand??0);
+      terminalPeak=Math.max(terminalPeak,Object.values(t.state.diagnostics!.samples.at(-1)!.terminalSales)
+        .reduce((a,b)=>a+b,0));
+      if(trail.length<60)continue;
+      const circuit=trail.reduce((sum,e)=>sum+e.circuit,0);
+      const steel=trail.reduce((sum,e)=>sum+e.steel,0);
+      const covered=trail.filter(e=>e.covered).length;
+      peakCircuits60=Math.max(peakCircuits60,circuit);
+      peakSteel60=Math.max(peakSteel60,steel);
+      const qualifies=circuit>=11&&steel>=5&&covered>=57;
+      winningStreak=qualifies?winningStreak+1:0;
+      if(qualifies)qualifyingExpandedWindows++;
+      bestExpandedStreak=Math.max(bestExpandedStreak,winningStreak);
+    }
+    expect(bestExpandedStreak).toBeGreaterThanOrEqual(60);
+    expect(terminalPeak).toBeLessThanOrEqual(1);
+    expect(peakDemand).toBeGreaterThanOrEqual(2);
+    expect(t.state.balanceCents).toBeGreaterThan(0);
+    observe(t,"M10 candidate physically qualified");
+    audit(t);
+    console.info("V04-OPTION-A-RECOVERY "+JSON.stringify({
+      startedFromRealV03DoneAt:done.tick,previousM9At:m10StartTick,
+      projectedResearchFeesCents:t.estimatedNewResearch,
+      financedTicks,rebuiltAtTick:m10BuiltAt,fullLayoutPriceCents:targetCost,
+      constructionCount:physicalM10.length,minCashCents:t.minCash,
+      bestExpandedStreak,qualifyingExpandedWindows,peakCircuits60,peakSteel60,
+      peakDemand,terminalPeak,finalTick:t.state.tick,cashCents:t.state.balanceCents,
+      caveat:"synthetic v0.3 300Cr engine campaign, proposed research fees debited but WP2 research not implemented"
+    }));
     console.info("V04-WP3-RECOVERY "+JSON.stringify({
       authenticHumanSave:false,source:"actual v0.3 300-Cr engine campaign",
       finalTick:t.state.tick,fromDoneTick:done.tick,
@@ -215,5 +270,5 @@ describe("WP3 real-command v0.3 DONE continuity and projected v0.4 economic reco
       capitalCents:t.capital,refundCents:t.refund,legacyResearchCents:t.legacyResearch,
       projectedUnimplementedNewResearchFeesCents:t.estimatedNewResearch,
       m8Ticks,m9Ticks,remainingSteelRoute:true,sales:t.state.sales,notes:t.notes}));
-  },30000);
+  },45000);
 });

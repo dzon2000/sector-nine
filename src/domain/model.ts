@@ -91,6 +91,8 @@ export interface GameState {
   introSeen: boolean; introOpen: boolean; tutorialEnabled: boolean;
   foundryStorySeen?:boolean;
   coalDeposits?: {x:number;y:number}[];
+  copperDeposits?: {x:number;y:number}[];
+  siliconDeposits?: {x:number;y:number}[];
   sales?: Record<Item,number>;
   materialLedger?: MaterialLedger;
   totalRevenueCents?:number; totalCostCents?:number;

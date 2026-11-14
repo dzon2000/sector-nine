@@ -58,6 +58,18 @@ export function diagnosticHint(state:GameState,id:number):string{
     return "Conveyor has no pending transfer; check upstream supply.";
   }
   if(current?.status==="output_blocked")return "Output blocked: inspect downstream belts and machine inputs.";
+  if(entity.kind==="coal_generator"){
+    const fuel=entity.fuelTicksRemaining??0;
+    if(fuel===0)return "Generator fuel depleted. Route physical coal into its input; fuel powers subsequent active ticks.";
+    return "Generator active: "+fuel+" fuel ticks remaining. Inspect site-wide power demand and supply.";
+  }
+  // A running fabricator with an existing cycle is waiting for actual power,
+  // not missing recipe inputs; preserve stronger output-blocked diagnostics.
+  if(entity.kind==="circuit_fabricator"&&entity.cycle!==null &&
+    state.power?.tick===state.tick&&state.power.demand>state.power.served){
+    return "Power shortage: "+state.power.served+"/"+state.power.demand+
+      " processing requests served. Supply fueled generators; inspect coal input.";
+  }
   const recipe=recipeFor(entity.kind);
   if(current?.status==="input_starved" && recipe){
     const missing=Object.entries(recipe.input).filter(([item,needed])=>

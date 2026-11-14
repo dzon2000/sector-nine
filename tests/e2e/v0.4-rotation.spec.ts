@@ -9,7 +9,7 @@ async function ready(page:Page){
  await page.getByRole("button",{name:"Begin Operations"}).click();
  await page.getByRole("button",{name:/Conveyor/}).click();
  const p=await center(page,4,4);await page.mouse.click(p.x,p.y);
- await page.getByRole("button",{name:"Inspect"}).click();
+ await page.getByRole("button",{name:"Inspect",exact:true}).click();
  await page.mouse.click(p.x,p.y);
  await expect(page.getByRole("heading",{name:"Conveyor"})).toBeVisible();
  return p;
@@ -32,7 +32,7 @@ test("WP4 #5 direct rotation cardinal directions and no-op preserve one event",a
  await drag(page,p,0,30);
  await expect(direction).toHaveText("S");
  await expect(page.getByTestId("playtest-panel")).toContainText("rotated 4");
- await page.reload();await page.getByRole("button",{name:"Inspect"}).click();
+ await page.reload();await page.getByRole("button",{name:"Inspect",exact:true}).click();
  const same=await center(page,4,4);await page.mouse.click(same.x,same.y);
  await expect(page.getByTestId("selected-facing")).toHaveText("S");
 });
@@ -57,7 +57,7 @@ test("WP4 #5 scaled board and placement tool do not rotate existing object",asyn
  await expect(page.getByTestId("selected-facing")).toHaveText("N");
  await page.getByRole("button",{name:/Conveyor/}).click();
  await drag(page,scaled,30,0);
- await page.getByRole("button",{name:"Inspect"}).click();
+ await page.getByRole("button",{name:"Inspect",exact:true}).click();
  await page.mouse.click(scaled.x,scaled.y);
  await expect(page.getByTestId("selected-facing")).toHaveText("N");
 });

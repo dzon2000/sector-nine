@@ -4,8 +4,8 @@ import {recordMissionTick} from "../game/missionMetrics";
 import {updateMission} from "../game/missions";
 type Request={source:Entity;target:Entity;item:Item};
 function at(s:GameState,x:number,y:number){return s.entities.find(e=>e.x===x&&e.y===y);}
-function output(e:Entity):Item|null{return e.kind==="conveyor"?e.belt:e.output;}
-function clear(e:Entity){if(e.kind==="conveyor")e.belt=null;else e.output=null;}
+function output(e:Entity):Item|null{return e.kind==="conveyor"||e.kind==="splitter"?e.belt:e.output;}
+function clear(e:Entity){if(e.kind==="conveyor"||e.kind==="splitter")e.belt=null;else e.output=null;}
 function directionTo(e:Entity):[number,number]{const [x,y]=STEP[e.direction];return [e.x+x,e.y+y];}
 function accepts(target:Entity,source:Entity,item:Item):boolean{
   if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(target.kind))return false;
@@ -13,7 +13,7 @@ function accepts(target:Entity,source:Entity,item:Item):boolean{
   const recipe=recipeFor(target.kind);
   if(recipe)return (recipe.input[item]??0)>0&&(target.inputBuffers?.[item]??0)<4&&
     !(source.x===target.x+STEP[target.direction][0]&&source.y===target.y+STEP[target.direction][1]);
-  if(target.kind==="conveyor")return target.belt===null;
+  if(target.kind==="conveyor"||target.kind==="splitter")return target.belt===null;
   return true;
 }
 export function tick(state:GameState):GameState {
@@ -52,7 +52,7 @@ export function tick(state:GameState):GameState {
   for(const e of s.entities){
     if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind)){
       if(e.output===null){
-        e.cycle=(e.cycle??({coal_mine:3,iron_mine:2,copper_mine:3,silicon_extractor:4} as const)[e.kind as "coal_mine"|"iron_mine"|"copper_mine"|"silicon_extractor"])-1;
+        e.cycle=(e.cycle??({coal_mine:3,iron_mine:2,copper_mine:2,silicon_extractor:4} as const)[e.kind as "coal_mine"|"iron_mine"|"copper_mine"|"silicon_extractor"])-1;
         if(e.cycle===0){e.output=({coal_mine:"coal",iron_mine:"iron_ore",copper_mine:"copper_ore",silicon_extractor:"silicon"} as const)[e.kind as "coal_mine"|"iron_mine"|"copper_mine"|"silicon_extractor"];e.cycle=null;if(e.kind==="iron_mine")s.totalOreProduced++;completed(e.id);audit(e.output!,"produced");costCents+=({coal_mine:80,iron_mine:60,copper_mine:70,silicon_extractor:90} as const)[e.kind as "coal_mine"|"iron_mine"|"copper_mine"|"silicon_extractor"];}
       }
     }else if(recipeFor(e.kind)&&e.cycle!==null){
@@ -69,9 +69,27 @@ export function tick(state:GameState):GameState {
   const requests:Request[]=[];
   for(const e of s.entities){
     const item=output(e);if(!item||e.kind==="sell_terminal")continue;
-    const [x,y]=directionTo(e),target=at(s,x,y);
-    if(target&&accepts(target,e,item))requests.push({source:e,target,item});
-    else if(target?.kind==="conveyor"&&target.belt!==null)requests.push({source:e,target,item});
+    if(e.kind==="splitter"){
+      const [fx,fy]=STEP[e.direction];
+      const outlets:[[number,number],[number,number]]=[[fx,fy],[-fy,fx]];
+      const preferred=e.splitterNext??0;
+      for(const index of [preferred,1-preferred]){
+        const [dx,dy]=outlets[index];
+        const target=at(s,e.x+dx,e.y+dy);
+        if(!target)continue;
+        // Conservative fallback: only the free destination is considered here.
+        // Occupied moving conveyor chains may be eligible after full arbitration.
+        if(accepts(target,e,item)){
+          requests.push({source:e,target,item});
+          break;
+        }
+      }
+    }else{
+      const [x,y]=directionTo(e),target=at(s,x,y);
+      if(target&&accepts(target,e,item))requests.push({source:e,target,item});
+      else if((target?.kind==="conveyor"||target?.kind==="splitter")&&target.belt!==null)
+        requests.push({source:e,target,item});
+    }
   }
   const byTarget=new Map<number,Request[]>();
   for(const r of requests){const a=byTarget.get(r.target.id)??[];a.push(r);byTarget.set(r.target.id,a);}
@@ -79,7 +97,7 @@ export function tick(state:GameState):GameState {
   for(const [id,reqs] of byTarget){
     const target=reqs[0].target;
     // Reject transfers to a furnace whose buffer is already full or wrong-side input.
-    const viable=reqs.filter(r=>accepts(target,r.source,r.item) || (target.kind==="conveyor"&&target.belt!==null));
+    const viable=reqs.filter(r=>accepts(target,r.source,r.item) || ((target.kind==="conveyor"||target.kind==="splitter")&&target.belt!==null));
     if(!viable.length)continue;
     viable.sort((a,b)=>a.source.id-b.source.id);
     const last=s.arbiters[String(id)]??-1;
@@ -97,7 +115,7 @@ export function tick(state:GameState):GameState {
     let possible=false;
     if(r.target.kind==="sell_terminal")possible=true;
     else if(recipeFor(r.target.kind)||r.target.kind==="coal_generator")possible=accepts(r.target,r.source,r.item);
-    else if(r.target.kind==="conveyor"){
+    else if(r.target.kind==="conveyor"||r.target.kind==="splitter"){
       if(r.target.belt===null)possible=true;
       else{
         const next=bySource.get(r.target.id);
@@ -110,14 +128,23 @@ export function tick(state:GameState):GameState {
   }
   for(const r of planned.values())canMove(r);
   // Belt occupancy at the exact transfer boundary, before departures and arrivals.
-  const conveyorOccupiedAtTransfer=new Set(s.entities.filter(e=>e.kind==="conveyor"&&e.belt!==null).map(e=>e.id));
+  const conveyorOccupiedAtTransfer=new Set(s.entities.filter(e=>(e.kind==="conveyor"||e.kind==="splitter")&&e.belt!==null).map(e=>e.id));
   // Depart all sources first, then arrive at destinations.
   const transfers=[...planned.values()].filter(r=>approved.has(r.source.id));
-  for(const r of transfers)clear(r.source);
+  for(const r of transfers){
+    if(r.source.kind==="splitter"){
+      const [fx,fy]=STEP[r.source.direction];
+      const side:[number,number]=[-fy,fx];
+      const isForward=r.target.x===r.source.x+fx&&r.target.y===r.source.y+fy;
+      const chosen=isForward?0:1;
+      r.source.splitterNext=(1-chosen) as 0|1;
+    }
+    clear(r.source);
+  }
   for(const r of transfers){
     const t=r.target;
     s.arbiters[String(t.id)]=r.source.id;
-    if(t.kind==="conveyor"){t.belt=r.item;costCents+=5;}
+    if(t.kind==="conveyor"||t.kind==="splitter"){t.belt=r.item;costCents+=5;}
     else if(recipeFor(t.kind)||t.kind==="coal_generator"){
       t.inputBuffers={...(t.inputBuffers??{}),[r.item]:(t.inputBuffers?.[r.item]??0)+1};
       if(t.kind==="furnace")t.oreInput=t.inputBuffers.iron_ore??0; // Legacy read-only mirror for v0.1-compatible snapshots.
@@ -160,7 +187,7 @@ export function tick(state:GameState):GameState {
       }
     }
     if(e.kind==="sell_terminal")e.status="waiting_for_inputs";
-    else if(e.kind==="conveyor")e.status=e.belt?"working":"waiting_for_inputs";
+    else if(e.kind==="conveyor"||e.kind==="splitter")e.status=e.belt?"working":"waiting_for_inputs";
     else if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind))e.status=e.output?"blocked_output":"working";
     else if(e.kind==="coal_generator")e.status=(e.fuelTicksRemaining??0)>0?"working":"waiting_for_inputs";
     else e.status=e.cycle===0||e.output?"blocked_output":e.cycle!==null?"working":"waiting_for_inputs";
@@ -180,8 +207,8 @@ export function tick(state:GameState):GameState {
     }
     observations[String(e.id)]={
       status,completedUnits:completions.get(e.id)??0,
-      conveyorMoves:e.kind==="conveyor"&&diagnosticDepartures.has(e.id)?1:0,
-      conveyorStalledTicks:e.kind==="conveyor"&&conveyorOccupiedAtTransfer.has(e.id)&&
+      conveyorMoves:(e.kind==="conveyor"||e.kind==="splitter")&&diagnosticDepartures.has(e.id)?1:0,
+      conveyorStalledTicks:(e.kind==="conveyor"||e.kind==="splitter")&&conveyorOccupiedAtTransfer.has(e.id)&&
         !diagnosticDepartures.has(e.id)?1:0
     };
   }

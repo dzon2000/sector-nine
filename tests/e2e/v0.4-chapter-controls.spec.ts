@@ -42,7 +42,7 @@ test("WP4 Chapter II starts only by explicit action, reveals resources and paid 
  await expect(page.getByTestId("cash")).toHaveText("220.00 Cr");
  await expect(page.getByRole("button",{name:/Copper Mine/})).not.toContainText("Locked");
  await page.reload();
- await page.getByRole("button",{name:/Technology \\+/}).click();
+ await page.getByRole("button",{name:/Technology \+/}).click();
  await expect(page.getByTestId("chapter-objectives")).toContainText("Copper sold: 0/10");
  await expect(page.getByTestId("technology-resource_surveying")).toContainText("Unlocked");
  await expect(page.getByTestId("begin-chapter-ii")).toHaveCount(0);

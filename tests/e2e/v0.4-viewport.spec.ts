@@ -30,7 +30,8 @@ for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[1280,600]] as co
  });
 }
 test("WP4 #7 mobile fallback exposes side panels via accessible toggles",async({page})=>{
- await page.setViewportSize({width:390,height:700});await launch(page);
+ await page.setViewportSize({width:390,height:700});
+ await page.goto("/");await page.getByRole("button",{name:"Begin Operations"}).click();
  await expect(page.getByTestId("factory-board")).toBeVisible();
  await expect(page.getByTestId("mission-hud")).toBeVisible();
  await expect(page.getByRole("button",{name:/Construction panel/})).toBeVisible();

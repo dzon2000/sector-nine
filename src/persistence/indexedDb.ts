@@ -32,11 +32,19 @@ export function validateSave(value:unknown):GameState{
   for(const e of s.entities){
     if(!Number.isSafeInteger(e.id)||!Number.isInteger(e.x)||!Number.isInteger(e.y)||
       e.x<0||e.x>=12||e.y<0||e.y>=12||!["N","E","S","W"].includes(e.direction)||
-      !["iron_mine","coal_mine","furnace","assembler","advanced_furnace","conveyor","sell_terminal","copper_mine","silicon_extractor","circuit_fabricator","coal_generator"].includes(e.kind)||
+      !["iron_mine","coal_mine","furnace","assembler","advanced_furnace","conveyor","sell_terminal","copper_mine","silicon_extractor","circuit_fabricator","coal_generator","splitter"].includes(e.kind)||
       !Number.isInteger(e.oreInput)||e.oreInput<0||e.oreInput>4||
       (e.cycle!==null&&(!Number.isInteger(e.cycle)||e.cycle<0))||
       !(e.output===null||ITEMS.includes(e.output))||!(e.belt===null||ITEMS.includes(e.belt))
     )throw Error("Invalid entity in save. Data preserved.");
+    if(e.kind==="splitter"){
+      if(e.splitterNext!==0&&e.splitterNext!==1)
+        throw Error("Invalid splitter arbitration cursor. Save preserved.");
+      if(e.output!==null||e.oreInput!==0||e.cycle!==null||
+        Object.keys(e.inputBuffers??{}).length||Object.keys(e.reservedInputs??{}).length)
+        throw Error("Invalid splitter material state. Save preserved.");
+    }else if(e.splitterNext!==undefined)
+      throw Error("Invalid non-splitter cursor. Save preserved.");
     const key=e.x+","+e.y;if(spots.has(key))throw Error("Overlapping entities in save. Data preserved.");spots.add(key);
   }
   if(s.entities.filter(e=>e.kind==="sell_terminal"&&e.x===10&&e.y===5).length!==1)

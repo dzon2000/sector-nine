@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import {resolveBuildCommit} from "./src/ui/buildProvenance";
+// Vite runs under Node; avoid broadening browser TypeScript types with Node globals.
+declare const process:{env:Record<string,string|undefined>};
 
 /** GitHub Actions supplies GITHUB_SHA for the exact checked-out build commit.
  * A local build, untrusted environment, or invalid SHA embeds JSON null.

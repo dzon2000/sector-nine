@@ -23,28 +23,34 @@ function checkStock(s:GameState){
  }
 }
 function measure(s:GameState,activeTicks:number){
- const snapshots:{circuit:number;steel:number;covered:boolean}[]=[];
+ const snapshots:{circuit:number;steel:number;covered:boolean;produced:number}[]=[];
  const old={...s.sales!};
  let maxCircuits=0,maxSteel=0,minCoverage=60,maxStreak=0,streak=0,qualifying=0,terminalMax=0;
+ let guardedStreak=0,maxGuardedStreak=0;
  let demandTotal=0,servedTotal=0;
  for(let i=0;i<activeTicks;i++){
    const prev=s.sales!;
+   const prevProduced=s.materialLedger!.circuit.produced;
    s=tick(s);
-   snapshots.push({circuit:s.sales!.circuit-prev.circuit,steel:s.sales!.steel-prev.steel,covered:s.power?.demandCovered===true});
+   snapshots.push({circuit:s.sales!.circuit-prev.circuit,steel:s.sales!.steel-prev.steel,
+     covered:s.power?.demandCovered===true,produced:s.materialLedger!.circuit.produced-prevProduced});
    if(snapshots.length>60)snapshots.shift();
    demandTotal+=s.power?.demand??0;servedTotal+=s.power?.served??0;
    terminalMax=Math.max(terminalMax,Object.values(s.diagnostics!.samples.at(-1)!.terminalSales).reduce((a,b)=>a+b,0));
    if(snapshots.length!==60)continue;
    const circuit=snapshots.reduce((a,e)=>a+e.circuit,0),steel=snapshots.reduce((a,e)=>a+e.steel,0);
    const covered=snapshots.filter(e=>e.covered).length;
+   const produced=snapshots.reduce((a,e)=>a+e.produced,0);
    maxCircuits=Math.max(maxCircuits,circuit);maxSteel=Math.max(maxSteel,steel);
    minCoverage=Math.min(minCoverage,covered);
    const good=circuit>=11&&steel>=5&&covered>=57;
    if(good)qualifying++;
    streak=good?streak+1:0;maxStreak=Math.max(maxStreak,streak);
+   guardedStreak=good&&produced>=11?guardedStreak+1:0;
+   maxGuardedStreak=Math.max(maxGuardedStreak,guardedStreak);
  }
  const measured={startTick:s.tick-activeTicks,endTick:s.tick,circuits:s.sales!.circuit-old.circuit,
-   steel:s.sales!.steel-old.steel,maxCircuits,maxSteel,minCoverage,maxStreak,qualifying,terminalMax,
+   steel:s.sales!.steel-old.steel,maxCircuits,maxSteel,minCoverage,maxStreak,maxGuardedStreak,qualifying,terminalMax,
    demandTotal,servedTotal,coalBurned:s.materialLedger!.coal.burned};
  console.info("V04-OPTION-A-M10 "+JSON.stringify(measured));
  checkStock(s);
@@ -89,6 +95,7 @@ describe("WP3 experimental Option A M10 full physical 12x12",()=>{
    const warm=runTicks(build(),360);
    const {s,measured}=measure(warm,300);
    expect(measured.maxStreak).toBeGreaterThanOrEqual(60);
+   expect(measured.maxGuardedStreak).toBeGreaterThanOrEqual(60);
    expect(measured.maxCircuits).toBeGreaterThanOrEqual(11);
    expect(measured.maxSteel).toBeGreaterThanOrEqual(5);
    expect(measured.terminalMax).toBeLessThanOrEqual(1);
@@ -161,8 +168,8 @@ describe("WP3 Option A staged-inventory + real-demand adversary",()=>{
    s=runTicks(s,360); // pre-activation old inventory cannot leave disconnected belt
    expect(s.entities.find(e=>e.id===buffered.id)!.belt).toBe("circuit");
    const oldStock=s.materialLedger!.circuit.opening;
-   const window:{circuit:number;steel:number;covered:boolean}[]=[];
-   let streak=0,maxStreak=0,extraReleased=false;
+   const window:{circuit:number;steel:number;covered:boolean;produced:number}[]=[];
+   let streak=0,maxStreak=0,guardedStreak=0,maxGuardedStreak=0,extraReleased=false;
    let maxCircuitWindow=0,maxCovered=0,saleTick:number|null=null;
    const startingTick=s.tick;
    for(let i=1;i<=240;i++){
@@ -176,27 +183,34 @@ describe("WP3 Option A staged-inventory + real-demand adversary",()=>{
        extraReleased=true;
      }
      const before={...s.sales!};
+     const previousProduced=s.materialLedger!.circuit.produced;
      s=tick(s);
      if(extraReleased&&saleTick===null&&s.entities.find(e=>e.id===buffered.id)!.belt===null)
        saleTick=s.tick; // first departure, final sale follows via shared terminal
      window.push({circuit:s.sales!.circuit-before.circuit,steel:s.sales!.steel-before.steel,
-       covered:s.power?.demandCovered===true});
+       covered:s.power?.demandCovered===true,
+       produced:s.materialLedger!.circuit.produced-previousProduced});
      if(window.length>60)window.shift();
      if(window.length<60)continue;
      const circuit=window.reduce((a,e)=>a+e.circuit,0);
      const steel=window.reduce((a,e)=>a+e.steel,0);
      const covered=window.filter(e=>e.covered).length;
+     const produced=window.reduce((a,e)=>a+e.produced,0);
      maxCircuitWindow=Math.max(maxCircuitWindow,circuit);
      maxCovered=Math.max(maxCovered,covered);
      const qualifies=circuit>=11&&steel>=5&&covered>=57;
      streak=qualifies?streak+1:0;maxStreak=Math.max(maxStreak,streak);
+     guardedStreak=qualifies&&produced>=11?guardedStreak+1:0;
+     maxGuardedStreak=Math.max(maxGuardedStreak,guardedStreak);
    }
    expect(oldStock).toBe(4);
    expect(extraReleased).toBe(true);
    checkStock(s);
+   expect(maxStreak).toBeGreaterThanOrEqual(60); // demonstrate original sales-only rule bypass
+   expect(maxGuardedStreak).toBeLessThan(60); // test proposed recent-production safeguard
    console.info("V04-OPTION-A-STOCKPILE-ADVERSARY "+JSON.stringify({startingTick,
      stagedPreActivationCircuits:oldStock,releaseAtRelativeTick:60,firstBufferDepartureTick:saleTick,
-     maxCircuitWindow,maxCovered,maxStreak,missionStreakRequirement:60,
+     maxCircuitWindow,maxCovered,maxStreak,maxGuardedStreak,missionStreakRequirement:60,
      verdict:maxStreak>=60?"BYPASS POSSIBLE — needs WP2 mission-only recent-production guard":"NO BYPASS in this fixture"}));
  },30000);
 });

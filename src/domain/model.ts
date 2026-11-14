@@ -94,7 +94,7 @@ export interface GameState {
   sales?: Record<Item,number>;
   materialLedger?: MaterialLedger;
   totalRevenueCents?:number; totalCostCents?:number;
-  technologies?: Record<"coal_extraction"|"mechanical_components"|"advanced_smelting"|"resource_surveying"|"circuit_fabrication"|"industrial_power",boolean>;
+  technologies?: Record<"coal_extraction"|"mechanical_components"|"advanced_smelting",boolean> & Partial<Record<"resource_surveying"|"circuit_fabrication"|"industrial_power",boolean>>;
 }
 export const DEPOSITS = [{x:3,y:5},{x:2,y:2},{x:2,y:9}] as const;
 export const COAL_DEPOSITS = [{x:7,y:9},{x:5,y:9}] as const;

@@ -119,7 +119,7 @@ describe("v0.2 deterministic economy: 600-tick warm-up and 240-tick measurement 
           `Conservation failed for ${item}: ${JSON.stringify(l)}`).toBe(physical[item]);
       }
     }
-  });
+  },15000); // Four 1,100-tick fixtures; keep all numerical conservation assertions unchanged.
   it("explicit demolition accounts for all in-flight and buffered materials",()=>{
     let state=setup(gears);
     state=runTicks(state,125);

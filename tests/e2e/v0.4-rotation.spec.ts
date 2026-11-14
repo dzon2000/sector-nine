@@ -42,6 +42,7 @@ test("WP4 #5 short drag, escape, cancellation, terminal and adjacent targets",as
  await expect(page.getByTestId("selected-facing")).toHaveText("E");
  await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(p.x-45,p.y);
  await page.keyboard.press("Escape");await page.mouse.up();
+ await page.mouse.click(p.x,p.y); // Escape clears selection but does not mutate orientation
  await expect(page.getByTestId("selected-facing")).toHaveText("E");
  const terminal=await center(page,10,5);await drag(page,terminal,-40,0);
  await page.mouse.click(p.x,p.y);await expect(page.getByTestId("selected-facing")).toHaveText("E");

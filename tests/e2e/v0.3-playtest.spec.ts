@@ -96,7 +96,9 @@ test("WP5 opt-in local playtest records only real commands, reloads and exports 
   await page.getByTestId("start-playtest").click();
   await page.getByRole("radio",{name:"Planning / routing"}).check();
   await page.getByRole("button",{name:/Conveyor/}).click();
-  await page.getByTestId("factory-board").locator("canvas").click({position:{x:4*44+22,y:5*44+22}});
+  const board=page.getByTestId("factory-board");
+  const bounds=await board.boundingBox();if(!bounds)throw Error("Board absent");
+  await board.locator("canvas").click({position:{x:4.5*bounds.width/12,y:5.5*bounds.height/12}});
   await page.locator(".inspector").getByRole("button",{name:"Rotate clockwise"}).click();
   await page.locator(".inspector").getByRole("button",{name:"Demolish",exact:true}).click();
   await expect(page.getByTestId("playtest-panel")).toContainText("placed 1, rotated 1, demolished 1, researched 0");

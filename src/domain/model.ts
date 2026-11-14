@@ -35,7 +35,7 @@ export const RECIPES: Record<RecipeId,Recipe> = {
   steel:{input:{iron_ingot:2,coal:1},output:"steel",durationTicks:8,operatingCostCents:350},
   circuit:{input:{copper_ore:2,silicon:1},output:"circuit",durationTicks:6,operatingCostCents:300}
 };
-export type Kind = "iron_mine" | "coal_mine" | "furnace" | "assembler" | "advanced_furnace" | "conveyor" | "sell_terminal" | "copper_mine" | "silicon_extractor" | "circuit_fabricator" | "coal_generator";
+export type Kind = "iron_mine" | "coal_mine" | "furnace" | "assembler" | "advanced_furnace" | "conveyor" | "sell_terminal" | "copper_mine" | "silicon_extractor" | "circuit_fabricator" | "coal_generator" | "splitter";
 export type Status = "working" | "waiting_for_inputs" | "blocked_output" | "paused";
 export type MissionId = "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "DONE";
 export interface Entity {
@@ -45,6 +45,8 @@ export interface Entity {
   inputBuffers?: Inventory; reservedInputs?: Inventory;
   /** Generator stored powered ticks, charged only after physical fuel intake. */
   fuelTicksRemaining?: number;
+  /** Experimental splitter outlet cursor: 0=forward, 1=clockwise. */
+  splitterNext?: 0|1;
 }
 export interface Accounting { tick: number; revenueCents: number; costCents: number; }
 export type DiagnosticStatus = "working"|"input_starved"|"output_blocked"|"idle";
@@ -102,6 +104,7 @@ export const DEFINITIONS = {
   advanced_furnace: { price:18000, label:"Advanced Furnace" },
   furnace: { price:8000, label:"Furnace" },
   conveyor: { price:500, label:"Conveyor" },
+  splitter: {price:900,label:"Splitter (experimental)"},
   sell_terminal: { price:0, label:"Sales Terminal" },
   copper_mine: {price:7500,label:"Copper Mine"},
   silicon_extractor: {price:8500,label:"Silicon Extractor"},

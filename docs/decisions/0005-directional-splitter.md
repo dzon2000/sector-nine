@@ -25,21 +25,21 @@ With one candidate copper deposit extracting one ore per three ticks, total copp
 
 The other new-system approved parameters are recorded in [v0.4 specification](../specifications/v0.4.md); former candidates are recorded in [WP0](../validation/v0.4-wp0-baseline.md): silicon 1/4 ticks, circuit 2 copper + 1 silicon / 6 powered processing ticks, generator 1 unit/tick, 12 ticks/coal, copper/silicon sites (8,2)/(8,9), original terminal (10,5), candidate new equipment and research fees, and M8/M9/M10 thresholds. The complete Option A parameter set and deposit coordinates are frozen by owner approval.
 
-## Physical validation requirements before sign-off
+## Physical validation evidence accepted at sign-off
 
 1. Two real circuit fabricators, two coal-fed generators, split copper and silicon feeds, and a real steel line must fit 12×12 with no overlapping entities, old-deposit edits, injections or terminal bypass.
 2. Once warmed, a complete 60-tick trailing window must have >=11 physical circuit sales, >=5 steel sales and >=57 covered *nonzero demand* ticks, **for >=60 consecutive evaluated ticks**; zero demand never counts.
 3. Both outputs are audited, alternating when both available, deterministic after save/reload and object reorder, and conserve every material item.
 4. One fabricator, one generator, fuel-starved, steel-less, and inactive-power/stockpile-only variants must fail qualification.
 5. Rebuild the expanded layout from an engine-derived v0.3 DONE factory with actual paid commands and a separately labeled *projected* fee debit for the three WP2 research actions that do not yet exist. No 1,000,000-cent isolated fixture counts as economic evidence.
-6. Explicit owner approval is required to move from experimental prototype to normative splitter, copper rate, price, coordinates and the original M8–M10 numerical targets. Confirm a separate answer for the stockpile anti-exploit policy.
+6. Product owner approved splitter, copper rate, price, coordinates, retained M8–M10 sales/coverage targets **and** the new M10 physical-production guard on 2026-11-14. Headless WP2 implementation follows this accepted contract.
 
 ## Trade-offs and open questions
 
 - A 12×12 physically viable design may be expensive in board operations; one validated proof requires roughly 73 post-demolition placements. It is not necessarily an enjoyable UI experience.
 - The prototype preserves conservative transfer rules for blocked outputs; more sophisticated predictive chain scheduling is out of scope.
-- Current WP1 `place()` does not enforce future Chapter II unlocks. Propose exposing Splitter after **Circuit Fabrication** in WP2, but this is a separate progression decision, not implemented.
-- **Confirmed:** four pre-activation circuits routed during M10 plus one real powered under-capacity fabricator yield **63 consecutive sales-only qualifying windows**. An additional **new-mission-only circuit production-window condition (>=11 newly produced circuits/60 active ticks)** eliminates the bypass (0 qualifying windows) while preserving 241 qualifying windows for the legitimate dual-fabricator factory, including the funded recovery. This is test-only WP3 validation, **approved for WP2, but not yet implemented in the mission engine**. Do not change old mission rules.
+- Splitter is unlocked by **Circuit Fabrication**, together with the fabricator; WP2 enforces the paid prerequisite in headless construction commands. User-facing research controls remain WP4.
+- **Confirmed:** four pre-activation circuits routed during M10 plus one real powered under-capacity fabricator yield **63 consecutive sales-only qualifying windows**. An additional **new-mission-only circuit production-window condition (>=11 newly produced circuits/60 active ticks)** eliminates the bypass (0 qualifying windows) while preserving 241 qualifying windows for the legitimate dual-fabricator factory, including the funded recovery. The owner approved this addition for WP2 on 2026-11-14. WP2 implements it through authoritative physical production-event history; UI remains separately gated. Do not change old mission rules.
 - The new kind is mapped to a placeholder renderer glyph solely to keep the TypeScript build exhaustive; WP4/WP5 own actual interaction and presentation.
 
 **Disposition:** Approved numerical/mechanical contract. WP2 authorized; keep old economy changes, map expansion, WP4+, merges and release blocked.

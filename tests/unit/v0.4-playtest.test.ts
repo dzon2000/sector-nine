@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {createGame} from "../../src/domain/model";
-import {startPlaytest,advancePlaytest,annotatePlaytest,resumePlaytest,finishPlaytest,buildPlaytestReport,isPlaytestSession} from "../../src/ui/playtest";
+import {startPlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,resumePlaytest,finishPlaytest,buildPlaytestReport,isPlaytestSession} from "../../src/ui/playtest";
 import {resolveBuildCommit,trustedCiBuildCommit} from "../../src/ui/buildProvenance";
 const SHA="b".repeat(40);
 const game=()=>{const s=createGame();s.paused=false;s.introOpen=false;return s;};
@@ -79,4 +79,16 @@ describe("WP5 provenance, player-declared waiting and power samples — RED",()=
    }
    expect(isPlaytestSession({...s,waitingForMissionMs:-1})).toBe(false);
  });
+ it("records new copper/silicon deposit use for reproducible Chapter II layouts",()=>{
+   const s=game();
+   const basic={direction:"E" as const,output:null,belt:null,oreInput:0,cycle:null,
+     inputBuffers:{},reservedInputs:{},status:"working" as const};
+   s.entities.push({id:2,kind:"copper_mine",x:8,y:2,...basic});
+   const begun=startPlaytest(s,0,SHA);
+   expect(begun.usedDeposits).toContain("copper:(8,2)");
+   const next=recordPlaytestCommand(begun,{kind:"place",entityKind:"silicon_extractor",x:8,y:9},1);
+   expect(next.usedDeposits).toEqual(["copper:(8,2)","silicon:(8,9)"]);
+   expect(buildPlaytestReport(next).usedDeposits).toEqual(next.usedDeposits);
+ });
+
 });

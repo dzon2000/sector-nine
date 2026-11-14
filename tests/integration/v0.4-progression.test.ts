@@ -27,7 +27,9 @@ import {recordChapterTick as recordChapterTickImported} from "../../src/game/cha
 
 describe("v0.4 WP2 red-first chapter & migration",()=>{
  it("opens Chapter II explicitly, preserving a completed foundry save and all physical stock",()=>{
-   const original=done();original.balanceCents=71321;original.paused=true;
+   let original=done();original.balanceCents=71321;original.paused=true;
+   const existing=place(original,"conveyor",8,2,"E");
+   expect(existing.ok).toBe(true);original=existing.state;
    const activated=beginChapterII(original);
    expect(activated.ok).toBe(true);
    const s=activated.state;
@@ -36,6 +38,10 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
    expect(s.mission.activeId).toBe("M8");
    expect(s.chapterII).toMatchObject({foundryCompleted:true,started:true,completed:false});
    expect(s.balanceCents).toBe(original.balanceCents);
+   expect(s.copperDeposits).toEqual([{x:8,y:2}]);
+   expect(s.siliconDeposits).toEqual([{x:8,y:9}]);
+   expect(s.entities.find(e=>e.x===8&&e.y===2)?.kind).toBe("conveyor");
+   expect(place(s,"copper_mine",8,2,"E").ok).toBe(false);
    expect(s.entities).toEqual(original.entities);
    expect(s.paused).toBe(true);
    expect(original.mission.activeId).toBe("DONE");

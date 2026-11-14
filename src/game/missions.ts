@@ -1,5 +1,6 @@
 import {stats,type GameState} from "../domain/model";
 import {activateMissionMetrics,missionWindow} from "./missionMetrics";
+import {chapterWindow,newChapterMetrics} from "./chapterTwo";
 export const MISSIONS={
  M1:{title:"Restore Extraction",hint:"Build an iron mine on a highlighted deposit. Rotate toward a delivery route and run the simulation."},
  M2:{title:"First Delivery",hint:"Deliver 10 iron ore to the terminal. Place conveyors, then rotate with R so their arrows lead toward the terminal."},
@@ -8,6 +9,9 @@ export const MISSIONS={
  M5:{title:"Below the Surface",hint:"Open Technology, purchase Coal Extraction (80 Cr), then mine at (7,9) or (5,9) and deliver 10 coal to the terminal."},
  M6:{title:"Mechanical Precision",hint:"Unlock Mechanical Components (120 Cr). Supply an assembler with two iron ingots per gear. Deliver at least 9 gears in EVERY trailing 60 active ticks for 120 consecutive ticks. Inspect input-starved machines and blocked outputs; one furnace may not provide enough ingots."},
  M7:{title:"The Old Foundry",hint:"Unlock Advanced Smelting (180 Cr). Keep TWO streams selling together: at least 7 gears, 7 steel and 175.00 Cr operating profit in every trailing 60 active ticks for 120 consecutive ticks. Steel needs 2 ingots plus 1 coal. Inspect starvation, blocked outputs and the mission HUD; keep a profitable route while rebuilding."},
+ M8:{title:"Unregistered Materials",hint:"Research Resource Surveying and sell 10 copper ore plus 10 silicon after Chapter II activation."},
+ M9:{title:"A Circuit in the Dark",hint:"Unlock Circuit Fabrication and Industrial Power, then sell 4 physically produced circuits."},
+ M10:{title:"Signal Integrity",hint:"Sustain 11 circuit sales, 11 circuit completions, 5 steel sales and 57 fully powered demand ticks per rolling 60, for 60 consecutive windows."},
  DONE:{title:"Foundry Restored",hint:"Steel production confirmed. Prometheus archive: sealed engineering records remain. Continue optimizing in sandbox mode."}
 } as const;
 export function updateMission(s:GameState):string|null {
@@ -59,7 +63,38 @@ export function updateMission(s:GameState):string|null {
     }
     m.activeId="DONE";
     if(s.missionRuleVersion===3)s.missionMetrics=null;
+    s.chapterII??={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};
+    s.chapterII.foundryCompleted=true;
     return "Sustained foundry operations confirmed. A sealed Prometheus engineering archive awaits future investigation.";
+  }
+  if(m.activeId==="M8" && s.missionRuleVersion===4 && s.chapterII?.started){
+    const metrics=s.chapterII.metrics;
+    if(s.technologies?.resource_surveying && metrics &&
+      (metrics.totals?.copper_ore??0)>=10&&(metrics.totals?.silicon??0)>=10){
+      m.activeId="M9";s.chapterII.metrics=newChapterMetrics(s.tick);
+      return "Copper and silicon verified. Prometheus circuit records recovered.";
+    }
+  }
+  if(m.activeId==="M9" && s.missionRuleVersion===4 && s.chapterII?.started){
+    const metrics=s.chapterII.metrics;
+    if(s.technologies?.circuit_fabrication && s.technologies?.industrial_power &&
+      metrics && (metrics.totals?.circuit??0)>=4){
+      m.activeId="M10";s.chapterII.metrics=newChapterMetrics(s.tick);
+      return "Signal recovered. Sustain powered electronics and steel throughput.";
+    }
+  }
+  if(m.activeId==="M10" && s.missionRuleVersion===4 && s.chapterII?.started){
+    const metrics=s.chapterII.metrics;
+    const window=chapterWindow(s);
+    if(!metrics||!window||metrics.lastEvaluatedTick===s.tick)return null;
+    metrics.lastEvaluatedTick=s.tick;
+    const qualifies=window.sales.circuit>=11&&window.producedCircuits>=11&&
+      window.sales.steel>=5&&window.coveredTicks>=57;
+    metrics.streakTicks=qualifies?metrics.streakTicks+1:0;
+    if(metrics.streakTicks>=60){
+      m.activeId="DONE";s.chapterII.completed=true;s.chapterII.metrics=null;
+      return "Signal integrity confirmed. Prometheus archive: Sublevel 03.";
+    }
   }
   return null;
 }

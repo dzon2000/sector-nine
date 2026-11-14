@@ -30,7 +30,7 @@ test("WP4 Chapter II starts only by explicit action, reveals resources and paid 
  await page.reload();
  await expect(page.getByTestId("begin-chapter-ii")).toBeVisible();
  await page.getByTestId("begin-chapter-ii").click();
- await expect(page.getByText("Unregistered Materials")).toBeVisible();
+ await expect(page.getByRole("heading",{name:"Unregistered Materials"})).toBeVisible();
  await expect(page.getByTestId("chapter-objectives")).toContainText("Copper sold: 0/10");
  await expect(page.getByTestId("technology-resource_surveying")).toContainText("Available");
  await expect(page.getByTestId("technology-circuit_fabrication")).toContainText("Locked");

@@ -80,6 +80,7 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
  it("M8 and M9 only count physically sold, post-activation products and require paid research",()=>{
    let s=beginChapterII(done()).state;s.balanceCents=100000;
    s=purchaseTechnology(s,"resource_surveying").state;
+   expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s); // active M8
    const old={...s.sales!};old.copper_ore=999;old.silicon=999;s.sales=old;
    injectEvents(s,[{circuit:0}]);
    expect(s.mission.activeId).toBe("M8");
@@ -89,13 +90,18 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
      s.tick++;recordChapterTick(s,sales({copper_ore:1,silicon:1}),0,false);updateMission(s);
    }
    expect(s.mission.activeId).toBe("M9");
+   expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s); // active M9
    expect(technologyStatus(s,"circuit_fabrication").status).toBe("available");
    s=purchaseTechnology(s,"circuit_fabrication").state;
    s=purchaseTechnology(s,"industrial_power").state;
    expect(s.balanceCents).toBe(70000);
+   s=validateSave(JSON.parse(JSON.stringify(s)));
+   expect(purchaseTechnology(s,"circuit_fabrication").ok).toBe(false);
+   expect(purchaseTechnology(s,"industrial_power").ok).toBe(false);
    for(let i=0;i<4;i++){s.tick++;recordChapterTick(s,sales({circuit:1}),1,true);updateMission(s);}
    expect(s.mission.activeId).toBe("M10");
    expect(s.chapterII?.metrics?.activatedAtTick).toBe(s.tick);
+   expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s); // active M10
  });
  it("M10 requires full post-activation rolling windows, 11 produced AND sold, steel, 57 covered demand ticks, 60-streak",()=>{
    let s=beginChapterII(done()).state;

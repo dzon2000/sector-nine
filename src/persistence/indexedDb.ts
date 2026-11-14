@@ -1,4 +1,4 @@
-import {COAL_DEPOSITS,ITEMS,emptyLedger,emptySales,stockOnHand,recipeFor,type GameState,type Item} from "../domain/model";
+import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,emptyLedger,emptySales,stockOnHand,recipeFor,type GameState,type Item} from "../domain/model";
 const DATABASE="sector-nine-v0.1";
 const STORE="snapshots";
 function openDb():Promise<IDBDatabase>{
@@ -19,24 +19,32 @@ function transaction<T>(db:IDBDatabase,mode:IDBTransactionMode,action:(store:IDB
 export function validateSave(value:unknown):GameState{
   if(!value||typeof value!=="object")throw Error("Save is missing or corrupt.");
   const s=value as GameState;
-  if(s.schemaVersion!==1&&s.schemaVersion!==2&&s.schemaVersion!==3)throw Error("Unsupported save schema. Export or reset your save manually.");
+  if(s.schemaVersion!==1&&s.schemaVersion!==2&&s.schemaVersion!==3&&s.schemaVersion!==4)throw Error("Unsupported save schema. Export or reset your save manually.");
   if(s.width!==12||s.height!==12||!Number.isSafeInteger(s.tick)||s.tick<0||
     !Number.isSafeInteger(s.balanceCents)||!Array.isArray(s.entities)||!Array.isArray(s.rollingEvents)||
     (!s.arbiters||typeof s.arbiters!=="object"||Array.isArray(s.arbiters)||Object.entries(s.arbiters).some(([key,value])=>!Number.isSafeInteger(Number(key))||Number(key)<1||!Number.isSafeInteger(value)||value<0))||!s.mission||!Number.isSafeInteger(s.nextId)||
     !Number.isSafeInteger(s.totalOreProduced)||!Number.isSafeInteger(s.totalIngotProduced)||
     !Number.isSafeInteger(s.mission.soldOre)||!Number.isSafeInteger(s.mission.soldIngot)||
-    !Number.isSafeInteger(s.mission.profitStreakTicks)||!["M1","M2","M3","M4","M5","M6","M7","DONE"].includes(s.mission.activeId)||
+    !Number.isSafeInteger(s.mission.profitStreakTicks)||!["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(s.mission.activeId)||
     typeof s.paused!=="boolean"||typeof s.introSeen!=="boolean"||typeof s.introOpen!=="boolean"||
     typeof s.tutorialEnabled!=="boolean"||s.rollingEvents.length>60)throw Error("Save validation failed. Your data has not been overwritten.");
   const spots=new Set<string>();
   for(const e of s.entities){
     if(!Number.isSafeInteger(e.id)||!Number.isInteger(e.x)||!Number.isInteger(e.y)||
       e.x<0||e.x>=12||e.y<0||e.y>=12||!["N","E","S","W"].includes(e.direction)||
-      !["iron_mine","coal_mine","furnace","assembler","advanced_furnace","conveyor","sell_terminal"].includes(e.kind)||
+      !["iron_mine","coal_mine","furnace","assembler","advanced_furnace","conveyor","sell_terminal","copper_mine","silicon_extractor","circuit_fabricator","coal_generator","splitter"].includes(e.kind)||
       !Number.isInteger(e.oreInput)||e.oreInput<0||e.oreInput>4||
       (e.cycle!==null&&(!Number.isInteger(e.cycle)||e.cycle<0))||
-      ![null,"iron_ore","iron_ingot","coal","gear","steel"].includes(e.output)||![null,"iron_ore","iron_ingot","coal","gear","steel"].includes(e.belt)
+      !(e.output===null||ITEMS.includes(e.output))||!(e.belt===null||ITEMS.includes(e.belt))
     )throw Error("Invalid entity in save. Data preserved.");
+    if(e.kind==="splitter"){
+      if(e.splitterNext!==0&&e.splitterNext!==1)
+        throw Error("Invalid splitter arbitration cursor. Save preserved.");
+      if(e.output!==null||e.oreInput!==0||e.cycle!==null||
+        Object.keys(e.inputBuffers??{}).length||Object.keys(e.reservedInputs??{}).length)
+        throw Error("Invalid splitter material state. Save preserved.");
+    }else if(e.splitterNext!==undefined)
+      throw Error("Invalid non-splitter cursor. Save preserved.");
     const key=e.x+","+e.y;if(spots.has(key))throw Error("Overlapping entities in save. Data preserved.");spots.add(key);
   }
   if(s.entities.filter(e=>e.kind==="sell_terminal"&&e.x===10&&e.y===5).length!==1)
@@ -69,7 +77,7 @@ export function validateSave(value:unknown):GameState{
     const opening=stockOnHand(n.entities);
     for(const item of ITEMS)n.materialLedger![item].opening=opening[item];
   }
-  if(n.schemaVersion===2||n.schemaVersion===3){
+  if(n.schemaVersion===2||n.schemaVersion===3||n.schemaVersion===4){
     // Earlier v0.2 development snapshots predate the Foundry interlude fields.
     // Upgrade only absent fields; explicit invalid values are still rejected.
     if(n.foundryStorySeen===undefined){
@@ -79,13 +87,18 @@ export function validateSave(value:unknown):GameState{
     if(n.mission.soldCoal===undefined)n.mission.soldCoal=0;
     if(n.mission.soldGear===undefined)n.mission.soldGear=0;
     if(n.mission.soldSteel===undefined)n.mission.soldSteel=0;
-    const technologyNames=["coal_extraction","mechanical_components","advanced_smelting"];
+    const legacyNames=["coal_extraction","mechanical_components","advanced_smelting"];
+    const extraNames=["resource_surveying","circuit_fabrication","industrial_power"];
+    const technologyNames=[...legacyNames,...extraNames];
     const tech=n.technologies;
+    const keys=tech&&typeof tech==="object"&&!Array.isArray(tech)?Object.keys(tech):[];
     if(!tech||typeof tech!=="object"||Array.isArray(tech)||
-       Object.keys(tech).length!==technologyNames.length||
-       Object.keys(tech).some(key=>!technologyNames.includes(key))||
-       technologyNames.some(key=>typeof tech[key as keyof typeof tech]!=="boolean"))
-      throw Error("Invalid v2 technology state. Data preserved.");
+       !(keys.length===3&&n.schemaVersion!==4 || keys.length===6)||
+       (n.schemaVersion===4&&keys.length!==6)||
+       keys.some(key=>!technologyNames.includes(key))||
+       legacyNames.some(key=>typeof tech[key as keyof typeof tech]!=="boolean")||
+       extraNames.some(key=>(n.schemaVersion===4||key in tech)&&typeof tech[key as keyof typeof tech]!=="boolean"))
+      throw Error("Invalid v2/v4 technology state. Data preserved.");
     if(!Array.isArray(n.coalDeposits)||n.coalDeposits.length!==COAL_DEPOSITS.length||
        n.coalDeposits.some((d,i)=>!d||typeof d!=="object"||Object.keys(d).length!==2||
          d.x!==COAL_DEPOSITS[i].x||d.y!==COAL_DEPOSITS[i].y))
@@ -95,6 +108,18 @@ export function validateSave(value:unknown):GameState{
        !Number.isSafeInteger(n.mission.soldGear)||n.mission.soldGear<0||
        !Number.isSafeInteger(n.mission.soldSteel)||n.mission.soldSteel<0)
       throw Error("Invalid v2 mission or narrative state. Data preserved.");
+    // WP1 additive engine fields: zero-fill only newly introduced item keys for
+    // v1-v3 snapshots. Existing sales/stock are not interpreted as new sales.
+    const electronics=["copper_ore","silicon","circuit"] as const;
+    if(n.sales&&n.materialLedger){
+      for(const item of electronics){
+        if(!(item in n.sales))n.sales[item]=0;
+        if(!(item in n.materialLedger))n.materialLedger[item]={opening:0,produced:0,consumed:0,sold:0,demolished:0,burned:0};
+      }
+      for(const item of ITEMS)if(n.materialLedger[item]&&n.materialLedger[item].burned===undefined){
+        n.materialLedger[item].burned=0;
+      }
+    }
     if(!n.sales||typeof n.sales!=="object"||Array.isArray(n.sales)||
        !n.materialLedger||typeof n.materialLedger!=="object"||Array.isArray(n.materialLedger)||
        !Number.isSafeInteger(n.totalRevenueCents)||!Number.isSafeInteger(n.totalCostCents)||
@@ -111,9 +136,9 @@ export function validateSave(value:unknown):GameState{
       if(!Number.isSafeInteger(n.sales[item])||n.sales[item]<0)throw Error("Invalid v2 sales history. Data preserved.");
       const ledger=n.materialLedger[item];
       if(!ledger||typeof ledger!=="object"||Array.isArray(ledger))throw Error("Invalid v2 material audit. Data preserved.");
-      const fields=["opening","produced","consumed","sold","demolished"] as const;
-      if(ledger.opening===undefined&&Object.keys(ledger).length===4){
-        const opening=stock[item]-ledger.produced+ledger.consumed+ledger.sold+ledger.demolished;
+      const fields=["opening","produced","consumed","sold","demolished","burned"] as const;
+      if(ledger.opening===undefined&&Object.keys(ledger).length===5){
+        const opening=stock[item]-ledger.produced+ledger.consumed+ledger.sold+ledger.demolished+(ledger.burned??0);
         ledger.opening=opening;
       }
       if(Object.keys(ledger).length!==fields.length||Object.keys(ledger).some(key=>!fields.includes(key as typeof fields[number])))
@@ -129,7 +154,7 @@ export function validateSave(value:unknown):GameState{
         if(!inventory||typeof inventory!=="object"||Array.isArray(inventory))
           throw Error("Invalid v2 inventory. Data preserved.");
         for(const [item,quantity] of Object.entries(inventory)){
-          if(!ITEMS.includes(item as Item)||!recipe?.input[item as Item]||
+          if(!ITEMS.includes(item as Item)||!(recipe?.input[item as Item]||(e.kind==="coal_generator"&&inventory===e.inputBuffers&&item==="coal"))||
              !Number.isSafeInteger(quantity)||quantity<0||quantity>4)
             throw Error("Invalid v2 inventory type or quantity. Data preserved.");
         }
@@ -153,6 +178,7 @@ export function validateSave(value:unknown):GameState{
         throw Error("Invalid v3 mission metrics. Data preserved.");
       for(let i=0;i<metrics.salesTicks.length;i++){
         const event=metrics.salesTicks[i];
+        if(event?.sales&&typeof event.sales==="object")for(const item of ["copper_ore","silicon","circuit"] as const)if(!(item in event.sales))event.sales[item]=0;
         if(!event||typeof event!=="object"||!Number.isSafeInteger(event.tick)||
            event.tick<=metrics.activatedAtTick||event.tick>n.tick||
            (i>0&&event.tick!==metrics.salesTicks[i-1].tick+1)||
@@ -174,6 +200,66 @@ export function validateSave(value:unknown):GameState{
     if(n.missionRuleVersion===3 && (n.mission.activeId==="M6"||n.mission.activeId==="M7") &&
       metrics==null)
       throw Error("Active v3 mission metrics are missing. Save preserved.");
+  }else if(n.schemaVersion===4){
+    if(n.missionRuleVersion!==4 || !n.chapterII ||
+      typeof n.chapterII!=="object" || Array.isArray(n.chapterII) ||
+      Object.keys(n.chapterII).length!==5 ||
+      typeof n.chapterII.foundryCompleted!=="boolean" ||
+      typeof n.chapterII.started!=="boolean" ||
+      typeof n.chapterII.completed!=="boolean" ||
+      typeof n.chapterII.storySeen!=="boolean" ||
+      n.chapterII.foundryCompleted!==true || n.chapterII.started!==true ||
+      !["M8","M9","M10","DONE"].includes(n.mission.activeId) ||
+      n.missionMetrics!==null ||
+      (n.chapterII.completed !== (n.mission.activeId==="DONE")))
+      throw Error("Invalid v4 Chapter II or mission rules. Save preserved.");
+    for(const [deposits,reference,label] of [
+      [n.copperDeposits,COPPER_DEPOSITS,"copper"],
+      [n.siliconDeposits,SILICON_DEPOSITS,"silicon"]
+    ] as const){
+      if(!Array.isArray(deposits)||deposits.length!==reference.length||
+        deposits.some((d,i)=>!d||typeof d!=="object"||
+          Object.keys(d).length!==2||d.x!==reference[i].x||d.y!==reference[i].y))
+        throw Error("Invalid v4 "+label+" deposit metadata. Save preserved.");
+    }
+    if(["M9","M10","DONE"].includes(n.mission.activeId) &&
+       n.technologies?.resource_surveying!==true)
+      throw Error("Invalid v4 Chapter II research history. Save preserved.");
+    if(["M10","DONE"].includes(n.mission.activeId) &&
+       (n.technologies?.circuit_fabrication!==true||
+        n.technologies?.industrial_power!==true))
+      throw Error("Invalid v4 Chapter II research history. Save preserved.");
+    const metrics=n.chapterII.metrics;
+    if(n.mission.activeId==="DONE"){
+      if(metrics!==null)throw Error("Completed v4 mission cannot retain active metrics. Save preserved.");
+    }else{
+      if(!metrics || typeof metrics!=="object" || Array.isArray(metrics) ||
+        Object.keys(metrics).some(key=>!["activatedAtTick","salesTicks","streakTicks","totals","lastEvaluatedTick"].includes(key)) ||
+        !Number.isSafeInteger(metrics.activatedAtTick) || metrics.activatedAtTick<0 || metrics.activatedAtTick>n.tick ||
+        !Number.isSafeInteger(metrics.streakTicks) || metrics.streakTicks<0 || metrics.streakTicks>60 ||
+        (metrics.lastEvaluatedTick!==undefined && (!Number.isSafeInteger(metrics.lastEvaluatedTick) ||
+          metrics.lastEvaluatedTick<=metrics.activatedAtTick || metrics.lastEvaluatedTick>n.tick)) ||
+        !Array.isArray(metrics.salesTicks) || metrics.salesTicks.length>60 ||
+        !metrics.totals || typeof metrics.totals!=="object" || Array.isArray(metrics.totals) ||
+        Object.keys(metrics.totals).length!==ITEMS.length ||
+        ITEMS.some(item=>!Number.isSafeInteger(metrics.totals![item]) || metrics.totals![item]<0))
+        throw Error("Invalid v4 mission metrics. Save preserved.");
+      for(let i=0;i<metrics.salesTicks.length;i++){
+        const e=metrics.salesTicks[i];
+        if(!e || typeof e!=="object" || Array.isArray(e) ||
+          Object.keys(e).length!==4 || !Number.isSafeInteger(e.tick) ||
+          e.tick<=metrics.activatedAtTick || e.tick>n.tick ||
+          (i>0 && e.tick!==metrics.salesTicks[i-1].tick+1) ||
+          !e.sales || typeof e.sales!=="object" || Array.isArray(e.sales) ||
+          Object.keys(e.sales).length!==ITEMS.length ||
+          ITEMS.some(item=>!Number.isSafeInteger(e.sales[item])||e.sales[item]<0) ||
+          !Number.isSafeInteger(e.producedCircuits) || e.producedCircuits<0 ||
+          typeof e.demandCovered!=="boolean")
+          throw Error("Invalid v4 mission sale/production history. Save preserved.");
+      }
+      if(metrics.salesTicks.length && metrics.salesTicks.at(-1)!.tick!==n.tick)
+        throw Error("Stale v4 mission window. Save preserved.");
+    }
   }else{
     // v1 already upgraded to the v2 shape; keep active v2 M6/M7 cumulative rules.
     n.missionRuleVersion=["M6","M7"].includes(n.mission.activeId)?2:3;
@@ -189,6 +275,7 @@ export function validateSave(value:unknown):GameState{
   const diagnosticEntities=new Set(n.entities.map(e=>String(e.id)));
   for(let i=0;i<history.samples.length;i++){
     const sample=history.samples[i];
+    if(sample?.terminalSales&&typeof sample.terminalSales==="object")for(const item of ["copper_ore","silicon","circuit"] as const)if(!(item in sample.terminalSales))sample.terminalSales[item]=0;
     if(!sample||typeof sample!=="object"||Array.isArray(sample)||
        Object.keys(sample).length!==3||!Number.isSafeInteger(sample.tick)||
        sample.tick<1||sample.tick>n.tick||
@@ -212,6 +299,47 @@ export function validateSave(value:unknown):GameState{
   }
   if(history.samples.length&&history.samples.at(-1)!.tick!==n.tick)
     throw Error("Stale v3 diagnostic history. Data preserved.");
+  // WP1 headless power snapshots are additive; full v4 schema migration is WP2.
+  const safe=(v:unknown):v is number=>Number.isSafeInteger(v)&&(v as number)>=0;
+  for(const entity of n.entities){
+    if(entity.kind==="coal_generator"){
+      if(!safe(entity.fuelTicksRemaining)||entity.fuelTicksRemaining>12||
+        !entity.inputBuffers||Object.keys(entity.inputBuffers).some(item=>item!=="coal"))
+        throw Error("Invalid generator fuel state. Save preserved.");
+    }else if(entity.fuelTicksRemaining!==undefined){
+      throw Error("Invalid non-generator fuel state. Save preserved.");
+    }
+  }
+  if(n.entities.some(e=>e.kind==="coal_generator"||e.kind==="circuit_fabricator")&&!n.power)
+    throw Error("Missing power allocation state. Save preserved.");
+  if(n.power!==undefined){
+    const p=n.power;
+    if(!p||typeof p!=="object"||
+       !safe(p.tick)||p.tick!==n.tick||
+       !safe(p.supply)||!safe(p.demand)||!safe(p.served)||
+       !safe(p.unpoweredProcessingTicks)||!safe(p.coalBurned)||
+       !safe(p.lastServedFabricatorId)||p.lastServedFabricatorId>=n.nextId||
+       typeof p.demandCovered!=="boolean"||
+       p.served>p.demand||p.served>p.supply||
+       p.unpoweredProcessingTicks!==p.demand-p.served||
+       p.demandCovered!==(p.demand>0&&p.demand===p.served)||
+       !Array.isArray(p.history)||p.history.length>60)
+      throw Error("Invalid power allocation state. Save preserved.");
+    for(let i=0;i<p.history.length;i++){
+      const t=p.history[i];
+      if(!t||!safe(t.tick)||t.tick<1||t.tick>n.tick||
+         (i>0&&t.tick!==p.history[i-1].tick+1)||
+         !safe(t.supply)||!safe(t.demand)||!safe(t.served)||
+         !safe(t.unpoweredProcessingTicks)||!safe(t.coalBurned)||
+         typeof t.demandCovered!=="boolean"||
+         t.served>t.demand||t.served>t.supply||
+         t.unpoweredProcessingTicks!==t.demand-t.served||
+         t.demandCovered!==(t.demand>0&&t.demand===t.served))
+        throw Error("Invalid power tick history. Save preserved.");
+    }
+    if(p.history.length && p.history[p.history.length-1].tick!==n.tick)
+      throw Error("Stale power history. Save preserved.");
+  }
   return n;
 }
 // All writes and deletes share one queue. Capture snapshots before enqueueing.

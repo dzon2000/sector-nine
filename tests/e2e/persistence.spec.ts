@@ -2,7 +2,8 @@ import {test,expect,type Page} from "@playwright/test";
 async function tile(page:Page,x:number,y:number){
  const board=page.getByTestId("factory-board");
  await expect(board.locator("canvas")).toBeVisible();
- await board.locator("canvas").click({position:{x:x*44+22,y:y*44+22}});
+ const bounds=await board.boundingBox();if(!bounds)throw Error("Board not visible");
+ await board.locator("canvas").click({position:{x:(x+.5)*bounds.width/12,y:(y+.5)*bounds.height/12}});
 }
 test("AC13 rapid construction, reload and reset never resurrect old state",async({page})=>{
  await page.goto("/");

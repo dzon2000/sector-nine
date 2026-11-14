@@ -1,10 +1,13 @@
 import {Fragment,useCallback,useEffect,useRef,useState} from "react";
-import {begin,place,remove,reset,setPause,turn} from "../game/commands";
+import {begin,place,remove,reset,setPause,turn,face} from "../game/commands";
 import {MISSIONS} from "../game/missions";
 import {entityDiagnostics,terminalDiagnostics,diagnosticHint} from "../game/diagnostics";
 import {missionWindow} from "../game/missionMetrics";
-import {TECHNOLOGIES,TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type TechnologyId} from "../game/technologies";
-import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
+import {beginChapterII,chapterWindow} from "../game/chapterTwo";
+import {CHAPTER_TRANSMISSIONS,availableTransmissions,type ChapterTransmissionId} from "../game/chapterNarrative";
+import {BUILD_COMMIT} from "./buildProvenance";
+import {TECHNOLOGIES,TECHNOLOGY_ORDER,CHAPTER_TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type AnyTechnologyId} from "../game/technologies";
+import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
 import {tick} from "../simulation/engine";
 import {loadGame,saveGame,eraseGame} from "../persistence/indexedDb";
 import {Board,type Tool} from "../rendering/Board";
@@ -31,7 +34,10 @@ export default function App(){
   const [panel,setPanel]=useState(0);
   const [help,setHelp]=useState(false);
   const [replayFoundry,setReplayFoundry]=useState(false);
+  const [transmission,setTransmission]=useState<ChapterTransmissionId|null>(null);
+  const [transmissionPage,setTransmissionPage]=useState(0);
   const [showTechnology,setShowTechnology]=useState(false);
+  const [mobilePanel,setMobilePanel]=useState<"construction"|"inspector"|null>(null);
   const [foundryPanel,setFoundryPanel]=useState(0);
   const [ready,setReady]=useState(false);
   const resetting=useRef(false);
@@ -107,6 +113,14 @@ export default function App(){
     void saveGame(s).catch(e=>setError(String(e)));
   };
   const selectedEntity=game?.entities.find(e=>e.id===selected);
+  const directRotate=(id:number,desired:Direction)=>{
+    const source=latest.current;if(!source||tool!=="select")return;
+    const entity=source.entities.find(e=>e.id===id);
+    if(!entity)return;
+    const result=face(source,id,desired);
+    if(result.ok)persist(result.state,{kind:"turn",entityKind:entity.kind,x:entity.x,y:entity.y});
+    else if(result.message!=="Facing unchanged.")setMessage(result.message);
+  };
   const rotateChoice=()=>{
     if(tool!=="select"&&tool!=="demolish")setDirection(d=>rotate(d));
     else if(selectedEntity){const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);
@@ -137,7 +151,14 @@ export default function App(){
     setMessage(result.message);if(result.ok){persist(result.state,{kind:"place",entityKind:tool,x,y});setSelected(result.state.nextId-1);}
   };
   const closeFoundry=()=>{const s=latest.current;if(!s)return;const n=structuredClone(s);n.foundryStorySeen=true;persist(n);setReplayFoundry(false);setFoundryPanel(0);};
-  const buyTechnology=(id:TechnologyId)=>{
+  const openTransmission=(id:ChapterTransmissionId)=>{setTransmission(id);setTransmissionPage(0);};
+  const closeTransmission=()=>{
+    if(transmission==="opening"&&latest.current?.chapterII?.started&&!latest.current.chapterII.storySeen){
+      const next=structuredClone(latest.current);next.chapterII!.storySeen=true;persist(next);
+    }
+    setTransmission(null);setTransmissionPage(0);
+  };
+  const buyTechnology=(id:AnyTechnologyId)=>{
     const current=latest.current;if(!current)return;
     const status=technologyStatus(current,id);
     if(status.status!=="available"||!status.affordable){setMessage(status.missing.join("; ")||"Insufficient credits.");return;}
@@ -149,11 +170,14 @@ export default function App(){
   const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)void saveGame(s).catch(e=>setError(String(e)));};
   const fresh=async()=>{if(resetting.current||!window.confirm("Factory Reset? All progress and your save will be permanently deleted."))return;
     resetting.current=true;
-    try{await eraseGame();savePlaytest(null);setShowPlaytest(false);const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+    try{await eraseGame();savePlaytest(null);setShowPlaytest(false);const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
   if(error)return <main className="error"><h1>Save error</h1><p role="alert">{error}</p><p>Stored data has not been overwritten. Export or back up your IndexedDB data before resetting.</p><button onClick={()=>void fresh()}>Factory Reset</button></main>;
   if(!game)return null;
   const kpi=stats(game),mission=MISSIONS[game.mission.activeId];
+  const narrativeAvailable=availableTransmissions(game);
+  const activeTransmission=transmission&&narrativeAvailable.includes(transmission)?CHAPTER_TRANSMISSIONS[transmission]:null;
+  const chapterCompleted=game.chapterII?.started&&game.chapterII.completed&&game.mission.activeId==="DONE";
   const legacyObjective=game.missionRuleVersion===2&&
     (game.mission.activeId==="M6"||game.mission.activeId==="M7");
   const objectiveHint=legacyObjective?
@@ -164,6 +188,11 @@ export default function App(){
   const machineCounters=selectedEntity?entityDiagnostics(game,selectedEntity.id):null;
   const terminalCounters=terminalDiagnostics(game);
   const currentWindow=missionWindow(game);
+  const chapterMetrics=game.chapterII?.metrics;
+  const chapterWindowProgress=chapterWindow(game);
+  const activeChapterMission=["M8","M9","M10"].includes(game.mission.activeId);
+  const canBeginChapterII=game.mission.activeId==="DONE"&&!game.chapterII?.started&&!game.chapterII?.completed&&
+    game.technologies?.coal_extraction&&game.technologies?.mechanical_components&&game.technologies?.advanced_smelting;
   const throughputMission=game.missionRuleVersion===3&&
     (game.mission.activeId==="M6"||game.mission.activeId==="M7");
   const isM7=game.mission.activeId==="M7";
@@ -186,9 +215,13 @@ export default function App(){
       <div className="kpis"><div>Cash<strong data-testid="cash">{money(game.balanceCents)}</strong></div><div>Revenue / min<strong>{kpi?money(kpi.revenueCents):"Collecting data"}</strong></div><div>Operating cost / min<strong>{kpi?money(kpi.costCents):"Collecting data"}</strong></div><div>Profit / min<strong data-testid="profit">{kpi?money(kpi.profitCents):"Collecting data"}</strong></div></div>
       <button onClick={()=>{const n=setPause(game,!game.paused);persist(n);}}>{game.paused?"▶ Run":"Ⅱ Pause"}</button>
     </header>
-    <div className="workspace"><aside className="palette"><h2>Construction</h2>
-      {(["select","iron_mine","furnace","coal_mine","assembler","advanced_furnace","conveyor","demolish"] as const).map(t=>{
-        const technology:Partial<Record<Kind,TechnologyId>>={coal_mine:"coal_extraction",assembler:"mechanical_components",advanced_furnace:"advanced_smelting"};
+    <div className="mobile-panel-actions" aria-label="Factory panels">
+      <button aria-expanded={mobilePanel==="construction"} onClick={()=>setMobilePanel(v=>v==="construction"?null:"construction")}>Construction panel</button>
+      <button aria-expanded={mobilePanel==="inspector"} onClick={()=>setMobilePanel(v=>v==="inspector"?null:"inspector")}>Inspector panel</button>
+    </div>
+    <div className="workspace"><aside className={"palette"+(mobilePanel==="construction"?" mobile-open":"")} aria-label="Construction and technology panel"><h2>Construction</h2>
+      {(["select","iron_mine","furnace","coal_mine","assembler","advanced_furnace","conveyor","copper_mine","silicon_extractor","circuit_fabricator","coal_generator","splitter","demolish"] as const).map(t=>{
+        const technology:Partial<Record<Kind,AnyTechnologyId>>={coal_mine:"coal_extraction",assembler:"mechanical_components",advanced_furnace:"advanced_smelting",copper_mine:"resource_surveying",silicon_extractor:"resource_surveying",circuit_fabricator:"circuit_fabrication",splitter:"circuit_fabrication",coal_generator:"industrial_power"};
         const required=t!=="select"&&t!=="demolish"?technology[t]:undefined;
         const locked=required?!game.technologies?.[required]:t==="furnace"?["M1","M2"].includes(game.mission.activeId):false;
         return <button key={t} className={tool===t?"active":""} onClick={()=>{if(locked){setMessage(required?`Unlock ${TECHNOLOGIES[required].label} in Technology first.`:"Complete M2 to construct Basic Furnace.");setShowTechnology(true);return;}setTool(t);}} aria-pressed={tool===t}>
@@ -200,7 +233,7 @@ export default function App(){
       {showTechnology&&<section id="technology-panel" className="technology-panel" aria-label="Technology unlocks">
         <h3>Technology unlocks</h3>
         <p>Meet milestones, then permanently purchase each unlock. No automatic credit deduction.</p>
-        {TECHNOLOGY_ORDER.map(id=>{
+        {[...TECHNOLOGY_ORDER,...(game.chapterII?.started?CHAPTER_TECHNOLOGY_ORDER:[])].map(id=>{
           const definition=TECHNOLOGIES[id],status=technologyStatus(game,id);
           return <article key={id} className="technology-node" data-testid={`technology-${id}`}>
             <h3>{definition.label}</h3>
@@ -213,10 +246,10 @@ export default function App(){
           </article>;
         })}
       </section>}
-      <h3>Iron deposits</h3><p>{DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p><h3>Coal deposits</h3><p>{COAL_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p>
+      <h3>Iron deposits</h3><p>{DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p><h3>Coal deposits</h3><p>{COAL_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p>{game.chapterII?.started&&<><h3>Copper deposit</h3><p>{COPPER_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p><h3>Silicon deposit</h3><p>{SILICON_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p></>}
     </aside><main className="center"><div className="board-title"><span>SECTOR MAP · 12 × 12</span><span>Tick {game.tick} · {game.paused?"PAUSED":"RUNNING"}</span></div>
-      <Board state={game} tool={tool} direction={direction} selectedId={selected} onTile={tile}/><p className="tip">M: iron mine · C: coal mine · F: furnace · A: assembler · S: advanced furnace · B: conveyor · $: terminal</p></main>
-      <aside className="inspector"><h2>Inspector</h2>{selectedEntity?<><h3>{DEFINITIONS[selectedEntity.kind].label}</h3><dl><dt>Position</dt><dd>({selectedEntity.x}, {selectedEntity.y})</dd><dt>Facing</dt><dd>{selectedEntity.direction}</dd><dt>Status</dt><dd>{game.paused?"paused":selectedEntity.status}</dd><dt>Output</dt><dd>{selectedEntity.output??selectedEntity.belt??"empty"}</dd>{(["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind))&&Object.entries(selectedEntity.kind==="furnace"?RECIPES.iron_ingot.input:selectedEntity.kind==="assembler"?RECIPES.gear.input:RECIPES.steel.input).map(([item,required])=><Fragment key={item}><dt>{item.replaceAll("_"," ")} buffer</dt><dd>{selectedEntity.inputBuffers?.[item as Item]??0}/4 (needs {required})</dd></Fragment>)}
+      <Board state={game} tool={tool} direction={direction} selectedId={selected} onTile={tile} onDragRotate={directRotate}/><p className="tip">M: iron mine · C: coal mine · F: furnace · A: assembler · S: advanced furnace · B: conveyor · $: terminal</p></main>
+      <aside className={"inspector"+(mobilePanel==="inspector"?" mobile-open":"")} aria-label="Inspector and diagnostics panel"><h2>Inspector</h2>{selectedEntity?<><h3>{DEFINITIONS[selectedEntity.kind].label}</h3><dl><dt>Position</dt><dd>({selectedEntity.x}, {selectedEntity.y})</dd><dt>Facing</dt><dd data-testid="selected-facing">{selectedEntity.direction}</dd><dt>Status</dt><dd>{game.paused?"paused":selectedEntity.status}</dd><dt>Output</dt><dd>{selectedEntity.output??selectedEntity.belt??"empty"}</dd>{(["furnace","assembler","advanced_furnace","circuit_fabricator"].includes(selectedEntity.kind))&&Object.entries(selectedEntity.kind==="furnace"?RECIPES.iron_ingot.input:selectedEntity.kind==="assembler"?RECIPES.gear.input:selectedEntity.kind==="advanced_furnace"?RECIPES.steel.input:RECIPES.circuit.input).map(([item,required])=><Fragment key={item}><dt>{item.replaceAll("_"," ")} buffer</dt><dd>{selectedEntity.inputBuffers?.[item as Item]??0}/4 (needs {required})</dd></Fragment>)}
         <dt>Cycle</dt><dd>{selectedEntity.cycle===null?"idle":selectedEntity.cycle+" ticks remaining"}</dd></dl>
         <section aria-label="Selected structure diagnostics" data-testid="entity-diagnostics" className="diagnostic-panel">
           <h3>Trailing 60 active ticks</h3>
@@ -235,7 +268,7 @@ export default function App(){
           </>:<p>Collecting active-tick diagnostic data.</p>}
           <p data-testid="diagnostic-hint">{diagnosticHint(game,selectedEntity.id)}</p>
         </section>
-        {["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind)&&<p>Recipe: {selectedEntity.kind==="furnace"?"2 iron ore → 1 iron ingot (4 ticks)":selectedEntity.kind==="assembler"?"2 iron ingots → 1 gear (5 ticks)":"2 iron ingots + 1 coal → 1 steel (8 ticks)"}</p>}
+        {["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind)&&<p>Recipe: {selectedEntity.kind==="furnace"?"2 iron ore → 1 iron ingot (4 ticks)":selectedEntity.kind==="assembler"?"2 iron ingots → 1 gear (5 ticks)":selectedEntity.kind==="advanced_furnace"?"2 iron ingots + 1 coal → 1 steel (8 ticks)":"2 copper ore + 1 silicon → 1 circuit (6 powered ticks)"}</p>}
         {selectedEntity.reservedInputs&&Object.values(selectedEntity.reservedInputs).some(v=>v>0)&&<p>Reserved inputs: {Object.entries(selectedEntity.reservedInputs).map(([item,count])=>`${item}: ${count}`).join(", ")}</p>}
         {COAL_DEPOSITS.some(d=>d.x===selectedEntity.x&&d.y===selectedEntity.y)&&selectedEntity.kind!=="coal_mine"&&<p>A coal deposit is beneath this structure. Demolish it to build a coal mine.</p>}
         {selectedEntity.kind!=="sell_terminal"&&<><button onClick={()=>{const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);if(r.ok)persist(r.state,{kind:"turn",entityKind:selectedEntity.kind,x:selectedEntity.x,y:selectedEntity.y});}}>Rotate clockwise</button><button className="danger" onClick={()=>demolish(selectedEntity.id)}>Demolish</button></>}</>:<p>Select a machine or conveyor to view status and controls.</p>}
@@ -251,22 +284,24 @@ export default function App(){
         {showPlaytest&&<div id="playtest-controls">
           <p>Opt-in. Data stays in this browser; no server telemetry. Export a JSON report when finished.</p>
           {!playtest?.active&&<button data-testid="start-playtest" onClick={()=>{
-            savePlaytest(startPlaytest(latest.current!,Date.now()));
+            savePlaytest(startPlaytest(latest.current!,Date.now(),BUILD_COMMIT));
           }}>{playtest?"Start new recording":"Start recording"}</button>}
           {playtest?.active&&<button data-testid="stop-playtest" onClick={()=>{
             savePlaytest(finishPlaytest(playtestRef.current!,latest.current!,Date.now()));
           }}>Stop recording</button>}
           {playtest&&<>
             <p data-testid="playtest-status">{playtest.active?"Recording":"Stopped"} · Active ticks: {playtest.activeTicks} · Wall time: {(playtest.wallMs/1000).toFixed(1)} s</p>
-            <p>Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s</p>
+            <p>Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s · Waiting for mission/stability: {((playtest.waitingForMissionMs??0)/1000).toFixed(1)} s</p>
+            <p>Power: {playtest.poweredTicks??0} fully powered ticks · {playtest.unpoweredTicks??0} underpowered ticks (observed nonzero demand only)</p>
+            <p>Recorded build: {playtest.buildCommit??"unverified local build"} · Schema at start: {playtest.schemaVersion??"legacy"} · Rules at start: {playtest.missionRuleVersion??"legacy"}</p>
             <p>Commands: placed {playtest.commands.place}, rotated {playtest.commands.turn}, demolished {playtest.commands.demolish}, researched {playtest.commands.research}</p>
             {playtest.active&&<fieldset aria-label="Playtest time annotation">
               <legend>Classify current unpaused time (manual annotation)</legend>
-              {(["unclassified","planning","waiting"] as PlaytestActivity[]).map(activity=>
+              {(["unclassified","planning","waiting","waiting_mission"] as PlaytestActivity[]).map(activity=>
                 <label key={activity}><input type="radio" name="playtest-activity"
                   checked={playtest.activity===activity} onChange={()=>
                     savePlaytest(annotatePlaytest(playtestRef.current!,activity,Date.now()))}/>
-                  {activity==="waiting"?"Waiting for credits":activity==="planning"?"Planning / routing":"Unclassified"}
+                  {activity==="waiting"?"Waiting for credits":activity==="waiting_mission"?"Waiting for mission/stability":activity==="planning"?"Planning / routing":"Unclassified"}
                 </label>)}
             </fieldset>}
             <button data-testid="export-playtest" onClick={exportPlaytest}>Export local JSON report</button>
@@ -274,9 +309,22 @@ export default function App(){
           </>}
         </div>}
       </section>
+      {selectedEntity?.kind==="coal_generator"&&<p>Fuel: {selectedEntity.fuelTicksRemaining??0}/12 powered ticks · Coal input: {selectedEntity.inputBuffers?.coal??0}</p>}
+      {selectedEntity?.kind==="splitter"&&<p>Next outlet: {selectedEntity.splitterNext===0?"forward":"clockwise"} · Cargo: {selectedEntity.belt??"empty"}</p>}
+      {game.power&&<section aria-label="Power diagnostics" data-testid="power-diagnostics" className="diagnostic-panel"><h3>Site-wide power</h3><p>Supply: {game.power.supply} · Demand: {game.power.demand} · Served: {game.power.served}</p><p>Unpowered processing: {game.power.unpoweredProcessingTicks} ticks · Burned coal: {game.power.coalBurned}</p></section>}
+      {narrativeAvailable.length>0&&<section className="diagnostic-panel" aria-label="Prometheus transmissions" data-testid="chapter-transmissions">
+        <h3>Prometheus transmissions</h3>
+        <p>Read or replay unlocked messages at any time. Messages never interrupt production.</p>
+        {narrativeAvailable.map(id=><button key={id} onClick={()=>openTransmission(id)}>
+          {id==="opening"&&!game.chapterII?.storySeen?"Inspect Request":"Replay "+CHAPTER_TRANSMISSIONS[id].label}
+        </button>)}
+      </section>}
       <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>void fresh()}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>
       </aside></div>
-    <footer><div><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{mission.title}</h2><p>{game.tutorialEnabled?objectiveHint:"Tutorial hints hidden."}</p>
+    <footer data-testid="mission-hud"><div className="mission-hud-objectives"><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{chapterCompleted?"First Signal Restored":mission.title}</h2><p>{game.tutorialEnabled?(chapterCompleted?"Prometheus archive: SECTOR 9 — SUBLEVEL 03. Continue optimizing your factory in sandbox mode.":objectiveHint):"Tutorial hints hidden."}</p>{narrativeAvailable.length>0&&<p data-testid="latest-transmission" className="transmission-notice">
+        Latest archive dispatch: {CHAPTER_TRANSMISSIONS[narrativeAvailable[narrativeAvailable.length-1]].pages[0].heading}.
+        Open Prometheus transmissions in Inspector to read or replay. Production continues.
+      </p>}
       {throughputMission&&<section className="mission-throughput" aria-label="Mission throughput diagnostics" data-testid="mission-throughput">
         <h3>Live objective · trailing 60 active ticks</h3>
         <p>{currentWindow?"Complete 60-tick window":"Collecting mission-local window"}</p>
@@ -289,8 +337,23 @@ export default function App(){
         </ul>
         <p data-testid="mission-bottleneck">{unmetRequirements[0]??"All conditions met in current window; maintain stable throughput."}</p>
       </section>}
+      {activeChapterMission&&<section className="mission-throughput" aria-label="Chapter II objectives" data-testid="chapter-objectives"><h3>Chapter II objectives</h3>{game.mission.activeId==="M8"?<p>Copper sold: {chapterMetrics?.totals?.copper_ore??0}/10 · Silicon sold: {chapterMetrics?.totals?.silicon??0}/10</p>:game.mission.activeId==="M9"?<p>Circuits sold: {chapterMetrics?.totals?.circuit??0}/4 · Fabrication: {game.technologies?.circuit_fabrication?"Unlocked":"Locked"} · Power: {game.technologies?.industrial_power?"Unlocked":"Locked"}</p>:<><p>{chapterWindowProgress?"Complete 60-tick window":"Collecting 60 active mission ticks"}</p><ul><li>Circuits sold: {chapterWindowProgress?.sales.circuit??0}/11</li><li>Circuits produced: {chapterWindowProgress?.producedCircuits??0}/11</li><li>Steel sold: {chapterWindowProgress?.sales.steel??0}/5</li><li>Demand covered: {chapterWindowProgress?.coveredTicks??0}/57 of 60</li><li>Stable: {chapterMetrics?.streakTicks??0}/60 consecutive windows</li></ul></>}</section>}
       <div className="progress">{game.mission.activeId==="M2"?`${game.mission.soldOre} / 10 ore sold`:game.mission.activeId==="M3"?`${game.mission.soldIngot} / 20 ingots sold`:game.mission.activeId==="M4"?`${game.mission.profitStreakTicks} / 60 qualifying ticks`:game.mission.activeId==="M5"?`${game.mission.soldCoal??0} / 10 coal sold`:game.mission.activeId==="M6"&&!throughputMission?`${game.mission.soldGear??0} / 8 gears sold`:game.mission.activeId==="M7"&&!throughputMission?`${game.mission.soldSteel??0} / 8 steel sold`:""}</div></div>
-      <div><p role="status">{message}</p><button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button></div></footer>
+      <div className="mission-hud-actions"><p role="status">{message}</p>{canBeginChapterII&&<button data-testid="begin-chapter-ii" onClick={()=>{
+        const result=beginChapterII(latest.current!);
+        setMessage(result.message);if(result.ok){persist(result.state);setShowTechnology(true);}
+      }}>Begin Chapter II</button>}<button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button></div></footer>
+    {activeTransmission&&!game.introOpen&&!help&&<div className="overlay" data-testid="chapter-transmission-overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Chapter II Transmission">
+      <small>{transmissionPage+1} / {activeTransmission.pages.length} · PROJECT PROMETHEUS</small>
+      <h1>{activeTransmission.pages[transmissionPage].heading}</h1>
+      <p>{activeTransmission.pages[transmissionPage].text}</p>
+      <div className="actions">
+        {transmissionPage>0&&<button onClick={()=>setTransmissionPage(p=>p-1)}>Previous Transmission</button>}
+        {transmissionPage<activeTransmission.pages.length-1&&<button onClick={()=>setTransmissionPage(p=>p+1)}>Next Transmission</button>}
+        <button onClick={closeTransmission}>Return to Factory</button>
+        <button onClick={closeTransmission}>Skip Transmission</button>
+      </div>
+    </section></div>}
     {foundryStoryOpen&&!game.introOpen&&!help&&<div className="overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Foundry Directive"><small>{foundryPanel+1} / 3 · PROMETHEUS ARCHIVE</small><h1>{FOUNDRY_NARRATIVE[foundryPanel][0]}</h1><p>{game.missionRuleVersion===2&&foundryPanel===2
     ?"Sell coal, manufacture gears, then synchronize iron ingots and coal to produce steel. The archive remains sealed until the foundry proves its capacity."
     :FOUNDRY_NARRATIVE[foundryPanel][1]}</p><div className="actions">{foundryPanel>0&&<button onClick={()=>setFoundryPanel(p=>p-1)}>Previous</button>}{foundryPanel<2&&<button onClick={()=>setFoundryPanel(p=>p+1)}>Next</button>}<button onClick={closeFoundry}>Close / Return</button><button onClick={closeFoundry}>Skip Directive</button></div></section></div>}

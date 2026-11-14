@@ -23,3 +23,55 @@ footer>div:first-child{max-width:880px}
 .playtest-panel fieldset label{display:block;margin:8px 0;line-height:1.35}
 .playtest-panel fieldset input{margin-right:8px;accent-color:#e7c07f}
 .playtest-panel button{white-space:normal}
+
+/* v0.4 WP4: map and mission console share one bounded viewport. */
+html,body,#root{height:100%;min-height:0}
+body{overflow:hidden}
+.app{height:100dvh;min-height:0;overflow:hidden}
+.app>header{flex:0 0 auto;padding:8px 16px;min-height:66px;max-height:92px}
+.app .workspace{flex:1 1 auto;min-height:0;max-width:1600px;margin:0 auto;
+  grid-template-columns:minmax(180px,220px) minmax(0,1fr) minmax(190px,240px);
+  gap:12px;padding:10px 12px;overflow:hidden;align-items:stretch}
+.workspace>aside{min-height:0;min-width:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:12px}
+.workspace .center{min-height:0;min-width:0;overflow:hidden;justify-content:center}
+.center .board-title{flex:0 0 auto;width:min(100%,528px);margin:4px 0 8px;letter-spacing:0}
+.center .board{width:min(100%,528px,calc(100dvh - 320px));height:auto;
+  flex:none;aspect-ratio:1/1;max-height:100%;touch-action:none;position:relative}
+.center .board canvas{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:1/1}
+.center .tip{flex:0 0 auto;max-width:90%;text-align:center;margin:6px 0 0;line-height:1.3}
+.app>footer{flex:0 0 auto;min-height:110px;max-height:min(24dvh,190px);
+  width:100%;padding:9px 18px;gap:18px;overflow:hidden;
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px)}
+.app>footer .mission-hud-objectives{min-height:0;max-width:none;overflow-y:auto;overscroll-behavior:contain}
+.app>footer .mission-hud-actions{min-height:0;overflow:auto;align-self:start}
+.app>footer h2{margin:3px 0}
+.app>footer p{margin:3px 0;line-height:1.35}
+.app>footer .mission-throughput{margin:6px 0;padding:6px 10px}
+.app>footer .mission-throughput ul{margin:3px 0}
+.app>footer .mission-throughput li{line-height:1.25}
+.mobile-panel-actions{display:none}
+@media (min-width:981px){
+  .app>header .kpis{gap:clamp(8px,2vw,28px)}
+}
+@media (max-width:980px){
+  .app .workspace{position:relative;display:flex;justify-content:center;padding:6px 8px;overflow:hidden}
+  .workspace>.center{flex:1}
+  .workspace>aside{display:none;position:absolute;top:0;bottom:0;width:min(350px,88%);
+    z-index:4;box-shadow:0 12px 32px #0009}
+  .workspace>.palette.mobile-open{display:block;left:8px}
+  .workspace>.inspector.mobile-open{display:block;right:8px}
+  .mobile-panel-actions{display:flex;gap:8px;justify-content:center;padding:4px 8px;flex:0 0 auto}
+  .mobile-panel-actions button{padding:5px 12px}
+  .app>footer{grid-template-columns:minmax(0,1fr) minmax(100px,180px);padding:6px 10px;max-height:27dvh}
+  .center .board{width:min(100%,528px,calc(100dvh - 360px))}
+  .app>header{flex-wrap:wrap;gap:6px;padding:6px 10px}
+  .brand{font-size:18px}.kpis{gap:8px}.kpis strong{font-size:12px}
+  .kpis>div{font-size:9px}
+}
+@media (max-width:600px){
+  .app>header{max-height:120px;overflow:hidden}
+  .app>footer{max-height:30dvh;min-height:120px;grid-template-columns:minmax(0,1fr) 105px;gap:8px}
+  .app>footer .mission-hud-actions button{padding:5px;font-size:11px}
+  .center .board{width:min(100%,calc(100dvh - 395px),528px)}
+  .center .tip{font-size:10px}
+}

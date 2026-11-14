@@ -1,4 +1,4 @@
-import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,ITEMS,STEP,rotate,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
+import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,STEP,rotate,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
 export type CommandResult={ok:boolean;message:string;state:GameState};
 function copy(s:GameState):GameState{return structuredClone(s);}
 export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:number,direction:Direction):CommandResult {
@@ -8,6 +8,15 @@ export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:
   if(kind==="furnace"&&["M1","M2"].includes(s.mission.activeId))return {ok:false,message:"Complete M2 to unlock the furnace.",state:s};
   const technology=({coal_mine:"coal_extraction",assembler:"mechanical_components",advanced_furnace:"advanced_smelting"} as const)[kind as "coal_mine"|"assembler"|"advanced_furnace"];
   if(technology&&!s.technologies?.[technology])return {ok:false,message:"Technology not unlocked.",state:s};
+  const chapterTech=({
+    copper_mine:"resource_surveying",silicon_extractor:"resource_surveying",
+    circuit_fabricator:"circuit_fabrication",splitter:"circuit_fabrication",
+    coal_generator:"industrial_power"
+  } as const)[kind as "copper_mine"|"silicon_extractor"|"circuit_fabricator"|"splitter"|"coal_generator"];
+  if(chapterTech && !s.technologies?.[chapterTech])
+    return {ok:false,message:"Chapter II technology not unlocked.",state:s};
+  if(kind==="copper_mine"&&!COPPER_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Copper mines require a copper deposit.",state:s};
+  if(kind==="silicon_extractor"&&!SILICON_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Silicon extractors require a silicon deposit.",state:s};
   if(kind==="coal_mine"&&!COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Coal mines require a coal deposit.",state:s};
   if(kind==="iron_mine"&&!DEPOSITS.some(d=>d.x===x&&d.y===y))
     return {ok:false,message:"Mines must be placed on an iron deposit.",state:s};
@@ -18,13 +27,29 @@ export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:
   if(s.balanceCents<price)return {ok:false,message:"Insufficient credits for construction.",state:s};
   const n=copy(s);
   n.balanceCents-=price;
-  n.entities.push({id:n.nextId++,kind,x,y,direction,output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs"});
+  if((kind==="coal_generator"||kind==="circuit_fabricator")&&!n.power)
+    n.power={tick:n.tick,supply:0,demand:0,served:0,demandCovered:false,
+      unpoweredProcessingTicks:0,coalBurned:0,lastServedFabricatorId:0,history:[]};
+  n.entities.push({id:n.nextId++,kind,x,y,direction,output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs",...(kind==="coal_generator"?{fuelTicksRemaining:0}:{}),...(kind==="splitter"?{splitterNext:0 as const}:{})});
   return {ok:true,message:`${DEFINITIONS[kind].label} constructed for ${(price/100).toFixed(2)} Cr.`,state:n};
 }
 export function turn(s:GameState,id:number):CommandResult {
   const n=copy(s), e=n.entities.find(e=>e.id===id);
   if(!e||e.kind==="sell_terminal")return {ok:false,message:"Cannot rotate this object.",state:s};
   e.direction=rotate(e.direction);return {ok:true,message:"Object rotated.",state:n};
+}
+/** Direct orientation is a single command regardless of previous facing. */
+export function face(s:GameState,id:number,direction:Direction):CommandResult {
+  const entity=s.entities.find(e=>e.id===id);
+  if(!entity||entity.kind==="sell_terminal")
+    return {ok:false,message:"Cannot rotate this object.",state:s};
+  if(!["N","E","S","W"].includes(direction))
+    return {ok:false,message:"Invalid facing.",state:s};
+  if(entity.direction===direction)
+    return {ok:false,message:"Facing unchanged.",state:s};
+  const next=copy(s);
+  next.entities.find(e=>e.id===id)!.direction=direction;
+  return {ok:true,message:"Object oriented "+direction+".",state:next};
 }
 export function remove(s:GameState,id:number,confirmed=false):CommandResult {
   const e=s.entities.find(e=>e.id===id);

@@ -1,5 +1,7 @@
 # ADR-0005 — Deterministic Directional Splitter for First Signal
 
+> Historical version contract. From v0.5, cross-version save migration and legacy mission-rule preservation requirements are superseded by [ADR-0006](../decisions/0006-development-save-policy.md). Gameplay/economy requirements and recorded evidence remain unchanged.
+
 **Status:** ACCEPTED — approved 2026-11-14 together with complete WP3 Option A numerical set and M10 production guard.
 **Scope:** WP2 headless progression and save migration authorized next; UI, PR merge and release separately gated.
 **Related:** [ADR-0004](0004-electronics-and-power.md), [WP3 amendment evidence](../validation/v0.4-option-a.md), [original WP3 report](../validation/v0.4-economy.md).

@@ -1,5 +1,7 @@
 # SEKTOR 9 — AI Game Development Studio
 
+**Save-policy authority:** [ADR-0006](../decisions/0006-development-save-policy.md) removes legacy compatibility gates from v0.5 onward. Historical save fixtures/manual migrations are not required for these releases. Current-version restore, malformed-data rejection and explicit restart remain required.
+
 **Scope:** project workflow and reusable OpenCode v2 agent configuration; no gameplay changes.
 **Authority:** the human Product Owner approves gameplay/design/economy changes, work-package gates, acceptance and releases. Repository documents, not conversational memory, define approved implementation scope.
 
@@ -18,11 +20,11 @@ Role permissions are guidance plus OpenCode tool restrictions, **not** a substit
 ## Operational workflow
 
 1. **Intake** — PO provides issue/version, objective, constraints, acceptance criteria and whether scope is approved. Studio inspects current branch, open PRs, frozen spec, ADRs, CI and pending gates.
-2. **Design** — Architect loads `specification-audit` and (for engine changes) `deterministic-simulation`. Produces bounded work packages, AC-to-test mapping, risks, migration impact and proposed ADRs. Changes to economics or approved design stop for PO approval.
+2. **Design** — Architect loads `specification-audit` and (for engine changes) `deterministic-simulation`. Produces bounded work packages, AC-to-test mapping, risks, current-version persistence impact (migration only if explicitly scheduled) and proposed ADRs. Changes to economics or approved design stop for PO approval.
 3. **Authorization** — PO explicitly approves the plan, frozen numbers and one work package/phase as required. An unapproved suggestion does not become an implementation task.
 4. **Implement** — Developer loads `tdd-delivery` and relevant engine skill. Adds RED test before changing behavior, records failing assertion, implements GREEN, refactors, and reports commit/CI evidence. Work stays on feature branch; no implementation of later work packages by implication.
-5. **Verify** — QA independently loads `game-qa`, checks change diff at a named commit, regression/acceptance matrix, and synthetic versus authentic saves; logs blockers. Failure returns to Developer; a clean QA report proceeds to PO review.
-6. **Human acceptance** — PO performs actual gameplay, UX, accessibility and migration validation; QA can provide a reproducible checklist and analyze genuine exported recorder data using `human-playtest`. Never translate engine-only tests into player sign-off.
+5. **Verify** — QA independently loads `game-qa`, checks change diff at a named commit, regression/acceptance matrix, and synthetic versus authentic current-version saves; logs blockers. Failure returns to Developer; a clean QA report proceeds to PO review.
+6. **Human acceptance** — PO performs actual gameplay, UX, accessibility and current-version save/restore validation; QA can provide a reproducible checklist and analyze genuine exported recorder data using `human-playtest`. Never translate engine-only tests into player sign-off.
 7. **Release gate** — QA uses `release-readiness` on exact proposed HEAD. Only the PO can separately authorize PR merge, tag and publishing. A WP approval is not release authorization.
 
 For independent tasks, the studio can run read-only Architect and QA analysis in parallel. For implementation, preserve ordered **design → PO approval → Developer → QA → PO acceptance** handoffs. No agent may silently proceed through a missing gate.
@@ -33,7 +35,7 @@ Use [work-package template](work-package-template.md) in PR descriptions or vali
 - source branch and **exact SHA**, spec/ADR revision and relevant GitHub issues;
 - permitted scope and out-of-scope items;
 - acceptance criterion IDs, tests and actual results (not just test intent);
-- runtime and save-schema/migration effects, economics and determinism risks;
+- runtime and current-version save-schema effects, economics and determinism risks;
 - CI URL attached to the **same SHA** (or clearly `NOT RUN`);
 - human observations and missing data, explicitly marked;
 - recommendation: **READY FOR PO / CHANGES REQUIRED / BLOCKED**.
@@ -53,4 +55,4 @@ OpenCode cannot enforce a **semantic** PO approval decision through Markdown alo
 
 ## Repository-specific release caution
 
-The v0.4 feature branch/PR must be assessed independently of the last merged `develop` release. v0.4's human playtest criterion V04-AC-17, authentic historical save validation and manual UX/deployment checks are distinct from automated success. Confirm current status from the live PR/validation files, rather than carrying these historical blockers forward without checking.
+The `v0.4` tag and `develop` were verified at `1056e793ae8e845bcbf14e090727d1c10552f6b9` on 2026-11-15. Older acceptance files contain pre-release status snapshots; these are not current v0.5 blockers or proof of unrecorded tests. Future releases still require exact-commit CI and separate human acceptance/release authorization.

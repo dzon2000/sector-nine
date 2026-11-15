@@ -19,7 +19,7 @@ OpenCode discovers reusable skills under `.opencode/skills/`. Load only those re
 - Follow the **currently approved, frozen, version-specific specification**. No new mechanics, altered economic constants, modified map coordinates, or redefined acceptance criteria without explicit Product Owner approval and an ADR/spec update.
 - Keep `src/simulation/` independent of React, PixiJS, DOM, timers, wall-clock time and persistence. Advance with explicit deterministic integer ticks. Represent money in integer cents.
 - Keep production, physical logistics, accounting, commands/progression, rendering and persistence separately testable; preserve material conservation and backpressure.
-- Preserve existing games and rule versions. Never discard, reset or silently upgrade a save after failed migration; validate real historical saves separately from synthetic fixtures.
+- From v0.5, support current-version saves only during active development; legacy save migration and historical mission-rule compatibility are not requirements ([ADR-0006](docs/decisions/0006-development-save-policy.md)). Preserve deterministic current-version save/restore and explicit error handling. Unsupported or corrupt saves must not be silently overwritten; starting over is an explicit player action. Compatibility returns only through a separately approved future ADR/spec.
 - Use strict TDD for functional changes: failing regression/acceptance test first (RED), minimal change (GREEN), refactor with tests. No speculative future-release work.
 - Run relevant Vitest, TypeScript/Vite build and Playwright checks. For release candidates, use the full repository CI suite and map every acceptance criterion to evidence.
 - Do not fabricate playtest observations, archived save coverage, CI success, commit provenance, or release readiness. Automated engine campaigns are **not** human gameplay.
@@ -28,7 +28,7 @@ OpenCode discovers reusable skills under `.opencode/skills/`. Load only those re
 
 1. Architect proposes a bounded plan, AC-to-test mapping, ADRs and identified risks; Product Owner approves any new/frozen design or work-package plan.
 2. Developer implements only authorized scope on a feature branch, produces test evidence and requests QA review.
-3. QA independently audits exact branch/commit and reports PASS, FAIL, BLOCKED or NOT RUN per criterion, including regression/migration/economic risks.
+3. QA independently audits exact branch/commit and reports PASS, FAIL, BLOCKED or NOT RUN per criterion, including regression, current-version persistence and economic risks; migration applies only when explicitly in scope.
 4. Product Owner performs hands-on playtesting and explicitly approves or rejects relevant human acceptance criteria and each requested work-package boundary.
 5. PRs target `develop`. No agent may merge, tag, publish, close release issues or deploy a release without **separate explicit Product Owner authorization**. Read-only review and green CI are not release approval.
 

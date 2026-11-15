@@ -9,7 +9,7 @@ Use only after PO authorization names the scope/work package.
 
 1. Confirm frozen spec/ADR, approved ACs, base/head branch and out-of-scope behavior. Do not code on an unapproved design.
 2. Write a focused test that fails for a real missing requirement; execute and record **RED** with expected failure. Include edge/adversarial cases.
-3. Implement the smallest behavior for **GREEN**, then refactor under passing tests. Prefer headless simulation before UI. Keep a tested save migration for changed state.
+3. Implement the smallest behavior for **GREEN**, then refactor under passing tests. Prefer headless simulation before UI. Follow docs/decisions/0006-development-save-policy.md: from v0.5, test current-version restore and unsupported-version rejection; do not add legacy migrations.
 4. Add integration and Playwright coverage as needed, including keyboard/pointer, responsive viewports, story/provenance and accessible focus.
 5. Execute `npm test`, `npm run build`, `npm run test:e2e` when relevant; for release candidates run all. If Playwright/browser is unavailable, say NOT RUN, never PASS.
 6. Review diff for accidental economic changes, forbidden future work, flaky time dependence, snapshots that conceal regressions and unsigned assumptions.

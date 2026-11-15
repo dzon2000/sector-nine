@@ -2,36 +2,44 @@
 
 A single-player, browser-based idle factory and economic strategy game. Design compact production lines, route physical goods, maximize **operating profit**, and unlock increasingly complex technologies while uncovering the history of an abandoned industrial colony.
 
-**Project phase:** design and assumptions validation, before v0.1 implementation.
-
 ## Key documents
 
 - [Game Design Document](docs/GDD.md) — product vision and long-term game systems
-- [v0.1 Specification](docs/specifications/v0.1.md) — first playable version and acceptance tests
-- [Economy](docs/economy.md) — economic assumptions and reference production line
-- [Validation Plan](docs/validation-plan.md) — tests to run before building game UI
-- [Tutorial and Story](docs/tutorial-and-story.md) — narrative opening and guided onboarding
-- [Architecture](docs/architecture.md) — technical structure and design constraints
+- [Architecture](docs/architecture.md) — technical design and deterministic simulation boundaries
 - [Roadmap](docs/roadmap.md) — incremental releases
-- [Agent guidelines](AGENTS.md) — conventions for implementation agents
+- [Specifications](docs/specifications/) — version-specific approved gameplay scope
+- [Decisions](docs/decisions/) — architecture and product decision records
+- [Validation](docs/validation/) and [Releases](docs/releases/) — acceptance and release evidence
+- [Studio Playbook](docs/studio/README.md) — AI roles, skills, work-package handoffs and human gates
+- [Agent Guidelines](AGENTS.md) — engineering rules
 
-## Technology (approved)
+## Stack
 
-TypeScript, React, PixiJS, Vite, Vitest, IndexedDB. Playwright is proposed for browser end-to-end testing. No backend for v0.1.
+TypeScript, React, PixiJS, Vite, Vitest, IndexedDB and Playwright. Game simulation is headless, deterministic and tick-based; no backend is required for local gameplay.
 
-## Project workflow
+## AI Game Development Studio (OpenCode v2)
 
-1. Brainstorm, discuss balance, and approve specifications in the dedicated **design chat**.
-2. Commit approved English-language documents to this repository; treat GitHub as the source of truth.
-3. Open a **separate implementation chat per version**. Implement against its frozen specification.
-4. Validate determinism, economics, and acceptance criteria before focusing on graphics or expanding gameplay.
-5. Develop on a feature branch; review via Pull Request into `develop`. Tag released versions separately.
+The human **Product Owner** owns gameplay decisions and every release authorization. The repo provides a read-only `studio` coordinator and specialist subagents for architecture, TDD development and independent QA.
 
-The repository deliberately contains **documentation and directory placeholders only** at this stage. Application bootstrap, simulation code, and build dependencies belong to the v0.1 implementation phase.
+1. Run OpenCode from the repository root and enter `/studio <your goal or GitHub issue>` (or select the `studio` primary agent).
+2. Studio delegates to `architect` to propose bounded design/work packages and maps acceptance criteria.
+3. Product Owner approves scope. Studio delegates only approved packages to `developer` (RED → GREEN → refactor).
+4. `qa` independently checks exact commits, CI, regressions and acceptance, and identifies human-only gates.
+5. Product Owner performs gameplay validation, signs off, and separately authorizes merge/release.
 
-## Status
+Agent definitions: `.opencode/agents/`; reusable task skills: `.opencode/skills/`; `/studio` entry point: `.opencode/commands/studio.md`. See [playbook](docs/studio/README.md) for permissions, handoff template and gates.
 
-All economic figures are provisional hypotheses pending headless simulation and playtests. No claims of functional gameplay are made by this initialization commit.
+## Development
+
+```sh
+npm ci
+npm run dev
+npm test
+npm run build
+npm run test:e2e
+```
+
+Develop from a feature branch and open a Pull Request into `develop`. Do not assume a version is released based on its existence in an unmerged feature branch. Check current PRs and release records; automated CI does **not** replace hands-on Product Owner acceptance.
 
 ## License
 

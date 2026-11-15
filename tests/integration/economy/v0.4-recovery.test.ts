@@ -1,6 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {begin,place,remove,turn} from "../../../src/game/commands";
-import {createGame,DEFINITIONS,ITEMS,stockOnHand,type Direction,type GameState,type Kind} from "../../../src/domain/model";
+import {createGame,DEFINITIONS,ITEMS,stockOnHand,stats,type Direction,type GameState,type Kind} from "../../../src/domain/model";
+import {missionWindow} from "../../../src/game/missionMetrics";
 import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
 import {beginChapterII} from "../../../src/game/chapterTwo";
 import {tick,runTicks} from "../../../src/simulation/engine";
@@ -51,8 +52,32 @@ function finance(t:Trace,cents:number,maxTicks=1800){
 }
 function until(t:Trace,mission:GameState["mission"]["activeId"],maxTicks:number){
   const start=t.state.tick;
-  while(t.state.mission.activeId!==mission&&t.state.tick-start<maxTicks)t.state=tick(t.state);
+  // Diagnostic-only shadow calculations; never mutate production rules or economy.
+  let candidateStreak=0,bestCandidateStreak=0,maxProfitCents=0,qualifyingTicks=0;
+  while(t.state.mission.activeId!==mission&&t.state.tick-start<maxTicks){
+    const active=t.state.mission.activeId;
+    t.state=tick(t.state);
+    const p=stats(t.state);
+    if(active==="M4"||active==="M7"){
+      const window=active==="M7"?missionWindow(t.state):null;
+      const profit=active==="M7"?window?.profitCents??0:p?.profitCents??0;
+      maxProfitCents=Math.max(maxProfitCents,profit);
+      const qualifies=active==="M4"?profit>=6000:
+        Boolean(window&&window.sales.gear>=7&&window.sales.steel>=7&&profit>=19000);
+      candidateStreak=qualifies?candidateStreak+1:0;
+      if(qualifies)qualifyingTicks++;
+      bestCandidateStreak=Math.max(bestCandidateStreak,candidateStreak);
+    }
+  }
   expect(t.state.mission.activeId,"Cannot reach "+mission).toBe(mission);
+  if(mission==="M5"||mission==="DONE")
+    console.info("V04-OWNER-THRESHOLD-PROBE "+JSON.stringify({mission:mission==="M5"?"M4":"M7",
+      candidateProfitCents:mission==="M5"?6000:19000,
+      startTick:start,endTick:t.state.tick,
+      maxProfitCents,qualifyingTicks,bestCandidateStreak,
+      requiredStreak:mission==="M5"?60:120,
+      candidateWouldHavePassed:bestCandidateStreak>=(mission==="M5"?60:120),
+      unchangedProductionRules:true}));
   observe(t,mission);
 }
 function oldResearch(t:Trace,id:TechnologyId){

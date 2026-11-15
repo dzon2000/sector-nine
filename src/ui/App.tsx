@@ -114,7 +114,7 @@ export default function App(){
   };
   const selectedEntity=game?.entities.find(e=>e.id===selected);
   const directRotate=(id:number,desired:Direction)=>{
-    const source=latest.current;if(!source||tool!=="select")return;
+    const source=latest.current;if(!source||tool==="demolish")return;
     const entity=source.entities.find(e=>e.id===id);
     if(!entity)return;
     const result=face(source,id,desired);
@@ -142,13 +142,19 @@ export default function App(){
     };
     window.addEventListener("keydown",listener);return ()=>window.removeEventListener("keydown",listener);
   });
-  const tile=(x:number,y:number)=>{
-    if(!game||game.introOpen)return;
-    const entity=game.entities.find(e=>e.x===x&&e.y===y);
-    if(tool==="select"){setSelected(entity?.id??null);return;}
-    if(tool==="demolish"){if(entity)demolish(entity.id);else setMessage("No object to demolish.");return;}
-    const result=place(game,tool,x,y,direction);
-    setMessage(result.message);if(result.ok){persist(result.state,{kind:"place",entityKind:tool,x,y});setSelected(result.state.nextId-1);}
+  const tile=(x:number,y:number):number|null=>{
+    const current=latest.current;
+    if(!current||current.introOpen||resetting.current)return null;
+    const entity=current.entities.find(e=>e.x===x&&e.y===y);
+    if(tool==="select"){setSelected(entity?.id??null);return null;}
+    if(tool==="demolish"){if(entity)demolish(entity.id);else setMessage("No object to demolish.");return null;}
+    const result=place(current,tool,x,y,direction);
+    setMessage(result.message);
+    if(!result.ok)return null;
+    const id=result.state.nextId-1;
+    persist(result.state,{kind:"place",entityKind:tool,x,y});
+    setSelected(id);
+    return id;
   };
   const closeFoundry=()=>{const s=latest.current;if(!s)return;const n=structuredClone(s);n.foundryStorySeen=true;persist(n);setReplayFoundry(false);setFoundryPanel(0);};
   const openTransmission=(id:ChapterTransmissionId)=>{setTransmission(id);setTransmissionPage(0);};
@@ -191,6 +197,13 @@ export default function App(){
   const chapterMetrics=game.chapterII?.metrics;
   const chapterWindowProgress=chapterWindow(game);
   const activeChapterMission=["M8","M9","M10"].includes(game.mission.activeId);
+  const depositsStatus=game.chapterII?.started?([
+    {name:"Copper",extractor:"copper_mine",coords:COPPER_DEPOSITS[0]},
+    {name:"Silicon",extractor:"silicon_extractor",coords:SILICON_DEPOSITS[0]}
+  ] as const).map(({name,extractor,coords})=>{
+    const occupied=game.entities.find(e=>e.x===coords.x&&e.y===coords.y);
+    return {name,coords,occupied,extractor};
+  }):[];
   const canBeginChapterII=game.mission.activeId==="DONE"&&!game.chapterII?.started&&!game.chapterII?.completed&&
     game.technologies?.coal_extraction&&game.technologies?.mechanical_components&&game.technologies?.advanced_smelting;
   const throughputMission=game.missionRuleVersion===3&&
@@ -246,9 +259,18 @@ export default function App(){
           </article>;
         })}
       </section>}
-      <h3>Iron deposits</h3><p>{DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p><h3>Coal deposits</h3><p>{COAL_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p>{game.chapterII?.started&&<><h3>Copper deposit</h3><p>{COPPER_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p><h3>Silicon deposit</h3><p>{SILICON_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p></>}
+      <h3>Iron deposits</h3><p>{DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p><h3>Coal deposits</h3><p>{COAL_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p>{game.chapterII?.started&&<><section data-testid="chapter-deposit-status" aria-label="Chapter II deposits" className="deposit-status">
+      <h3>New mineral deposits</h3>
+      {depositsStatus.map(({name,coords,occupied,extractor})=><p key={name}>
+        <strong>{name} ({coords.x},{coords.y})</strong> — {occupied
+          ?occupied.kind===extractor?DEFINITIONS[occupied.kind].label+" installed."
+          :`occupied by ${DEFINITIONS[occupied.kind].label}. Clear this tile with Demolish, then build the extractor; existing inventory is not moved automatically.`
+          :"available for an extractor after Resource Surveying."}
+      </p>)}
+    </section></>}
     </aside><main className="center"><div className="board-title"><span>SECTOR MAP · 12 × 12</span><span>Tick {game.tick} · {game.paused?"PAUSED":"RUNNING"}</span></div>
-      <Board state={game} tool={tool} direction={direction} selectedId={selected} onTile={tile} onDragRotate={directRotate}/><p className="tip">M: iron mine · C: coal mine · F: furnace · A: assembler · S: advanced furnace · B: conveyor · $: terminal</p></main>
+      <Board state={game} tool={tool} direction={direction} selectedId={selected} onTile={tile} onDragRotate={directRotate}/>
+      <p className="tip">Drag an existing structure in the direction it should face, even with a construction tool selected. Click an empty tile to build. R rotates the selected object.</p></main>
       <aside className={"inspector"+(mobilePanel==="inspector"?" mobile-open":"")} aria-label="Inspector and diagnostics panel"><h2>Inspector</h2>{selectedEntity?<><h3>{DEFINITIONS[selectedEntity.kind].label}</h3><dl><dt>Position</dt><dd>({selectedEntity.x}, {selectedEntity.y})</dd><dt>Facing</dt><dd data-testid="selected-facing">{selectedEntity.direction}</dd><dt>Status</dt><dd>{game.paused?"paused":selectedEntity.status}</dd><dt>Output</dt><dd>{selectedEntity.output??selectedEntity.belt??"empty"}</dd>{(["furnace","assembler","advanced_furnace","circuit_fabricator"].includes(selectedEntity.kind))&&Object.entries(selectedEntity.kind==="furnace"?RECIPES.iron_ingot.input:selectedEntity.kind==="assembler"?RECIPES.gear.input:selectedEntity.kind==="advanced_furnace"?RECIPES.steel.input:RECIPES.circuit.input).map(([item,required])=><Fragment key={item}><dt>{item.replaceAll("_"," ")} buffer</dt><dd>{selectedEntity.inputBuffers?.[item as Item]??0}/4 (needs {required})</dd></Fragment>)}
         <dt>Cycle</dt><dd>{selectedEntity.cycle===null?"idle":selectedEntity.cycle+" ticks remaining"}</dd></dl>
         <section aria-label="Selected structure diagnostics" data-testid="entity-diagnostics" className="diagnostic-panel">

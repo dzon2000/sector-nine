@@ -49,7 +49,7 @@ test("WP4 #5 short drag, escape, cancellation, terminal and adjacent targets",as
  const other=await center(page,5,4);await drag(page,p,other.x-p.x,other.y-p.y);
  await expect(page.getByTestId("selected-facing")).toHaveText("E");
 });
-test("WP4 #5 scaled board and placement tool do not rotate existing object",async({page})=>{
+test("WP4 #5 scaled board supports direct rotation even with placement tool selected",async({page})=>{
  const p=await ready(page);
  await page.getByTestId("factory-board").evaluate(el=>{(el as HTMLElement).style.width="360px";});
  const scaled=await center(page,4,4);
@@ -59,7 +59,7 @@ test("WP4 #5 scaled board and placement tool do not rotate existing object",asyn
  await drag(page,scaled,30,0);
  await page.getByRole("button",{name:"Inspect",exact:true}).click();
  await page.mouse.click(scaled.x,scaled.y);
- await expect(page.getByTestId("selected-facing")).toHaveText("N");
+ await expect(page.getByTestId("selected-facing")).toHaveText("E");
 });
 
 test("WP4 #5 pointer cancellation, keyboard R and rotation while simulation runs",async({page})=>{

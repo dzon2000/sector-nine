@@ -6,8 +6,8 @@ import {STRUCTURE_GLYPHS} from "./structureVisuals";
 export type Tool="select"|"demolish"|"iron_mine"|"coal_mine"|"furnace"|"assembler"|"advanced_furnace"|"conveyor"|"copper_mine"|"silicon_extractor"|"circuit_fabricator"|"coal_generator"|"splitter";
 const TILE=44;
 const fill:Record<Kind,number>={iron_mine:0xc58d53,coal_mine:0x676c79,furnace:0xd76446,assembler:0xc3a4e8,advanced_furnace:0xb64c4c,conveyor:0x508fa3,sell_terminal:0x68b98a,copper_mine:0xd69b57,silicon_extractor:0x8196b2,circuit_fabricator:0xbda0ed,coal_generator:0xdfc278,splitter:0x65c0b4};
-export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{state:GameState;tool:Tool;direction:Direction;onTile:(x:number,y:number)=>void;onDragRotate:(id:number,direction:Direction)=>void;selectedId:number|null}){
-  const active=useRef<{id:number;pointerId:number;startX:number;startY:number;tileX:number;tileY:number;cancelled:boolean}|null>(null);
+export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{state:GameState;tool:Tool;direction:Direction;onTile:(x:number,y:number)=>number|null;onDragRotate:(id:number,direction:Direction)=>void;selectedId:number|null}){
+  const active=useRef<{id:number|null;pointerId:number;startX:number;startY:number;tileX:number;tileY:number;handledOnDown:boolean}|null>(null);
   const [preview,setPreview]=useState<{id:number;direction:Direction}|null>(null);
   const point=(clientX:number,clientY:number)=>{
     const rect=element.current?.getBoundingClientRect();
@@ -23,19 +23,24 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
     window.addEventListener("keydown",escape);
     return ()=>window.removeEventListener("keydown",escape);
   },[]);
+  const cancelPointer=(event:ReactPointerEvent<HTMLDivElement>)=>{
+    if(active.current?.pointerId===event.pointerId)cancel();
+  };
   const onDown=(event:ReactPointerEvent<HTMLDivElement>)=>{
     if(event.button!==0||active.current)return;
     const p=point(event.clientX,event.clientY);if(!p)return;
     const entity=state.entities.find(e=>e.x===p.x&&e.y===p.y);
-    active.current={id:tool==="select"&&entity&&entity.kind!=="sell_terminal"?entity.id:-1,
-      pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,
-      tileX:p.x,tileY:p.y,cancelled:false};
+    const handledOnDown=!entity&&tool!=="select"&&tool!=="demolish";
     event.currentTarget.setPointerCapture(event.pointerId);
+    const id=handledOnDown?onTile(p.x,p.y):
+      tool!=="demolish"&&entity&&entity.kind!=="sell_terminal"?entity.id:null;
+    active.current={id,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,
+      tileX:p.x,tileY:p.y,handledOnDown};
   };
   const onMove=(event:ReactPointerEvent<HTMLDivElement>)=>{
     const gesture=active.current;if(!gesture||gesture.pointerId!==event.pointerId)return;
     const dx=event.clientX-gesture.startX,dy=event.clientY-gesture.startY;
-    if(tool==="select"&&gesture.id>0&&Math.hypot(dx,dy)>=12){
+    if(gesture.id!==null&&Math.hypot(dx,dy)>=12){
       setPreview({id:gesture.id,direction:vector(dx,dy)});
     }else setPreview(null);
   };
@@ -43,13 +48,13 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
     const gesture=active.current;if(!gesture||gesture.pointerId!==event.pointerId)return;
     const release=point(event.clientX,event.clientY);
     const dx=event.clientX-gesture.startX,dy=event.clientY-gesture.startY;
-    const shouldRotate=tool==="select"&&gesture.id>0&&Math.hypot(dx,dy)>=12;
+    const dragged=Math.hypot(dx,dy)>=12;
     cancel();
     if(event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
     if(!release)return;
-    if(shouldRotate)onDragRotate(gesture.id,vector(dx,dy));
-    else if(Math.hypot(dx,dy)<12)onTile(gesture.tileX,gesture.tileY);
+    if(dragged&&gesture.id!==null)onDragRotate(gesture.id,vector(dx,dy));
+    else if(!dragged&&!gesture.handledOnDown)onTile(gesture.tileX,gesture.tileY);
   };
   const element=useRef<HTMLDivElement>(null);
   const app=useRef<Application|null>(null);
@@ -125,5 +130,20 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
   },[state,tool,direction,selectedId,initialized,preview]);
   return <div className="board" ref={element} aria-label="12 by 12 factory map" data-testid="factory-board"
     onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
-    onPointerCancel={cancel} onLostPointerCapture={cancel}/>;
+    onPointerCancel={cancelPointer} onLostPointerCapture={cancelPointer}>
+      {state.chapterII?.started&&([
+        {name:"copper",label:"Cu",extractor:"copper_mine",point:COPPER_DEPOSITS[0]},
+        {name:"silicon",label:"Si",extractor:"silicon_extractor",point:SILICON_DEPOSITS[0]}
+      ] as const).map(({name,label,extractor,point})=>{
+        const occupant=state.entities.find(e=>e.x===point.x&&e.y===point.y);
+        if(!occupant||occupant.kind===extractor)return null;
+        return <span key={name} className="deposit-overlay"
+          data-testid={`deposit-marker-${name}`}
+          aria-label={`${name} deposit at (${point.x},${point.y}), occupied by ${occupant.kind}`}
+          title={`${name} deposit (${point.x},${point.y}) — occupied by ${occupant.kind}`}
+          style={{left:`${point.x/12*100}%`,top:`${point.y/12*100}%`}}>
+          {label}
+        </span>;
+      })}
+    </div>;
 }

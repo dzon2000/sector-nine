@@ -27,7 +27,7 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
     if(event.button!==0||active.current)return;
     const p=point(event.clientX,event.clientY);if(!p)return;
     const entity=state.entities.find(e=>e.x===p.x&&e.y===p.y);
-    active.current={id:tool==="select"&&entity&&entity.kind!=="sell_terminal"?entity.id:-1,
+    active.current={id:tool!=="demolish"&&entity&&entity.kind!=="sell_terminal"?entity.id:-1,
       pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,
       tileX:p.x,tileY:p.y,cancelled:false};
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -35,7 +35,7 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
   const onMove=(event:ReactPointerEvent<HTMLDivElement>)=>{
     const gesture=active.current;if(!gesture||gesture.pointerId!==event.pointerId)return;
     const dx=event.clientX-gesture.startX,dy=event.clientY-gesture.startY;
-    if(tool==="select"&&gesture.id>0&&Math.hypot(dx,dy)>=12){
+    if(gesture.id>0&&Math.hypot(dx,dy)>=12){
       setPreview({id:gesture.id,direction:vector(dx,dy)});
     }else setPreview(null);
   };
@@ -43,7 +43,7 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
     const gesture=active.current;if(!gesture||gesture.pointerId!==event.pointerId)return;
     const release=point(event.clientX,event.clientY);
     const dx=event.clientX-gesture.startX,dy=event.clientY-gesture.startY;
-    const shouldRotate=tool==="select"&&gesture.id>0&&Math.hypot(dx,dy)>=12;
+    const shouldRotate=gesture.id>0&&Math.hypot(dx,dy)>=12;
     cancel();
     if(event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -125,5 +125,19 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
   },[state,tool,direction,selectedId,initialized,preview]);
   return <div className="board" ref={element} aria-label="12 by 12 factory map" data-testid="factory-board"
     onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
-    onPointerCancel={cancel} onLostPointerCapture={cancel}/>;
+    onPointerCancel={cancel} onLostPointerCapture={cancel}>
+      {state.chapterII?.started&&([
+        {name:"copper",label:"Cu",point:COPPER_DEPOSITS[0]},
+        {name:"silicon",label:"Si",point:SILICON_DEPOSITS[0]}
+      ] as const).map(({name,label,point})=>{
+        const occupant=state.entities.find(e=>e.x===point.x&&e.y===point.y);
+        return <span key={name} className={"deposit-overlay"+(occupant?" deposit-occupied":"")}
+          data-testid={`deposit-marker-${name}`}
+          aria-label={`${name} deposit at (${point.x},${point.y})${occupant?", occupied by "+occupant.kind:""}`}
+          title={`${name} deposit (${point.x},${point.y})${occupant?" — occupied by "+occupant.kind:""}`}
+          style={{left:`${point.x/12*100}%`,top:`${point.y/12*100}%`}}>
+          {label}
+        </span>;
+      })}
+    </div>;
 }

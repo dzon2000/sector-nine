@@ -89,12 +89,12 @@ test("PR #8: both deposits remain visible and explain occupant after original-fa
  // A representative M1–M7 layout occupies both newly revealed sites.
  await page.getByRole("button",{name:/Conveyor/}).click();
  const silicon=await boardCenter(page,8,9);await page.mouse.click(silicon.x,silicon.y);
- await page.getByRole("button",{name:/Basic Furnace/}).click();
+ await page.getByRole("button",{name:/^Furnace/}).click();
  const copper=await boardCenter(page,8,2);await page.mouse.click(copper.x,copper.y);
  await expect(page.getByTestId("deposit-marker-copper")).toBeVisible();
  await expect(page.getByTestId("deposit-marker-silicon")).toBeVisible();
  await expect(page.getByTestId("chapter-deposit-status")).toContainText("occupied by Conveyor");
- await expect(page.getByTestId("chapter-deposit-status")).toContainText("occupied by Basic Furnace");
+ await expect(page.getByTestId("chapter-deposit-status")).toContainText("occupied by Furnace");
  await expect(page.getByTestId("chapter-deposit-status")).toContainText("Clear");
  await page.reload();
  await expect(page.getByTestId("deposit-marker-copper")).toBeVisible();

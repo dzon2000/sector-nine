@@ -75,3 +75,19 @@ body{overflow:hidden}
   .center .board{width:min(100%,calc(100dvh - 395px),528px)}
   .center .tip{font-size:10px}
 }
+
+/* Overlay remains visible on top of existing structures. Pointer events pass through. */
+.deposit-overlay{
+ position:absolute;z-index:3;pointer-events:none;
+ display:flex;align-items:center;justify-content:center;
+ width:8.333333%;height:8.333333%;font-size:clamp(10px,1vw,13px);
+ font-weight:900;text-shadow:0 1px 2px #000;
+ border:2px solid #e5c777;border-radius:50%;
+ color:#fff9d2;background:#384b68bb;
+ box-shadow:inset 0 0 0 1px #101a27,0 0 5px #0009;
+}
+.deposit-overlay.deposit-occupied{
+ border:2px dashed #ffc26f;background:#6a3c2cbf;
+}
+.deposit-status{border-top:1px solid #34506a;padding-top:8px;margin-top:12px}
+.deposit-status p{font-size:12px;line-height:1.45;margin:8px 0}

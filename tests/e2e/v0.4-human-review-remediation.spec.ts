@@ -52,6 +52,58 @@ test("PR #8: drag existing structure never creates construction or demolition ac
  await expect(page.getByRole("heading",{name:"Conveyor"})).toBeVisible();
 });
 
+test("PR #8: one press-drag places and rotates once, with facing saved after reload",async({page})=>{
+ await page.goto("/");
+ await page.getByRole("button",{name:"Begin Operations"}).click();
+ const recorder=page.getByTestId("playtest-panel");
+ await recorder.getByRole("button",{name:/Local playtest/}).click();
+ await page.getByTestId("start-playtest").click();
+ await page.getByRole("button",{name:/^Conveyor/}).click();
+ const start=await boardCenter(page,4,4);
+ const adjacent=await boardCenter(page,4,3);
+ await page.mouse.move(start.x,start.y);
+ await page.mouse.down();
+ await expect(recorder).toContainText("placed 1, rotated 0");
+ await expect(page.getByTestId("selected-facing")).toHaveText("E");
+ await page.mouse.move(adjacent.x,adjacent.y,{steps:5});
+ await expect(page.getByTestId("selected-facing")).toHaveText("E");
+ await page.mouse.up();
+ await expect(page.getByTestId("selected-facing")).toHaveText("N");
+ await expect(recorder).toContainText("placed 1, rotated 1");
+
+ await page.reload();
+ await page.getByRole("button",{name:"Inspect",exact:true}).click();
+ const reloaded=await boardCenter(page,4,4);
+ const empty=await boardCenter(page,4,3);
+ await page.mouse.click(empty.x,empty.y);
+ await expect(page.getByTestId("selected-facing")).toHaveCount(0);
+ await page.mouse.click(reloaded.x,reloaded.y);
+ await expect(page.getByTestId("selected-facing")).toHaveText("N");
+});
+
+test("PR #8: cancelling a new structure's rotation keeps the placement at its starting facing",async({page})=>{
+ await page.goto("/");
+ await page.getByRole("button",{name:"Begin Operations"}).click();
+ const recorder=page.getByTestId("playtest-panel");
+ await recorder.getByRole("button",{name:/Local playtest/}).click();
+ await page.getByTestId("start-playtest").click();
+ for(const [x,cancellation] of [[3,"Escape"],[4,"pointercancel"],[5,"lostpointercapture"],[6,"outside"]] as const){
+   await page.getByRole("button",{name:/^Conveyor/}).click();
+   const start=await boardCenter(page,x,4);
+   await page.mouse.move(start.x,start.y);
+   await page.mouse.down();
+   await page.mouse.move(start.x,start.y-30,{steps:3});
+   if(cancellation==="Escape")await page.keyboard.press("Escape");
+   else if(cancellation==="outside")await page.mouse.move(start.x,0);
+   else await page.getByTestId("factory-board").dispatchEvent(cancellation,{pointerId:1});
+   await page.mouse.up();
+   await page.getByRole("button",{name:"Inspect",exact:true}).click();
+   await page.mouse.click(start.x,start.y);
+   await expect(page.getByTestId("selected-facing")).toHaveText("E");
+ }
+ await expect(recorder).toContainText("placed 4, rotated 0");
+});
+
 async function chapterII(page:Page){
  await page.goto("/");
  await page.getByRole("button",{name:"Begin Operations"}).click();
@@ -79,10 +131,10 @@ async function chapterII(page:Page){
  await page.getByTestId("begin-chapter-ii").click();
 }
 
-test("PR #8: both deposits remain visible and explain occupant after original-factory construction",async({page})=>{
+test("PR #8: deposit overlays appear only over unrelated structures",async({page})=>{
  await chapterII(page);
- await expect(page.getByTestId("deposit-marker-copper")).toBeVisible();
- await expect(page.getByTestId("deposit-marker-silicon")).toBeVisible();
+ await expect(page.getByTestId("deposit-marker-copper")).toHaveCount(0);
+ await expect(page.getByTestId("deposit-marker-silicon")).toHaveCount(0);
  await expect(page.getByTestId("chapter-deposit-status")).toContainText("Copper");
  await expect(page.getByTestId("chapter-deposit-status")).toContainText("Silicon");
 
@@ -98,5 +150,27 @@ test("PR #8: both deposits remain visible and explain occupant after original-fa
  await expect(page.getByTestId("chapter-deposit-status")).toContainText("Clear");
  await page.reload();
  await expect(page.getByTestId("deposit-marker-copper")).toBeVisible();
+ await expect(page.getByTestId("deposit-marker-silicon")).toBeVisible();
  await expect(page.getByTestId("chapter-deposit-status")).toContainText("occupied");
+
+ await page.getByRole("button",{name:/Technology \+/}).click();
+ await page.once("dialog",dialog=>dialog.accept());
+ await page.getByTestId("unlock-resource_surveying").click();
+ for(const [name,building,y] of [["copper","Copper Mine",2],["silicon","Silicon Extractor",9]] as const){
+   const point=await boardCenter(page,8,y);
+   const marker=page.getByTestId(`deposit-marker-${name}`);
+   await page.getByRole("complementary",{name:/Construction and technology/})
+     .getByRole("button",{name:"Demolish",exact:true}).click();
+   await page.once("dialog",dialog=>dialog.accept());
+   await page.mouse.click(point.x,point.y);
+   await expect(marker).toHaveCount(0);
+   await page.getByRole("button",{name:new RegExp(`^${building}`)}).click();
+   await page.mouse.click(point.x,point.y);
+   await expect(page.getByRole("heading",{name:building,exact:true})).toBeVisible();
+   await expect(marker).toHaveCount(0);
+ }
+ await expect(page.getByTestId("chapter-deposit-status")).not.toContainText("Clear");
+ await page.reload();
+ await expect(page.getByTestId("deposit-marker-copper")).toHaveCount(0);
+ await expect(page.getByTestId("deposit-marker-silicon")).toHaveCount(0);
 });

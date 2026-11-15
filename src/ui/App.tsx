@@ -142,13 +142,19 @@ export default function App(){
     };
     window.addEventListener("keydown",listener);return ()=>window.removeEventListener("keydown",listener);
   });
-  const tile=(x:number,y:number)=>{
-    if(!game||game.introOpen)return;
-    const entity=game.entities.find(e=>e.x===x&&e.y===y);
-    if(tool==="select"){setSelected(entity?.id??null);return;}
-    if(tool==="demolish"){if(entity)demolish(entity.id);else setMessage("No object to demolish.");return;}
-    const result=place(game,tool,x,y,direction);
-    setMessage(result.message);if(result.ok){persist(result.state,{kind:"place",entityKind:tool,x,y});setSelected(result.state.nextId-1);}
+  const tile=(x:number,y:number):number|null=>{
+    const current=latest.current;
+    if(!current||current.introOpen||resetting.current)return null;
+    const entity=current.entities.find(e=>e.x===x&&e.y===y);
+    if(tool==="select"){setSelected(entity?.id??null);return null;}
+    if(tool==="demolish"){if(entity)demolish(entity.id);else setMessage("No object to demolish.");return null;}
+    const result=place(current,tool,x,y,direction);
+    setMessage(result.message);
+    if(!result.ok)return null;
+    const id=result.state.nextId-1;
+    persist(result.state,{kind:"place",entityKind:tool,x,y});
+    setSelected(id);
+    return id;
   };
   const closeFoundry=()=>{const s=latest.current;if(!s)return;const n=structuredClone(s);n.foundryStorySeen=true;persist(n);setReplayFoundry(false);setFoundryPanel(0);};
   const openTransmission=(id:ChapterTransmissionId)=>{setTransmission(id);setTransmissionPage(0);};
@@ -192,11 +198,11 @@ export default function App(){
   const chapterWindowProgress=chapterWindow(game);
   const activeChapterMission=["M8","M9","M10"].includes(game.mission.activeId);
   const depositsStatus=game.chapterII?.started?([
-    {name:"Copper",coords:COPPER_DEPOSITS[0]},
-    {name:"Silicon",coords:SILICON_DEPOSITS[0]}
-  ] as const).map(({name,coords})=>{
+    {name:"Copper",extractor:"copper_mine",coords:COPPER_DEPOSITS[0]},
+    {name:"Silicon",extractor:"silicon_extractor",coords:SILICON_DEPOSITS[0]}
+  ] as const).map(({name,extractor,coords})=>{
     const occupied=game.entities.find(e=>e.x===coords.x&&e.y===coords.y);
-    return {name,coords,occupied};
+    return {name,coords,occupied,extractor};
   }):[];
   const canBeginChapterII=game.mission.activeId==="DONE"&&!game.chapterII?.started&&!game.chapterII?.completed&&
     game.technologies?.coal_extraction&&game.technologies?.mechanical_components&&game.technologies?.advanced_smelting;
@@ -255,9 +261,10 @@ export default function App(){
       </section>}
       <h3>Iron deposits</h3><p>{DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p><h3>Coal deposits</h3><p>{COAL_DEPOSITS.map(d=>`(${d.x},${d.y})`).join(" · ")}</p>{game.chapterII?.started&&<><section data-testid="chapter-deposit-status" aria-label="Chapter II deposits" className="deposit-status">
       <h3>New mineral deposits</h3>
-      {depositsStatus.map(({name,coords,occupied})=><p key={name}>
+      {depositsStatus.map(({name,coords,occupied,extractor})=><p key={name}>
         <strong>{name} ({coords.x},{coords.y})</strong> — {occupied
-          ?`occupied by ${DEFINITIONS[occupied.kind].label}. Clear this tile with Demolish, then build the extractor; existing inventory is not moved automatically.`
+          ?occupied.kind===extractor?DEFINITIONS[occupied.kind].label+" installed."
+          :`occupied by ${DEFINITIONS[occupied.kind].label}. Clear this tile with Demolish, then build the extractor; existing inventory is not moved automatically.`
           :"available for an extractor after Resource Surveying."}
       </p>)}
     </section></>}

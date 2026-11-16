@@ -72,7 +72,8 @@ body{overflow:hidden}
   .app>header{max-height:120px;overflow:hidden}
   .app>footer{max-height:30dvh;min-height:120px;grid-template-columns:minmax(0,1fr) 105px;gap:8px}
   .app>footer .mission-hud-actions button{padding:5px;font-size:11px}
-  .center .board{width:min(100%,calc(100dvh - 395px),528px)}
+  .workspace .center{container-type:size}
+  .center .board{width:min(100%,calc(100dvh - 395px),max(0px,calc(100cqh - 60px)),528px);max-height:none}
   .center .tip{font-size:10px}
 }
 

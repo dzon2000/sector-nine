@@ -1,5 +1,7 @@
 # SEKTOR 9 — Game Design Document
 
+**Active-development save policy (2026-11-15):** From v0.5, only current-version saves are supported. Cross-version migration is deferred until explicitly reinstated; see [ADR-0006](decisions/0006-development-save-policy.md).
+
 **Document version:** 0.1 — draft  
 **Date:** 2026-11-08  
 **Status:** design baseline; balance numbers are unverified  

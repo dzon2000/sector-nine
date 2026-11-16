@@ -1,5 +1,7 @@
 # Architecture — SEKTOR 9
 
+**Current persistence policy:** [ADR-0006](decisions/0006-development-save-policy.md) supersedes cross-version save requirements from v0.5. Current-version deterministic restore remains mandatory.
+
 **Status:** approved high-level technology choices; concrete module APIs pending v0.1 implementation.
 
 ## Technical stack
@@ -42,7 +44,7 @@ User action -> UI command adapter -> domain command validation
 - `src/game/`: commands, tutorial flow, mission progress, game session orchestration.
 - `src/rendering/`: PixiJS scene, object sprites, belt indicators.
 - `src/ui/`: panels, controls, UI feedback, accessibility.
-- `src/persistence/`: save serialization, validation, IndexedDB adapter, migrations.
+- `src/persistence/`: save serialization, validation, IndexedDB adapter and explicit unsupported-version handling. Legacy migration removal is scheduled for v0.5 WP1.
 - `tests/`: unit, integration, and browser E2E tests.
 
 ## Domain rules

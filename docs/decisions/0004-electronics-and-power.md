@@ -1,5 +1,7 @@
 # ADR-0004 — Deterministic Electronics and Site-Wide Power (Accepted)
 
+> Historical version contract. From v0.5, cross-version save migration and legacy mission-rule preservation requirements are superseded by [ADR-0006](../decisions/0006-development-save-policy.md). Gameplay/economy requirements and recorded evidence remain unchanged.
+
 **Date:** 2026-11-13
 **Status:** ACCEPTED — 2026-11-14 product-owner Option A numerical and mission-rule approval; implementation validated in WP3.
 **Specification:** [v0.4 First Signal](../specifications/v0.4.md)

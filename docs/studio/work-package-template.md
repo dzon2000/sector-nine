@@ -20,7 +20,7 @@
 
 - Design assumptions and source of authority:
 - Determinism, tick ordering, financial/material ledger:
-- Save-schema/rule migrations and restore:
+- Current-version save schema/rules, deterministic restore and unsupported-version handling:
 - UX/accessibility and responsive behavior:
 - Exact commands executed and counts:
 - CI run URL for final HEAD:
@@ -29,7 +29,7 @@
 ## QA and human gate
 
 - Independent QA findings (severity + path/test):
-- Authentic historical saves available? Which? Distinguish synthetic fixtures:
+- Authentic current-version saves available? Distinguish synthetic fixtures. Historical migration: N/A under ADR-0006 unless explicitly reinstated:
 - Human gameplay/recorder export reference, observations, decision:
 - Human UX/accessibility/deployed smoke results:
 - Outstanding ACs and waivers:

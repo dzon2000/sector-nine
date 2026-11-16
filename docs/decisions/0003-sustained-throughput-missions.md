@@ -1,5 +1,7 @@
 # ADR-0003 — Sustained Throughput Missions and Legacy Save Compatibility
 
+> Historical version contract. From v0.5, cross-version save migration and legacy mission-rule preservation requirements are superseded by [ADR-0006](../decisions/0006-development-save-policy.md). Gameplay/economy requirements and recorded evidence remain unchanged.
+
 **Date:** 2026-11-10  
 **Status:** accepted  
 **Specification:** [SEKTOR 9 v0.3](../specifications/v0.3.md)  

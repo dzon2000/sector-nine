@@ -3,6 +3,9 @@ import {begin,place,remove,reset,setPause,turn,face} from "../game/commands";
 import {MISSIONS} from "../game/missions";
 import {entityDiagnostics,terminalDiagnostics,diagnosticHint} from "../game/diagnostics";
 import {missionWindow} from "../game/missionMetrics";
+import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "../game/chapterThree";
+import {ChapterThreePanel} from "./ChapterThreePanel";
+import {ConfirmationDialog} from "./ConfirmationDialog";
 import {beginChapterII,chapterWindow} from "../game/chapterTwo";
 import {CHAPTER_TRANSMISSIONS,availableTransmissions,type ChapterTransmissionId} from "../game/chapterNarrative";
 import {BUILD_COMMIT} from "./buildProvenance";
@@ -107,7 +110,9 @@ export default function App(){
       if(!s||resetting.current)return;
       if(s.paused||s.introOpen||document.hidden){observePlaytest(s);return;}
       const next=tick(s);latest.current=next;setGame(next);observePlaytest(next);
-      if(next.tick%10===0)queueSave(next);
+      const contractCompleted=next.chapterIII?.completed.length!==s.chapterIII?.completed.length;
+      if(contractCompleted)setMessage("Contract complete. Archive entry unlocked.");
+      if(contractCompleted||next.tick%10===0)queueSave(next);
     },1000);
     return ()=>clearInterval(id);
   },[ready,game?.paused,game?.introOpen,error,queueSave]);
@@ -147,11 +152,11 @@ export default function App(){
   };
   useEffect(()=>{
     const listener=(e:KeyboardEvent)=>{
-      if(e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement||e.target instanceof HTMLButtonElement||game?.introOpen||error)return;
+      if(document.querySelector("dialog:modal")||e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement||e.target instanceof HTMLButtonElement||game?.introOpen||error)return;
       if(e.key.toLowerCase()==="r"){e.preventDefault();rotateChoice();}
       if(e.key==="Escape"){setTool("select");setSelected(null);}
       if(e.key==="Delete"&&selectedEntity)demolish(selectedEntity.id);
-      if(e.code==="Space"){e.preventDefault();change(s=>{const n=setPause(s,!s.paused);queueSave(n);return n;});}
+      if(e.code==="Space"&&!(e.target instanceof Element&&e.target.closest(".mission-hud-objectives[tabindex]"))){e.preventDefault();change(s=>{const n=setPause(s,!s.paused);queueSave(n);return n;});}
     };
     window.addEventListener("keydown",listener);return ()=>window.removeEventListener("keydown",listener);
   });
@@ -195,13 +200,18 @@ export default function App(){
   if(error)return <main className="error">
     <h1>Save error</h1><p role="alert">{error}</p>
     <p>Cancel keeps any stored data intact. Starting a new campaign replaces the saved factory.</p>
-    {confirmRestart?<section role="dialog" aria-label="Confirm restart">
-      <p>Replace the stored save and restart at Mission 1? This permanently deletes your saved progress.</p>
-      <button onClick={()=>setConfirmRestart(false)}>Cancel</button>
-      <button onClick={()=>void fresh()}>Replace save and restart</button>
-    </section>:<button onClick={()=>setConfirmRestart(true)}>Start new game</button>}
+    <button onClick={()=>setConfirmRestart(true)}>Start new game</button>
+    {confirmRestart&&<ConfirmationDialog title="Confirm restart" confirmLabel="Replace save and restart"
+      description={<p>Replace the stored save and restart at Mission 1? This permanently deletes your saved progress.</p>}
+      onCancel={()=>setConfirmRestart(false)} onConfirm={()=>{setConfirmRestart(false);void fresh();}}/>}
   </main>;
   if(!game)return null;
+  const runContractCommand=(command:(state:GameState)=>ReturnType<typeof beginChapterIII>)=>{
+    if(!latest.current||resetting.current)return;
+    const result=command(latest.current);
+    setMessage(result.message);
+    if(result.ok)persist(result.state);
+  };
   const kpi=stats(game),mission=MISSIONS[game.mission.activeId];
   const narrativeAvailable=availableTransmissions(game);
   const activeTransmission=transmission&&narrativeAvailable.includes(transmission)?CHAPTER_TRANSMISSIONS[transmission]:null;
@@ -357,10 +367,11 @@ export default function App(){
       </section>}
       <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
       </aside></div>
-    <footer data-testid="mission-hud"><div className="mission-hud-objectives"><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{chapterCompleted?"First Signal Restored":mission.title}</h2><p>{game.tutorialEnabled?(chapterCompleted?"Prometheus archive: SECTOR 9 — SUBLEVEL 03. Continue optimizing your factory in sandbox mode.":mission.hint):"Tutorial hints hidden."}</p>{narrativeAvailable.length>0&&<p data-testid="latest-transmission" className="transmission-notice">
-        Latest archive dispatch: {CHAPTER_TRANSMISSIONS[narrativeAvailable[narrativeAvailable.length-1]].pages[0].heading}.
-        Open Prometheus transmissions in Inspector to read or replay. Production continues.
-      </p>}
+    <footer data-testid="mission-hud"><div className="mission-hud-objectives" tabIndex={chapterCompleted?0:undefined} role={chapterCompleted?"region":undefined} aria-label={chapterCompleted?"Operations objectives":undefined}>{chapterCompleted&&<ChapterThreePanel game={game}
+        onStart={()=>runContractCommand(beginChapterIII)}
+        onAccept={id=>runContractCommand(s=>acceptChapterIIIContract(s,id))}
+        onChoose={route=>runContractCommand(s=>chooseChapterIIIRoute(s,route,true))}/>}
+      {!chapterCompleted&&<><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{mission.title}</h2><p>{game.tutorialEnabled?mission.hint:"Tutorial hints hidden."}</p>
       {throughputMission&&<section className="mission-throughput" aria-label="Mission throughput diagnostics" data-testid="mission-throughput">
         <h3>Live objective · trailing 60 active ticks</h3>
         <p>{currentWindow?"Complete 60-tick window":"Collecting mission-local window"}</p>
@@ -374,11 +385,15 @@ export default function App(){
         <p data-testid="mission-bottleneck">{unmetRequirements[0]??"All conditions met in current window; maintain stable throughput."}</p>
       </section>}
       {activeChapterMission&&<section className="mission-throughput" aria-label="Chapter II objectives" data-testid="chapter-objectives"><h3>Chapter II objectives</h3>{game.mission.activeId==="M8"?<p>Copper sold: {chapterMetrics?.totals?.copper_ore??0}/10 · Silicon sold: {chapterMetrics?.totals?.silicon??0}/10</p>:game.mission.activeId==="M9"?<p>Circuits sold: {chapterMetrics?.totals?.circuit??0}/4 · Fabrication: {game.technologies?.circuit_fabrication?"Unlocked":"Locked"} · Power: {game.technologies?.industrial_power?"Unlocked":"Locked"}</p>:<><p>{chapterWindowProgress?"Complete 60-tick window":"Collecting 60 active mission ticks"}</p><ul><li>Circuits sold: {chapterWindowProgress?.sales.circuit??0}/11</li><li>Circuits produced: {chapterWindowProgress?.producedCircuits??0}/11</li><li>Steel sold: {chapterWindowProgress?.sales.steel??0}/5</li><li>Demand covered: {chapterWindowProgress?.coveredTicks??0}/57 of 60</li><li>Stable: {chapterMetrics?.streakTicks??0}/60 consecutive windows</li></ul></>}</section>}
-      <div className="progress">{game.mission.activeId==="M2"?`${game.mission.soldOre} / 10 ore sold`:game.mission.activeId==="M3"?`${game.mission.soldIngot} / 20 ingots sold`:game.mission.activeId==="M4"?`${game.mission.profitStreakTicks} / 60 qualifying ticks`:game.mission.activeId==="M5"?`${game.mission.soldCoal??0} / 10 coal sold`:game.mission.activeId==="M6"&&!throughputMission?`${game.mission.soldGear??0} / 8 gears sold`:game.mission.activeId==="M7"&&!throughputMission?`${game.mission.soldSteel??0} / 8 steel sold`:""}</div></div>
+      <div className="progress">{game.mission.activeId==="M2"?`${game.mission.soldOre} / 10 ore sold`:game.mission.activeId==="M3"?`${game.mission.soldIngot} / 20 ingots sold`:game.mission.activeId==="M4"?`${game.mission.profitStreakTicks} / 60 qualifying ticks`:game.mission.activeId==="M5"?`${game.mission.soldCoal??0} / 10 coal sold`:game.mission.activeId==="M6"&&!throughputMission?`${game.mission.soldGear??0} / 8 gears sold`:game.mission.activeId==="M7"&&!throughputMission?`${game.mission.soldSteel??0} / 8 steel sold`:""}</div></>}
+      {!game.chapterIII&&narrativeAvailable.length>0&&<p data-testid="latest-transmission" className="transmission-notice">
+        Latest archive dispatch: {CHAPTER_TRANSMISSIONS[narrativeAvailable[narrativeAvailable.length-1]].pages[0].heading}.
+        Open Prometheus transmissions in Inspector to read or replay. Production continues.
+      </p>}</div>
       <div className="mission-hud-actions"><p role="status">{message}</p>{canBeginChapterII&&<button data-testid="begin-chapter-ii" onClick={()=>{
         const result=beginChapterII(latest.current!);
         setMessage(result.message);if(result.ok){persist(result.state);setShowTechnology(true);}
-      }}>Begin Chapter II</button>}<button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button></div></footer>
+      }}>Begin Chapter II</button>}{!game.chapterIII&&<button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button>}</div></footer>
     {activeTransmission&&!game.introOpen&&!help&&<div className="overlay" data-testid="chapter-transmission-overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Chapter II Transmission">
       <small>{transmissionPage+1} / {activeTransmission.pages.length} · PROJECT PROMETHEUS</small>
       <h1>{activeTransmission.pages[transmissionPage].heading}</h1>

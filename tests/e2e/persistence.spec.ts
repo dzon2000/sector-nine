@@ -67,8 +67,17 @@ for(const schemaVersion of [3,99,5]){
   }),rejected);
   await page.reload();
   await expect(page.getByRole("alert")).toContainText(schemaVersion===5?/corrupt/i:/unsupported/i);
-  await page.getByRole("button",{name:"Start new game"}).click();
-  await page.getByRole("button",{name:"Cancel"}).click();
+  const restart=page.getByRole("button",{name:"Start new game"});
+  const confirmation=page.getByRole("dialog",{name:"Confirm restart"});
+  await restart.focus();
+  await page.keyboard.press("Enter");
+  await expect(confirmation.getByRole("button",{name:"Cancel"})).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toHaveCount(0);
+  await expect(restart).toBeFocused();
+  await restart.click();
+  await confirmation.getByRole("button",{name:"Cancel"}).click();
+  await expect(restart).toBeFocused();
   await page.reload();
   await expect(page.getByRole("heading",{name:"Save error"})).toBeVisible();
   expect(await page.evaluate(()=>new Promise((resolve,reject)=>{

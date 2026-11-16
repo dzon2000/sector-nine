@@ -1,8 +1,8 @@
 import {test,expect,type Page} from "@playwright/test";
 
 /** Seed validated deterministic active-tick fixture; no UI timer or animation inference. */
-async function seedDiagnostics(page:Page,legacy=false){
-  await page.evaluate(async legacySave=>{
+async function seedDiagnostics(page:Page){
+  await page.evaluate(async ()=>{
     await new Promise<void>((resolve,reject)=>{
       const request=indexedDB.open("sector-nine-v0.1",1);
       request.onerror=()=>reject(request.error);
@@ -14,12 +14,11 @@ async function seedDiagnostics(page:Page,legacy=false){
         req.onsuccess=()=>{
           const s=req.result;
           if(!s){reject(new Error("No game save"));return;}
-          const items=["iron_ore","iron_ingot","coal","gear","steel"] as const;
+          const items=["iron_ore","iron_ingot","coal","gear","steel","copper_ore","silicon","circuit"] as const;
           const empty=()=>Object.fromEntries(items.map(item=>[item,0]));
           s.tick=60;s.paused=true;s.introOpen=false;s.foundryStorySeen=true;
           s.mission.activeId="M6";s.mission.soldGear=9;
-          s.missionRuleVersion=legacySave?2:3;
-          s.missionMetrics=legacySave?null:{
+          s.missionMetrics={
             activatedAtTick:0,streakTicks:1,lastEvaluatedTick:60,
             salesTicks:Array.from({length:60},(_,i)=>({
               tick:i+1,sales:{...empty(),gear:i<9?1:0}
@@ -56,7 +55,7 @@ async function seedDiagnostics(page:Page,legacy=false){
         tx.onerror=()=>{db.close();reject(tx.error);};
       };
     });
-  },legacy);
+  });
 }
 async function select(page:Page,x:number,y:number){
   const board=page.getByTestId("factory-board");
@@ -113,13 +112,4 @@ test("WP4 mission HUD, terminal and inspector show source-derived counters acros
   await expect(page.getByTestId("mission-throughput")).toContainText("Stable: 0/120");
   await expect(page.getByTestId("mission-bottleneck")).toContainText("Increase gear production");
   await expect(page.getByTestId("terminal-throughput")).toContainText("gear: 8");
-});
-test("WP4 legacy active M6 retains cumulative progress without v3 throughput HUD",async({page})=>{
-  await page.goto("/");
-  await page.getByRole("button",{name:"Begin Operations"}).click();
-  await seedDiagnostics(page,true);
-  await page.reload();
-  await expect(page.getByTestId("mission-throughput")).toHaveCount(0);
-  await expect(page.getByText("9 / 8 gears sold")).toBeVisible();
-  await expect(page.getByTestId("terminal-throughput")).toContainText("gear: 9");
 });

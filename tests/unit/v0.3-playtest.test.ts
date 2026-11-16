@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {startPlaytest,resumePlaytest,advancePlaytest,recordPlaytestCommand,annotatePlaytest,finishPlaytest,buildPlaytestReport,type PlaytestSession} from "../../src/ui/playtest";
+import {isPlaytestSession,startPlaytest,resumePlaytest,advancePlaytest,recordPlaytestCommand,annotatePlaytest,finishPlaytest,buildPlaytestReport,type PlaytestSession} from "../../src/ui/playtest";
 import {createGame,type GameState} from "../../src/domain/model";
 
 function state(tick=0):GameState{
@@ -43,13 +43,11 @@ describe("WP5 optional local-only playtest protocol",()=>{
   it("exports rule/schema provenance captured from actual game state for new and legacy missions",()=>{
     const modern=state(60);
     modern.mission.activeId="M6";
-    modern.missionRuleVersion=3;
     const report=buildPlaytestReport(finishPlaytest(startPlaytest(modern,1000),modern,2000));
-    expect(report).toMatchObject({format:"sector-nine-playtest-v1",schemaVersion:3,missionRuleVersion:3});
-    const legacy=state(60);
-    legacy.mission.activeId="M7";
-    legacy.missionRuleVersion=2;
-    expect(buildPlaytestReport(startPlaytest(legacy,1000))).toMatchObject({
+    expect(report).toMatchObject({format:"sector-nine-playtest-v1",schemaVersion:5,missionRuleVersion:5});
+    const legacy={...startPlaytest(modern,1000),schemaVersion:3,missionRuleVersion:2} as const;
+    expect(isPlaytestSession(legacy)).toBe(true);
+    expect(buildPlaytestReport(legacy)).toMatchObject({
       schemaVersion:3,missionRuleVersion:2
     });
   });

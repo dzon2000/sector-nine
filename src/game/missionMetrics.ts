@@ -7,7 +7,7 @@ export function activateMissionMetrics(activatedAtTick:number):MissionMetrics {
 
 /** Record one complete active tick, including zero-sale ticks. */
 export function recordMissionTick(state:GameState,sales:Readonly<Record<Item,number>>):void {
-  if(state.missionRuleVersion!==3 || !["M6","M7"].includes(state.mission.activeId))return;
+  if(!["M6","M7"].includes(state.mission.activeId))return;
   const metrics=state.missionMetrics;
   if(!metrics || state.tick<=metrics.activatedAtTick)return;
   metrics.salesTicks.push({tick:state.tick,sales:{...sales}});
@@ -17,7 +17,7 @@ export function recordMissionTick(state:GameState,sales:Readonly<Record<Item,num
 /** Evaluate only complete, contiguous post-activation windows. */
 export function missionWindow(state:GameState):{sales:Record<Item,number>;profitCents:number}|null {
   const metrics=state.missionMetrics;
-  if(state.missionRuleVersion!==3 || !metrics || metrics.salesTicks.length!==60)return null;
+  if(!metrics || metrics.salesTicks.length!==60)return null;
   const first=state.tick-59;
   if(first<=metrics.activatedAtTick || metrics.salesTicks[0]?.tick!==first ||
     metrics.salesTicks.some((event,i)=>event.tick!==first+i))return null;

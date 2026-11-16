@@ -33,7 +33,7 @@ export const CHAPTER_TRANSMISSIONS:Record<ChapterTransmissionId,ChapterTransmiss
 
 /** M8/M9/M10 transmissions unlock after the corresponding completed mission. */
 export function availableTransmissions(state:GameState):ChapterTransmissionId[]{
-  if(state.missionRuleVersion!==4||!state.chapterII?.started)return [];
+  if(!state.chapterII?.started)return [];
   const available:ChapterTransmissionId[]=["opening"];
   if(["M9","M10","DONE"].includes(state.mission.activeId))available.push("m8");
   if(["M10","DONE"].includes(state.mission.activeId))available.push("m9");

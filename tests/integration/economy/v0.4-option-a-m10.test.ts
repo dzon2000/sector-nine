@@ -5,7 +5,8 @@ import {runTicks,tick} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
 import {physicalM10} from "./v0.4-option-a-layout";
 function build(){
- let s=createGame();s.mission.activeId="DONE";s.balanceCents=1000000;
+ let s=createGame();s.mission.activeId="DONE";
+  s.chapterII={foundryCompleted:true,started:true,completed:true,storySeen:false,metrics:null};s.balanceCents=1000000;
  s.technologies={coal_extraction:true,mechanical_components:true,advanced_smelting:true,resource_surveying:true,circuit_fabrication:true,industrial_power:true};
  for(const [kind,x,y,d] of physicalM10){
    const r=place(s,kind,x,y,d);

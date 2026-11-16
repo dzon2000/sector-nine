@@ -9,7 +9,7 @@ import {BUILD_COMMIT} from "./buildProvenance";
 import {TECHNOLOGIES,TECHNOLOGY_ORDER,CHAPTER_TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type AnyTechnologyId} from "../game/technologies";
 import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
 import {tick} from "../simulation/engine";
-import {loadGame,saveGame,eraseGame} from "../persistence/indexedDb";
+import {loadGame,saveGame,restartGame} from "../persistence/indexedDb";
 import {Board,type Tool} from "../rendering/Board";
 import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,isPlaytestSession,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
 const PLAYTEST_KEY="sector-nine-v0.3-local-playtest";
@@ -41,6 +41,7 @@ export default function App(){
   const [foundryPanel,setFoundryPanel]=useState(0);
   const [ready,setReady]=useState(false);
   const resetting=useRef(false);
+  const [confirmRestart,setConfirmRestart]=useState(false);
   const [showPlaytest,setShowPlaytest]=useState(false);
   const [playtest,setPlaytest]=useState<PlaytestSession|null>(null);
   const playtestRef=useRef<PlaytestSession|null>(null);
@@ -174,23 +175,24 @@ export default function App(){
     if(result.ok)persist(result.state,{kind:"research",technology:id});
   };
   const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)void saveGame(s).catch(e=>setError(String(e)));};
-  const fresh=async()=>{if(resetting.current||!window.confirm("Factory Reset? All progress and your save will be permanently deleted."))return;
+  const fresh=async()=>{if(resetting.current)return;
     resetting.current=true;
-    try{await eraseGame();savePlaytest(null);setShowPlaytest(false);const s=reset();latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+    try{const s=reset();await restartGame(s);setConfirmRestart(false);savePlaytest(null);setShowPlaytest(false);latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
-  if(error)return <main className="error"><h1>Save error</h1><p role="alert">{error}</p><p>Stored data has not been overwritten. Export or back up your IndexedDB data before resetting.</p><button onClick={()=>void fresh()}>Factory Reset</button></main>;
+  if(error)return <main className="error">
+    <h1>Save error</h1><p role="alert">{error}</p>
+    <p>Cancel keeps any stored data intact. Starting a new campaign replaces the saved factory.</p>
+    {confirmRestart?<section role="dialog" aria-label="Confirm restart">
+      <p>Replace the stored save and restart at Mission 1? This permanently deletes your saved progress.</p>
+      <button onClick={()=>setConfirmRestart(false)}>Cancel</button>
+      <button onClick={()=>void fresh()}>Replace save and restart</button>
+    </section>:<button onClick={()=>setConfirmRestart(true)}>Start new game</button>}
+  </main>;
   if(!game)return null;
   const kpi=stats(game),mission=MISSIONS[game.mission.activeId];
   const narrativeAvailable=availableTransmissions(game);
   const activeTransmission=transmission&&narrativeAvailable.includes(transmission)?CHAPTER_TRANSMISSIONS[transmission]:null;
   const chapterCompleted=game.chapterII?.started&&game.chapterII.completed&&game.mission.activeId==="DONE";
-  const legacyObjective=game.missionRuleVersion===2&&
-    (game.mission.activeId==="M6"||game.mission.activeId==="M7");
-  const objectiveHint=legacyObjective?
-    (game.mission.activeId==="M6"
-      ?"Legacy campaign: sell eight gears at the terminal. Your original cumulative progress is preserved."
-      :"Legacy campaign: unlock Advanced Smelting and sell eight steel at the terminal. Your original cumulative progress is preserved.")
-    :mission.hint;
   const machineCounters=selectedEntity?entityDiagnostics(game,selectedEntity.id):null;
   const terminalCounters=terminalDiagnostics(game);
   const currentWindow=missionWindow(game);
@@ -206,8 +208,7 @@ export default function App(){
   }):[];
   const canBeginChapterII=game.mission.activeId==="DONE"&&!game.chapterII?.started&&!game.chapterII?.completed&&
     game.technologies?.coal_extraction&&game.technologies?.mechanical_components&&game.technologies?.advanced_smelting;
-  const throughputMission=game.missionRuleVersion===3&&
-    (game.mission.activeId==="M6"||game.mission.activeId==="M7");
+  const throughputMission=(game.mission.activeId==="M6"||game.mission.activeId==="M7");
   const isM7=game.mission.activeId==="M7";
   const missionStreak=game.missionMetrics?.streakTicks??0;
   const unmetRequirements:string[]=[];
@@ -341,9 +342,9 @@ export default function App(){
           {id==="opening"&&!game.chapterII?.storySeen?"Inspect Request":"Replay "+CHAPTER_TRANSMISSIONS[id].label}
         </button>)}
       </section>}
-      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>void fresh()}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>
+      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>
       </aside></div>
-    <footer data-testid="mission-hud"><div className="mission-hud-objectives"><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{chapterCompleted?"First Signal Restored":mission.title}</h2><p>{game.tutorialEnabled?(chapterCompleted?"Prometheus archive: SECTOR 9 — SUBLEVEL 03. Continue optimizing your factory in sandbox mode.":objectiveHint):"Tutorial hints hidden."}</p>{narrativeAvailable.length>0&&<p data-testid="latest-transmission" className="transmission-notice">
+    <footer data-testid="mission-hud"><div className="mission-hud-objectives"><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{chapterCompleted?"First Signal Restored":mission.title}</h2><p>{game.tutorialEnabled?(chapterCompleted?"Prometheus archive: SECTOR 9 — SUBLEVEL 03. Continue optimizing your factory in sandbox mode.":mission.hint):"Tutorial hints hidden."}</p>{narrativeAvailable.length>0&&<p data-testid="latest-transmission" className="transmission-notice">
         Latest archive dispatch: {CHAPTER_TRANSMISSIONS[narrativeAvailable[narrativeAvailable.length-1]].pages[0].heading}.
         Open Prometheus transmissions in Inspector to read or replay. Production continues.
       </p>}
@@ -376,9 +377,7 @@ export default function App(){
         <button onClick={closeTransmission}>Skip Transmission</button>
       </div>
     </section></div>}
-    {foundryStoryOpen&&!game.introOpen&&!help&&<div className="overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Foundry Directive"><small>{foundryPanel+1} / 3 · PROMETHEUS ARCHIVE</small><h1>{FOUNDRY_NARRATIVE[foundryPanel][0]}</h1><p>{game.missionRuleVersion===2&&foundryPanel===2
-    ?"Sell coal, manufacture gears, then synchronize iron ingots and coal to produce steel. The archive remains sealed until the foundry proves its capacity."
-    :FOUNDRY_NARRATIVE[foundryPanel][1]}</p><div className="actions">{foundryPanel>0&&<button onClick={()=>setFoundryPanel(p=>p-1)}>Previous</button>}{foundryPanel<2&&<button onClick={()=>setFoundryPanel(p=>p+1)}>Next</button>}<button onClick={closeFoundry}>Close / Return</button><button onClick={closeFoundry}>Skip Directive</button></div></section></div>}
+    {foundryStoryOpen&&!game.introOpen&&!help&&<div className="overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Foundry Directive"><small>{foundryPanel+1} / 3 · PROMETHEUS ARCHIVE</small><h1>{FOUNDRY_NARRATIVE[foundryPanel][0]}</h1><p>{FOUNDRY_NARRATIVE[foundryPanel][1]}</p><div className="actions">{foundryPanel>0&&<button onClick={()=>setFoundryPanel(p=>p-1)}>Previous</button>}{foundryPanel<2&&<button onClick={()=>setFoundryPanel(p=>p+1)}>Next</button>}<button onClick={closeFoundry}>Close / Return</button><button onClick={closeFoundry}>Skip Directive</button></div></section></div>}
     {(game.introOpen||help)&&<div className="overlay"><section className="story" role="dialog" aria-modal="true"><small>{panel+1} / 3 · SECTOR 9 ARCHIVE</small><h1>{NARRATIVE[panel][0]}</h1><p>{NARRATIVE[panel][1]}</p><div className="actions">{panel>0&&<button onClick={()=>setPanel(p=>p-1)}>Previous</button>}{panel<2&&<button onClick={()=>setPanel(p=>p+1)}>Next</button>}<button onClick={()=>{if(help){setHelp(false);return;}go();}}> {help?"Close / Return":"Begin Operations"}</button>{!help&&<button onClick={go}>Skip Introduction</button>}</div></section></div>}
   </div>;
 }

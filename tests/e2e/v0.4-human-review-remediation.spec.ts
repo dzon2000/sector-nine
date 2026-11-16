@@ -116,7 +116,8 @@ async function chapterII(page:Page){
        const get=store.get("slot1");
        get.onsuccess=()=>{
          const s=get.result;
-         s.mission.activeId="DONE";s.foundryStorySeen=true;s.paused=true;
+         s.mission.activeId="DONE";
+         s.chapterII={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};s.foundryStorySeen=true;s.paused=true;
          s.technologies.coal_extraction=true;
          s.technologies.mechanical_components=true;
          s.technologies.advanced_smelting=true;

@@ -34,8 +34,7 @@ export interface TechnologyStatus {
 }
 
 function completedM4(state:GameState):boolean{
-  // DONE is the v0.1 post-M4 state, including migrated saves.
-  // v0.2 missions M5-M7 also imply M4 was completed previously.
+  // Chapter I free play and M5–M7 all follow M4.
   return ["DONE","M5","M6","M7"].includes(state.mission.activeId);
 }
 export function technologyStatus(state:GameState,id:AnyTechnologyId):TechnologyStatus {

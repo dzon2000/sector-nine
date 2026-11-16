@@ -149,7 +149,7 @@ export function tick(state:GameState):GameState {
     if(t.kind==="conveyor"||t.kind==="splitter"){t.belt=r.item;costCents+=5;}
     else if(recipeFor(t.kind)||t.kind==="coal_generator"){
       t.inputBuffers={...(t.inputBuffers??{}),[r.item]:(t.inputBuffers?.[r.item]??0)+1};
-      if(t.kind==="furnace")t.oreInput=t.inputBuffers.iron_ore??0; // Legacy read-only mirror for v0.1-compatible snapshots.
+      if(t.kind==="furnace")t.oreInput=t.inputBuffers.iron_ore??0; // Keep the furnace ore counter synchronized with typed inventory.
     }
     else if(t.kind==="sell_terminal"){
       revenueCents+=REVENUE[r.item];

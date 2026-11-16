@@ -17,8 +17,8 @@ export interface PlaytestTransition {tick:number;from:MissionId;to:MissionId}
 export interface PlaytestSession {
   active:boolean;
   /** Optional only for recordings created before provenance support. */
-  schemaVersion?:GameState["schemaVersion"];
-  missionRuleVersion?:2|3|4;
+  schemaVersion?:1|2|3|4|5;
+  missionRuleVersion?:2|3|4|5;
   /** Original build provenance; absent in old sessions, null for untrusted/local builds. */
   buildCommit?:string|null;
   startedAt:number;
@@ -55,8 +55,8 @@ export function isPlaytestSession(value:unknown):value is PlaytestSession{
   for(const optional of ["waitingForMissionMs","poweredTicks","unpoweredTicks"]){
     if(v[optional]!==undefined&&(!Number.isSafeInteger(v[optional])||(v[optional] as number)<0))return false;
   }
-  if((v.schemaVersion!==undefined && ![1,2,3,4].includes(v.schemaVersion as number))||
-    (v.missionRuleVersion!==undefined && v.missionRuleVersion!==2 && v.missionRuleVersion!==3 && v.missionRuleVersion!==4))return false;
+  if((v.schemaVersion!==undefined && ![1,2,3,4,5].includes(v.schemaVersion as number))||
+    (v.missionRuleVersion!==undefined && ![2,3,4,5].includes(v.missionRuleVersion as number)))return false;
   if(typeof v.active!=="boolean"||typeof v.lastPaused!=="boolean"||
     !["unclassified","planning","waiting","waiting_mission"].includes(String(v.activity))||
     !["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(String(v.lastMission)))return false;

@@ -1,6 +1,6 @@
 import {test,expect,type Page} from "@playwright/test";
 
-async function seed(page:Page,mutation:"m5-ready"|"m6-streak"|"m7-starved"|"legacy-m6"){
+async function seed(page:Page,mutation:"m5-ready"|"m6-streak"|"m7-starved"){
   await page.evaluate(async mutation=>{
     await new Promise<void>((resolve,reject)=>{
       const open=indexedDB.open("sector-nine-v0.1",1);
@@ -11,7 +11,7 @@ async function seed(page:Page,mutation:"m5-ready"|"m6-streak"|"m7-starved"|"lega
           const s=request.result;
           if(!s){reject(new Error("Missing saved campaign"));return;}
           s.foundryStorySeen=true;s.introOpen=false;
-          const empty=()=>({iron_ore:0,iron_ingot:0,coal:0,gear:0,steel:0});
+          const empty=()=>({iron_ore:0,iron_ingot:0,coal:0,gear:0,steel:0,copper_ore:0,silicon:0,circuit:0});
           if(mutation==="m5-ready"){
             s.mission.activeId="M5";s.mission.soldCoal=9;s.technologies.coal_extraction=true;
             s.entities.push({id:2,kind:"conveyor",x:9,y:5,direction:"E",belt:"coal",output:null,oreInput:0,
@@ -22,13 +22,10 @@ async function seed(page:Page,mutation:"m5-ready"|"m6-streak"|"m7-starved"|"lega
             s.rollingEvents=Array.from({length:60},(_,i)=>({tick:i+1,revenueCents:0,costCents:0}));
             s.lastEvent=s.rollingEvents.at(-1);
             s.mission.activeId=mutation==="m7-starved"?"M7":"M6";
-            s.missionRuleVersion=mutation==="legacy-m6"?2:3;
-            if(s.missionRuleVersion===3){
-              s.missionMetrics={activatedAtTick:0,streakTicks:mutation==="m6-streak"?119:0,lastEvaluatedTick:60,
+            s.missionMetrics={activatedAtTick:0,streakTicks:mutation==="m6-streak"?119:0,lastEvaluatedTick:60,
                 salesTicks:Array.from({length:60},(_,i)=>({
                   tick:i+1,sales:{...empty(),gear:mutation==="m6-streak"&&i>=1&&i<=10?1:0}
                 }))};
-            }else s.missionMetrics=null;
             s.diagnostics={samples:[]};
             s.technologies.mechanical_components=true;
             if(mutation==="m6-streak"){s.sales.gear=10;s.mission.soldGear=10;s.materialLedger.gear.opening=10;s.materialLedger.gear.sold=10;}
@@ -64,30 +61,6 @@ test("WP5 M6 to M7 transitions to simultaneous targets and highlights coal/steel
   await expect(page.getByTestId("mission-throughput")).toContainText("Steel sales: 0/7");
   await expect(page.getByTestId("mission-bottleneck")).toContainText("Collect 60 active mission ticks");
 });
-test("WP5 legacy M6 retains 8-gear guidance rather than v3 120-tick requirement",async({page})=>{
-  await page.goto("/");await page.getByRole("button",{name:"Begin Operations"}).click();
-  await seed(page,"legacy-m6");await page.reload();
-  await expect(page.locator("footer")).toContainText("Legacy campaign: sell eight gears");
-  await expect(page.getByTestId("mission-throughput")).toHaveCount(0);
-});
-test("WP6 legacy rule provenance in downloaded playtest JSON",async({page})=>{
-  await page.goto("/");
-  await page.getByRole("button",{name:"Begin Operations"}).click();
-  await seed(page,"legacy-m6");await page.reload();
-  await page.getByRole("button",{name:/Local playtest/}).click();
-  await page.getByTestId("start-playtest").click();
-  await page.getByTestId("stop-playtest").click();
-  const downloadPromise=page.waitForEvent("download");
-  await page.getByTestId("export-playtest").click();
-  const download=await downloadPromise;
-  const stream=await download.createReadStream();
-  const chunks:string[]=[];
-  for await(const chunk of stream)chunks.push(chunk.toString("utf8"));
-  const report=JSON.parse(chunks.join(""));
-  expect(report).toMatchObject({
-    format:"sector-nine-playtest-v1",schemaVersion:3,missionRuleVersion:2
-  });
-});
 test("WP5 opt-in local playtest records only real commands, reloads and exports anonymized JSON",async({page})=>{
   page.on("dialog",d=>d.accept());
   await page.goto("/");await page.getByRole("button",{name:"Begin Operations"}).click();
@@ -114,8 +87,8 @@ test("WP5 opt-in local playtest records only real commands, reloads and exports 
   for await(const chunk of stream)chunks.push(chunk.toString("utf8"));
   const report=JSON.parse(chunks.join(""));
   expect(report.format).toBe("sector-nine-playtest-v1");
-  expect(report.schemaVersion).toBe(3);
-  expect(report.missionRuleVersion).toBe(3);
+  expect(report.schemaVersion).toBe(5);
+  expect(report.missionRuleVersion).toBe(5);
   expect(report.commands).toEqual({place:1,turn:1,demolish:1,research:0});
   expect(report.commandEvents.map((e:{kind:string})=>e.kind)).toEqual(["place","turn","demolish"]);
   expect(report).toHaveProperty("planningMs");

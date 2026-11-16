@@ -19,7 +19,7 @@ test("WP5 exported build provenance is exact CI checkout SHA or JSON null",async
  await page.waitForTimeout(75);
  await page.getByTestId("stop-playtest").click();
  const payload=await report(page);
- expect(payload).toMatchObject({format:"sector-nine-playtest-v1",schemaVersion:3,missionRuleVersion:3});
+ expect(payload).toMatchObject({format:"sector-nine-playtest-v1",schemaVersion:5,missionRuleVersion:5});
  expect(payload).toHaveProperty("buildCommit",original);
  expect(payload.waitingForMissionMs).toBeGreaterThanOrEqual(0);
  expect(payload.waitingMs).toBe(0);

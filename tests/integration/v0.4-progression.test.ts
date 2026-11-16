@@ -7,7 +7,7 @@ import {updateMission} from "../../src/game/missions";
 import {tick} from "../../src/simulation/engine";
 import {validateSave} from "../../src/persistence/indexedDb";
 
-const done=()=>{const s=createGame();s.mission.activeId="DONE";s.technologies!.coal_extraction=true;
+const done=()=>{const s=createGame();s.mission.activeId="DONE";s.chapterII={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};s.technologies!.coal_extraction=true;
  s.technologies!.mechanical_components=true;s.technologies!.advanced_smelting=true;
  return s;};
 const sales=(patch:Record<string,number>)=>({...emptySales(),...patch});
@@ -25,7 +25,7 @@ function injectEvents(s:GameState, events:{circuit?:number;steel?:number;produce
 function requireChapter(){return {recordChapterTick:recordChapterTickImported};}
 import {recordChapterTick as recordChapterTickImported} from "../../src/game/chapterTwo";
 
-describe("v0.4 WP2 red-first chapter & migration",()=>{
+describe("v0.4 WP2 chapter and current saves",()=>{
  it("opens Chapter II explicitly, preserving a completed foundry save and all physical stock",()=>{
    let original=done();original.balanceCents=71321;original.paused=true;
    const existing=place(original,"conveyor",8,2,"E");
@@ -33,8 +33,8 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
    const activated=beginChapterII(original);
    expect(activated.ok).toBe(true);
    const s=activated.state;
-   expect(s.schemaVersion).toBe(4);
-   expect(s.missionRuleVersion).toBe(4);
+   expect(s.schemaVersion).toBe(5);
+   expect(s.missionRuleVersion).toBe(5);
    expect(s.mission.activeId).toBe("M8");
    expect(s.chapterII).toMatchObject({foundryCompleted:true,started:true,completed:false});
    expect(s.balanceCents).toBe(original.balanceCents);
@@ -48,13 +48,13 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
    expect(beginChapterII(s).ok).toBe(false);
    expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s);
  });
- it("does not start Chapter II early or accidentally on loading legacy DONE",()=>{
+ it("does not start Chapter II early or accidentally on loading Chapter I DONE",()=>{
    const s=createGame();
    expect(beginChapterII(s).ok).toBe(false);
    const loaded=validateSave(done());
    expect(loaded.mission.activeId).toBe("DONE");
    expect(loaded.chapterII?.started??false).toBe(false);
-   expect(loaded.missionRuleVersion).toBe(3);
+   expect(loaded.missionRuleVersion).toBe(5);
  });
  it("gates copper, silicon, fabricators, splitter and generator behind separate paid research",()=>{
    let s=beginChapterII(done()).state;
@@ -128,15 +128,5 @@ describe("v0.4 WP2 red-first chapter & migration",()=>{
    expect(s.chapterII!.metrics!.streakTicks).toBe(0);
    const missing=structuredClone(s);delete (missing as any).chapterII;
    expect(()=>validateSave(missing)).toThrow();
- });
- it("retains schema and rule version for active legacy M6/M7 and never introduces offline ticks",()=>{
-   for(const version of [2,3] as const){
-     const s=createGame();s.mission.activeId="M7";s.missionRuleVersion=version;
-     s.missionMetrics=version===3?{activatedAtTick:0,salesTicks:[],streakTicks:0}:null;
-     const restored=validateSave(JSON.parse(JSON.stringify(s)));
-     expect(restored.missionRuleVersion).toBe(version);
-     expect(restored.mission.activeId).toBe("M7");
-     const paused={...restored,paused:true};expect(tick(paused)).toEqual(paused);
-   }
  });
 });

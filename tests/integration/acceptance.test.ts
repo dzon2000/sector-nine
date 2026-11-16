@@ -246,7 +246,7 @@ describe("AC-13: snapshot integrity and resume",()=>{
     expect(()=>validateSave({...s,arbiters:[]})).toThrow(/validation/i);
     expect(()=>validateSave({...s,arbiters:{"3":-1}})).toThrow(/validation/i);
     expect(()=>validateSave({...s,arbiters:{"3":1.5}})).toThrow(/validation/i);
-    expect(()=>validateSave({...s,entities:[...s.entities,s.entities[0]]})).toThrow(/overlapping/i);
+    expect(()=>validateSave({...s,nextId:s.nextId+1,entities:[...s.entities,{...s.entities[0],id:s.nextId}]})).toThrow(/overlapping/i);
     expect(()=>validateSave({...s,rollingEvents:[{tick:1,revenueCents:1.5,costCents:0}]})).toThrow(/accounting/i);
     expect(()=>validateSave({...s,entities:s.entities.filter(e=>e.kind!=="sell_terminal")})).toThrow(/terminal/i);
   });

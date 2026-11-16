@@ -26,21 +26,22 @@ describe("WP6 release gates — immutable economics, save ancestry and sandbox",
    expect(SILICON_DEPOSITS).toEqual([{x:8,y:9}]);
    expect(TERMINAL).toEqual({x:10,y:5});
  });
- it("explicit v0.3 DONE -> v0.4 preserves occupied deposits, old ledgers, state and free-play after Chapter II completion",()=>{
+ it("explicit Chapter II entry preserves occupied deposits, old ledgers, state and free-play after Chapter II completion",()=>{
    let old=begin(createGame());old.mission.activeId="DONE";
-   old.technologies={coal_extraction:true,mechanical_components:true,advanced_smelting:true};
+  old.chapterII={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};
+   old.technologies={...old.technologies!,coal_extraction:true,mechanical_components:true,advanced_smelting:true};
    let created=place(old,"conveyor",8,2,"E");expect(created.ok).toBe(true);old=created.state;
    old=runTicks(old,4);old.paused=true;
    const original=validateSave(JSON.parse(JSON.stringify(old)));
-   expect(original.schemaVersion).toBe(3);
+   expect(original.schemaVersion).toBe(5);
    expect(original.mission.activeId).toBe("DONE");
    expect(availableTransmissions(original)).toEqual([]);
    const beforeJSON=JSON.stringify(original);
    const begun=beginChapterII(original);expect(begun.ok).toBe(true);
    let chapter=begun.state;
    expect(JSON.stringify(original)).toBe(beforeJSON);
-   expect(chapter.schemaVersion).toBe(4);
-   expect(chapter.missionRuleVersion).toBe(4);
+   expect(chapter.schemaVersion).toBe(5);
+   expect(chapter.missionRuleVersion).toBe(5);
    expect(chapter.mission.activeId).toBe("M8");
    expect(chapter.balanceCents).toBe(original.balanceCents);
    expect(chapter.entities).toEqual(original.entities);

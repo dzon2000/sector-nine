@@ -1,7 +1,7 @@
 # ADR-0006 — Current-Version Saves During Active Development
 
 **Date:** 2026-11-15  
-**Status:** ACCEPTED — Product Owner explicitly requested removal of legacy-save compatibility and a v0.5 work package. Runtime implementation is pending.  
+**Status:** ACCEPTED — Product Owner explicitly requested removal of legacy-save compatibility and a v0.5 work package. Runtime policy implemented in v0.5 WP1.  
 **Applies:** v0.5 onward, until explicitly superseded. Released v0.4 behavior is unchanged by this documentation commit.
 
 ## Decision

@@ -15,10 +15,10 @@ describe("WP5 provenance, player-declared waiting and power samples — RED",()=
      expect(resolveBuildCommit(input)).toBeNull();
  });
  it("preserves original artifact SHA and schema/rules through reload and a later game build",()=>{
-   const s=game();s.missionRuleVersion=3;
-   const session=startPlaytest(s,1000,SHA);
+   const s=game();
+   const session={...startPlaytest(s,1000,SHA),schemaVersion:3,missionRuleVersion:3} as const;
    expect(session.buildCommit).toBe(SHA);
-   const upgraded=game();upgraded.schemaVersion=4;upgraded.missionRuleVersion=4;
+   const upgraded=game();
    const saved=JSON.parse(JSON.stringify(session));
    const resumed=resumePlaytest(saved,upgraded,100000);
    const report=buildPlaytestReport(finishPlaytest(resumed,upgraded,101000));

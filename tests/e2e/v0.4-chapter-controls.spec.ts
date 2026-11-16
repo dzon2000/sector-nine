@@ -12,7 +12,8 @@ async function reachFoundry(page:Page){
        get.onsuccess=()=>{
          const s=get.result;
          if(!s){reject(Error("Missing existing save"));return;}
-         s.mission.activeId="DONE";s.foundryStorySeen=true;
+         s.mission.activeId="DONE";
+         s.chapterII={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};s.foundryStorySeen=true;
          s.technologies.coal_extraction=true;s.technologies.mechanical_components=true;
          s.technologies.advanced_smelting=true;s.paused=true;
          store.put(s,"slot1");

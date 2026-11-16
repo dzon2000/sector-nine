@@ -28,7 +28,7 @@ test("WP4 purchase confirmation is cancellable; successful unlock persists after
         get.onsuccess=()=>{
           const state=get.result;
           if(!state){reject(new Error("Missing initial save"));return;}
-          state.mission.activeId="DONE";
+          state.mission.activeId="M5";state.foundryStorySeen=true;
           state.mission.soldIngot=20;
           state.sales.iron_ingot=20;
           store.put(state,"slot1");

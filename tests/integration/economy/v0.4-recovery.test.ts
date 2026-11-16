@@ -50,6 +50,13 @@ function finance(t:Trace,cents:number,maxTicks=1800){
   expect(t.state.balanceCents, "Could not finance "+cents+" with existing factory").toBeGreaterThanOrEqual(cents);
   return elapsed;
 }
+function verifyRestore(t:Trace){
+  const before=t.state;
+  const restored=validateSave(JSON.parse(JSON.stringify(before)));
+  expect(restored).toEqual(before);
+  expect(tick(restored)).toEqual(tick(before));
+  t.state=restored;
+}
 function until(t:Trace,mission:GameState["mission"]["activeId"],maxTicks:number){
   const start=t.state.tick;
   // Diagnostic-only shadow calculations; never mutate production rules or economy.
@@ -57,6 +64,7 @@ function until(t:Trace,mission:GameState["mission"]["activeId"],maxTicks:number)
   while(t.state.mission.activeId!==mission&&t.state.tick-start<maxTicks){
     const active=t.state.mission.activeId;
     t.state=tick(t.state);
+    if(t.state.mission.activeId!==active)verifyRestore(t);
     const p=stats(t.state);
     if(active==="M4"||active==="M7"){
       const window=active==="M7"?missionWindow(t.state):null;
@@ -108,8 +116,9 @@ function audit(t:Trace){
   }
   expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s);
 }
-function realV03Done():Trace {
+function completeChapterI():Trace {
   const t=start();
+  verifyRestore(t);
   build(t,["conveyor",0,0,"E"]);demolish(t,0,0);
   build(t,["iron_mine",3,5,"E"],...[4,5,6,7,8,9].map(x=>["conveyor",x,5,"E"] as Built));
   until(t,"M3",120);
@@ -138,12 +147,12 @@ function realV03Done():Trace {
   audit(t);
   return t;
 }
-describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
-  it("pays all research and completes physical M8–M10 after an engine-generated v0.3 DONE save",()=>{
-    const t=realV03Done();
+describe("Full 300-Cr current campaign and recovery",()=>{
+  it("pays all research and completes physical M8–M10 after restoring the Chapter I checkpoint",()=>{
+    const t=completeChapterI();
     const done=validateSave(JSON.parse(JSON.stringify(t.state)));
     expect(done.mission.activeId).toBe("DONE");
-    expect(done.technologies).toEqual({
+    expect(done.technologies).toMatchObject({
       coal_extraction:true,mechanical_components:true,advanced_smelting:true
     });
     const occupied=t.state.entities.map(e=>[e.kind,e.x,e.y] as const);
@@ -154,6 +163,7 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
     expect(chapter.ok,chapter.message).toBe(true);
     t.state=chapter.state;
     expect(t.state.mission.activeId).toBe("M8");
+    verifyRestore(t);
     // M8: preserve the profitable steel line while replacing ONE abandoned
     // gear-output conveyor with copper mining. Keep upper route to terminal.
     purchaseChapterResearch(t,"resource_surveying",8000);
@@ -172,6 +182,7 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
     expect(t.state.sales!.silicon-m8Start.silicon).toBeGreaterThanOrEqual(10);
     expect(t.state.sales!.steel).toBeGreaterThan(done.sales!.steel);
     expect(t.state.mission.activeId).toBe("M9");
+    verifyRestore(t);
     observe(t,"M8 physical post-activation sales");
     audit(t);
 
@@ -202,6 +213,7 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
 
     // Check that the initially under-capacity single-fabricator M10 layout
     // fails real rolling-window qualification before expanding the factory.
+    verifyRestore(t);
     const m10StartTick=t.state.tick;
     const initialCircuitSales=t.state.sales!.circuit;
     let probeState=structuredClone(t.state);
@@ -296,12 +308,16 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
     expect(t.state.mission.activeId).toBe("DONE");
     expect(t.state.chapterII?.completed).toBe(true);
     expect(t.state.chapterII?.foundryCompleted).toBe(true);
-    expect(t.state.schemaVersion).toBe(4);
-    expect(t.state.missionRuleVersion).toBe(4);
+    expect(t.state.schemaVersion).toBe(5);
+    expect(t.state.missionRuleVersion).toBe(5);
     expect(t.state.chapterII?.metrics).toBeNull();
     expect(terminalPeak).toBeLessThanOrEqual(1);
     expect(peakDemand).toBeGreaterThanOrEqual(2);
     expect(t.state.balanceCents).toBeGreaterThan(0);
+    verifyRestore(t);
+    expect(t.state.tick).toBe(1728);
+    expect(t.state.balanceCents).toBe(503345);
+    expect(t.minCash).toBe(4655);
     observe(t,"M10 physical mission completed");
     audit(t);
     console.info("V04-OPTION-A-RECOVERY "+JSON.stringify({
@@ -311,10 +327,10 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
       constructionCount:physicalM10.length,minCashCents:t.minCash,
       bestExpandedStreak,maxGuardedStreak,qualifyingExpandedWindows,peakCircuits60,peakSteel60,
       peakDemand,terminalPeak,finalTick:t.state.tick,cashCents:t.state.balanceCents,
-      caveat:"synthetic engine-generated v0.3 DONE continuation with real paid WP2 research and construction"
+      caveat:"synthetic engine-generated Chapter I continuation with real paid WP2 research and construction"
     }));
     console.info("V04-WP3-RECOVERY "+JSON.stringify({
-      authenticHumanSave:false,source:"actual v0.3 300-Cr engine campaign",
+      authenticHumanSave:false,source:"current 300-Cr engine campaign",
       finalTick:t.state.tick,fromDoneTick:done.tick,
       cashCents:t.state.balanceCents,minCashCents:t.minCash,
       capitalCents:t.capital,refundCents:t.refund,legacyResearchCents:t.legacyResearch,

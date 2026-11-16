@@ -6,7 +6,7 @@ import {purchaseTechnology,technologyStatus,TECHNOLOGIES,type TechnologyId} from
 
 function completed():GameState {
   const state=createGame();
-  state.mission.activeId="DONE";
+  state.mission.activeId="M5";
   state.mission.soldIngot=20;
   state.sales!.iron_ingot=20;
   return state;
@@ -112,16 +112,5 @@ describe("WP4 paid technology unlocks (V02-AC-10, 11, 12)",()=>{
     const restored=validateSave(JSON.parse(JSON.stringify(demolished.state)));
     expect(technologyStatus(restored,"coal_extraction").status).toBe("unlocked");
     expect(restored.technologies!.coal_extraction).toBe(true);
-  });
-  it("recognizes migrated DONE milestone and prior ingot deliveries without replay",()=>{
-    const source=createGame();
-    source.schemaVersion=1;
-    source.mission.activeId="DONE";
-    source.mission.soldIngot=23;
-    delete source.technologies;delete source.coalDeposits;
-    for(const entity of source.entities){delete entity.inputBuffers;delete entity.reservedInputs;}
-    const migrated=validateSave(source);
-    expect(technologyStatus(migrated,"mechanical_components").status).toBe("available");
-    expect(buy(migrated,"mechanical_components").technologies!.mechanical_components).toBe(true);
   });
 });

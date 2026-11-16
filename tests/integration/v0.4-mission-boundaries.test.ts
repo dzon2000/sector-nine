@@ -97,7 +97,7 @@ describe("WP2 exact M10 thresholds and active-tick restore",()=>{
       s=>{s.chapterII!.metrics!.salesTicks.push({...s.chapterII!.metrics!.salesTicks.at(-1)!,tick:s.tick+1});},
       s=>{s.chapterII!.metrics!.lastEvaluatedTick=s.tick+2;},
       s=>{s.chapterII!.completed=true;},
-      s=>{s.missionRuleVersion=2;},
+      s=>{Object.assign(s,{missionRuleVersion:2});},
       s=>{delete (s as any).chapterII;},
       s=>{delete s.technologies!.industrial_power;},
       s=>{s.copperDeposits![0].x=7;},

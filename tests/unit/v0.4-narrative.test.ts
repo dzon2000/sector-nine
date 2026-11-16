@@ -1,7 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {createGame} from "../../src/domain/model";
 import {availableTransmissions,CHAPTER_TRANSMISSIONS} from "../../src/game/chapterNarrative";
-const begin=()=>{const s=createGame();s.schemaVersion=4;s.missionRuleVersion=4;s.chapterII={
+const begin=()=>{const s=createGame();s.chapterII={
  foundryCompleted:true,started:true,completed:false,storySeen:false,metrics:null};
  s.mission.activeId="M8";return s;};
 describe("WP5 approved Chapter II narrative",()=>{

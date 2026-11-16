@@ -478,6 +478,21 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   evaluate(corp,"M12 corporate",corporate);
   expect(bestStreak(observeWindows(structuredClone(corp)),independent)).toBe(0);
 
+  const gearInterlock:Goal={circuit:13,gear:12,steel:7,profit:60000};
+  const independentInterlock=structuredClone(independ);
+  const corporateInterlock=structuredClone(corp);
+  for(const checkpoint of [independentInterlock,corporateInterlock]){
+    expect(bestStreak(observeWindows(structuredClone(checkpoint)),gearInterlock)).toBe(0);
+  }
+
+  restoreDualCircuits(independentInterlock);
+  build(independentInterlock,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
+  evaluate(independentInterlock,"M13 interlock from independent",gearInterlock);
+
+  demolish(corporateInterlock,2,6);
+  build(corporateInterlock,["assembler",2,6,"W"]);
+  evaluate(corporateInterlock,"M13 interlock from corporate",gearInterlock);
+
   restoreDualCircuits(independ);
   expandSteel(independ);
   evaluate(independ,"M13 from independent",reconstructArchive);

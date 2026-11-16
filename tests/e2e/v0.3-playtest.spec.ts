@@ -75,6 +75,7 @@ test("WP5 opt-in local playtest records only real commands, reloads and exports 
   await page.locator(".inspector").getByRole("button",{name:"Rotate clockwise"}).click();
   await page.locator(".inspector").getByRole("button",{name:"Demolish",exact:true}).click();
   await expect(page.getByTestId("playtest-panel")).toContainText("placed 1, rotated 1, demolished 1, researched 0");
+  await expect(page.getByTestId("save-status")).toHaveText("Saved");
   await page.reload();
   await expect(page.getByTestId("playtest-panel")).toContainText("placed 1, rotated 1, demolished 1, researched 0");
   await page.getByTestId("stop-playtest").click();

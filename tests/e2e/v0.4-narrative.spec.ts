@@ -60,6 +60,7 @@ test("WP5 Chapter II opening optional, skippable and persistently replayable",as
  await expect(page.getByRole("dialog",{name:"Chapter II Transmission"})).toContainText("No external client is registered");
  await page.getByRole("button",{name:"Return to Factory"}).click();
  await expect(page.getByRole("dialog",{name:"Chapter II Transmission"})).toHaveCount(0);
+ await expect(page.getByTestId("save-status")).toHaveText("Saved");
  await page.reload();
  await expect(page.getByRole("dialog",{name:"Chapter II Transmission"})).toHaveCount(0);
  await page.getByRole("button",{name:"Replay Unknown Client Request"}).click();

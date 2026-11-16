@@ -1,5 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {createGame} from "../../src/domain/model";
+import {place} from "../../src/game/commands";
 import {beginChapterII} from "../../src/game/chapterTwo";
 import {validateSave} from "../../src/persistence/indexedDb";
 
@@ -31,5 +32,23 @@ describe("v0.5 current saves",()=>{
     expect(diagnostics).toBeDefined();
     expect(()=>validateSave(withoutDiagnostics)).toThrow(/diagnostic/i);
     expect(()=>validateSave({})).toThrow(/corrupt/i);
+  });
+  it("rejects a processing cycle without its exact reserved inputs",()=>{
+    const game=createGame();
+    game.mission.activeId="M3";
+    const built=place(game,"furnace",5,5,"E").state;
+    const furnace=built.entities.find(entity=>entity.kind==="furnace")!;
+    furnace.cycle=1;
+    expect(()=>validateSave(built)).toThrow(/reservation/i);
+    furnace.reservedInputs={iron_ore:2};
+    expect(validateSave(built)).toEqual(built);
+    furnace.cycle=50;
+    expect(()=>validateSave(built)).toThrow(/processing cycle/i);
+  });
+
+  it("rejects a mine with a completed cycle and empty output",()=>{
+    const built=place(createGame(),"iron_mine",3,5,"E").state;
+    built.entities.find(entity=>entity.kind==="iron_mine")!.cycle=0;
+    expect(()=>validateSave(built)).toThrow(/extraction cycle/i);
   });
 });

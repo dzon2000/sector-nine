@@ -4,21 +4,21 @@ import {loadGame,restartGame,saveGame} from "../../src/persistence/indexedDb";
 
 // Single-slot IndexedDB double. Requests complete before the transaction commits.
 function slot(initial:unknown){
-  let value=initial;
+  const stored=new Map<string,unknown>([["slot1",initial]]);
   let writes=0;
   let beforeCommit:Promise<void>|undefined;
   let putStarted:(()=>void)|undefined;
   const db={close(){},transaction(){
-    let next=value;
+    const next=new Map<string,unknown>();
     let aborted=false;
     let wrote=false;
     const transaction={
       oncomplete:()=>{},onabort:()=>{},error:null,
       abort(){aborted=true;transaction.onabort();},
       objectStore(){return {
-        get(){return request(value);},
-        put(snapshot:unknown){
-          next=structuredClone(snapshot);wrote=true;putStarted?.();return request(undefined);
+        get(key:string){return request(stored.get(key));},
+        put(snapshot:unknown,key:string){
+          next.set(key,structuredClone(snapshot));wrote=true;putStarted?.();return request(undefined);
         }
       };}
     };
@@ -30,7 +30,10 @@ function slot(initial:unknown){
     setTimeout(async()=>{
       if(wrote)await beforeCommit;
       if(aborted)return;
-      if(wrote){value=next;writes++;}
+      if(wrote){
+        for(const [key,value] of next)stored.set(key,value);
+        writes++;
+      }
       transaction.oncomplete();
     },0);
     return transaction;
@@ -41,7 +44,7 @@ function slot(initial:unknown){
     return request;
   }});
   return {
-    get value(){return value;},
+    get value(){return stored.get("slot1");},
     get writes(){return writes;},
     holdWrite(){
       let release!:()=>void;
@@ -80,5 +83,22 @@ describe("v0.5 single-slot write boundaries",()=>{
     expect(await loadGame()).toEqual(createGame());
     await saveGame({...createGame(),balanceCents:29000});
     expect(await loadGame()).toMatchObject({balanceCents:29000});
+  });
+  it("blocks an older tab from saving after another tab restarts the campaign",async()=>{
+    const original={...createGame(),balanceCents:123};
+    const storage=slot(original);
+    vi.resetModules();
+    const olderTab=await import("../../src/persistence/indexedDb");
+    await expect(olderTab.loadGame()).resolves.toEqual(original);
+    vi.resetModules();
+    const restartingTab=await import("../../src/persistence/indexedDb");
+    await expect(restartingTab.loadGame()).resolves.toEqual(original);
+
+    await restartingTab.restartGame(createGame());
+    await expect(olderTab.saveGame(original)).rejects.toThrow(/another tab/i);
+    expect(storage.value).toEqual(createGame());
+    await expect(olderTab.loadGame()).resolves.toEqual(createGame());
+    await olderTab.saveGame({...createGame(),balanceCents:29000});
+    expect(storage.value).toMatchObject({balanceCents:29000});
   });
 });

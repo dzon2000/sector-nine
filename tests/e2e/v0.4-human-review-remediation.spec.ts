@@ -70,6 +70,7 @@ test("PR #8: one press-drag places and rotates once, with facing saved after rel
  await page.mouse.up();
  await expect(page.getByTestId("selected-facing")).toHaveText("N");
  await expect(recorder).toContainText("placed 1, rotated 1");
+ await expect(page.getByTestId("save-status")).toHaveText("Saved");
 
  await page.reload();
  await page.getByRole("button",{name:"Inspect",exact:true}).click();

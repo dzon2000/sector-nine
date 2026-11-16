@@ -42,6 +42,18 @@ export default function App(){
   const [ready,setReady]=useState(false);
   const resetting=useRef(false);
   const [confirmRestart,setConfirmRestart]=useState(false);
+  const [saveStatus,setSaveStatus]=useState<"Saving…"|"Saved"|null>(null);
+  const saveRequest=useRef(0);
+  const queueSave=useCallback((state:GameState)=>{
+    if(resetting.current)return;
+    const request=++saveRequest.current;
+    setSaveStatus("Saving…");
+    void saveGame(state).then(()=>{
+      if(request===saveRequest.current)setSaveStatus("Saved");
+    }).catch(error=>{
+      if(request===saveRequest.current)setError(String(error));
+    });
+  },[]);
   const [showPlaytest,setShowPlaytest]=useState(false);
   const [playtest,setPlaytest]=useState<PlaytestSession|null>(null);
   const playtestRef=useRef<PlaytestSession|null>(null);
@@ -95,23 +107,23 @@ export default function App(){
       if(!s||resetting.current)return;
       if(s.paused||s.introOpen||document.hidden){observePlaytest(s);return;}
       const next=tick(s);latest.current=next;setGame(next);observePlaytest(next);
-      if(next.tick%10===0)void saveGame(next).catch(e=>setError(String(e)));
+      if(next.tick%10===0)queueSave(next);
     },1000);
     return ()=>clearInterval(id);
-  },[ready,game?.paused,game?.introOpen,error]);
+  },[ready,game?.paused,game?.introOpen,error,queueSave]);
   useEffect(()=>{
     const onVisibility=()=>{
       if(document.hidden&&latest.current&&!resetting.current){
         change(s=>setPause(s,true));
-        void saveGame({...latest.current!,paused:true}).catch(e=>setError(String(e)));
+        queueSave({...latest.current!,paused:true});
       }
     };
     document.addEventListener("visibilitychange",onVisibility);
     return ()=>document.removeEventListener("visibilitychange",onVisibility);
-  },[change]);
+  },[change,queueSave]);
   const persist=(s:GameState,command?:PlaytestCommand)=>{
     if(resetting.current)return;latest.current=s;setGame(s);observePlaytest(s,command);
-    void saveGame(s).catch(e=>setError(String(e)));
+    queueSave(s);
   };
   const selectedEntity=game?.entities.find(e=>e.id===selected);
   const directRotate=(id:number,desired:Direction)=>{
@@ -139,7 +151,7 @@ export default function App(){
       if(e.key.toLowerCase()==="r"){e.preventDefault();rotateChoice();}
       if(e.key==="Escape"){setTool("select");setSelected(null);}
       if(e.key==="Delete"&&selectedEntity)demolish(selectedEntity.id);
-      if(e.code==="Space"){e.preventDefault();change(s=>{const n=setPause(s,!s.paused);void saveGame(n).catch(err=>setError(String(err)));return n;});}
+      if(e.code==="Space"){e.preventDefault();change(s=>{const n=setPause(s,!s.paused);queueSave(n);return n;});}
     };
     window.addEventListener("keydown",listener);return ()=>window.removeEventListener("keydown",listener);
   });
@@ -174,10 +186,11 @@ export default function App(){
     setMessage(result.message);
     if(result.ok)persist(result.state,{kind:"research",technology:id});
   };
-  const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)void saveGame(s).catch(e=>setError(String(e)));};
+  const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)queueSave(s);};
   const fresh=async()=>{if(resetting.current)return;
     resetting.current=true;
-    try{const s=reset();await restartGame(s);setConfirmRestart(false);savePlaytest(null);setShowPlaytest(false);latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+    saveRequest.current++;
+    try{const s=reset();await restartGame(s);setSaveStatus("Saved");setConfirmRestart(false);savePlaytest(null);setShowPlaytest(false);latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
   if(error)return <main className="error">
     <h1>Save error</h1><p role="alert">{error}</p>
@@ -342,7 +355,7 @@ export default function App(){
           {id==="opening"&&!game.chapterII?.storySeen?"Inspect Request":"Replay "+CHAPTER_TRANSMISSIONS[id].label}
         </button>)}
       </section>}
-      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>
+      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
       </aside></div>
     <footer data-testid="mission-hud"><div className="mission-hud-objectives"><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{chapterCompleted?"First Signal Restored":mission.title}</h2><p>{game.tutorialEnabled?(chapterCompleted?"Prometheus archive: SECTOR 9 — SUBLEVEL 03. Continue optimizing your factory in sandbox mode.":mission.hint):"Tutorial hints hidden."}</p>{narrativeAvailable.length>0&&<p data-testid="latest-transmission" className="transmission-notice">
         Latest archive dispatch: {CHAPTER_TRANSMISSIONS[narrativeAvailable[narrativeAvailable.length-1]].pages[0].heading}.

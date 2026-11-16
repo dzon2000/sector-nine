@@ -2,6 +2,8 @@ import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,SAVE_SCHEMA_VERSION
 // Keep the existing slot address so incompatible saves can be detected and preserved.
 const DATABASE="sector-nine-v0.1";
 const STORE="snapshots";
+const SLOT="slot1";
+const EPOCH="slot1-restart-epoch";
 function openDb():Promise<IDBDatabase>{
   return new Promise((resolve,reject)=>{
     const request=indexedDB.open(DATABASE,1);
@@ -112,6 +114,14 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
             throw Error("Invalid inventory type or quantity. Data preserved.");
         }
       }
+      if(recipe&&e.cycle!==null&&e.cycle>recipe.durationTicks)
+        throw Error("Invalid processing cycle. Save preserved.");
+      const inputs=e.cycle!==null?Object.entries(recipe?.input??{}):[];
+      if(Object.keys(e.reservedInputs!).length!==inputs.length||
+         inputs.some(([item,quantity])=>e.reservedInputs![item as Item]!==quantity))
+        throw Error("Invalid processing reservation. Save preserved.");
+      if(["iron_mine","coal_mine","copper_mine","silicon_extractor"].includes(e.kind)&&e.cycle===0)
+        throw Error("Invalid extraction cycle. Save preserved.");
       if(e.kind==="furnace"&&e.oreInput!==(e.inputBuffers?.iron_ore??0))
         throw Error("Inconsistent furnace ore buffer and typed inventory. Data preserved.");
     }
@@ -161,8 +171,8 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
   const chapterMission=["M8","M9","M10"].includes(mission);
   if((chapterMission||mission==="DONE")&&!chapter)
     throw Error("Missing chapter progress. Save preserved.");
-  if(chapter){
-    if(typeof chapter!=="object"||Array.isArray(chapter)||
+  if(chapter!==undefined){
+    if(!chapter||typeof chapter!=="object"||Array.isArray(chapter)||
        Object.keys(chapter).length!==5||chapter.foundryCompleted!==true||
        typeof chapter.started!=="boolean"||typeof chapter.completed!=="boolean"||
        typeof chapter.storySeen!=="boolean"||
@@ -295,21 +305,41 @@ function enqueue(operation:()=>Promise<void>):Promise<void>{
 }
 let generation=0;
 let restartPending=false;
+let loadedEpoch=0;
 
-async function writeSnapshot(state:GameState,replace:boolean):Promise<void>{
+function readEpoch(value:unknown):number{
+  if(value===undefined)return 0;
+  if(typeof value!=="number"||!Number.isSafeInteger(value)||value<0)
+    throw Error("Corrupt save restart metadata.");
+  return value;
+}
+
+async function writeSnapshot(state:GameState,expectedEpoch:number|null):Promise<number>{
   const db=await openDb();
-  await transaction<void>(db,"readwrite",(store,resolve,reject)=>{
-    const put=()=>{
-      const request=store.put(state,"slot1");
-      request.onsuccess=()=>resolve();
-    };
-    if(replace){put();return;}
-    // Read and write in one transaction so autosave cannot replace a rejected slot.
-    const read=store.get("slot1");
-    read.onsuccess=()=>{
+  return transaction<number>(db,"readwrite",(store,resolve,reject)=>{
+    const epochRequest=store.get(EPOCH);
+    epochRequest.onsuccess=()=>{
       try{
-        if(read.result!==undefined)assertCurrentSave(read.result);
-        put();
+        if(expectedEpoch===null){
+          // Replace both records atomically. A fresh epoch invalidates writers in other tabs.
+          const stored=epochRequest.result;
+          const epoch=(typeof stored==="number"&&Number.isSafeInteger(stored)&&stored>=0&&stored<Number.MAX_SAFE_INTEGER?stored:0)+1;
+          store.put(epoch,EPOCH);
+          const write=store.put(state,SLOT);
+          write.onsuccess=()=>resolve(epoch);
+          return;
+        }
+        const epoch=readEpoch(epochRequest.result);
+        if(epoch!==expectedEpoch)throw Error("The factory was restarted in another tab. Reload this page to continue.");
+        // Read and write in one transaction so autosave cannot replace a rejected slot.
+        const read=store.get(SLOT);
+        read.onsuccess=()=>{
+          try{
+            if(read.result!==undefined)assertCurrentSave(read.result);
+            const write=store.put(state,SLOT);
+            write.onsuccess=()=>resolve(epoch);
+          }catch(error){reject(error);}
+        };
       }catch(error){reject(error);}
     };
   });
@@ -317,17 +347,22 @@ async function writeSnapshot(state:GameState,replace:boolean):Promise<void>{
 export async function loadGame():Promise<GameState|null>{
   await pending;
   const db=await openDb();
-  const value=await transaction<unknown>(db,"readonly",(store,resolve)=>{
-    const req=store.get("slot1");req.onsuccess=()=>resolve(req.result);
+  const {snapshot,epoch}=await transaction<{snapshot:unknown;epoch:unknown}>(db,"readonly",(store,resolve)=>{
+    const snapshotRequest=store.get(SLOT);
+    const epochRequest=store.get(EPOCH);
+    epochRequest.onsuccess=()=>resolve({snapshot:snapshotRequest.result,epoch:epochRequest.result});
   });
-  return value===undefined?null:validateSave(value);
+  const state=snapshot===undefined?null:validateSave(snapshot);
+  loadedEpoch=readEpoch(epoch);
+  return state;
 }
 export function saveGame(state:GameState):Promise<void>{
   if(restartPending)return Promise.resolve();
   const snapshot=structuredClone(state);
   const requestedGeneration=generation;
+  const expectedEpoch=loadedEpoch;
   return enqueue(async()=>{
-    if(requestedGeneration===generation)await writeSnapshot(snapshot,false);
+    if(requestedGeneration===generation)await writeSnapshot(snapshot,expectedEpoch);
   });
 }
 export function restartGame(state:GameState):Promise<void>{
@@ -335,7 +370,9 @@ export function restartGame(state:GameState):Promise<void>{
   generation++;
   restartPending=true;
   const requestedGeneration=generation;
-  return enqueue(()=>writeSnapshot(snapshot,true)).finally(()=>{
+  return enqueue(async()=>{
+    loadedEpoch=await writeSnapshot(snapshot,null);
+  }).finally(()=>{
     if(requestedGeneration===generation)restartPending=false;
   });
 }

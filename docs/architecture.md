@@ -59,7 +59,7 @@ User action -> UI command adapter -> domain command validation
 
 ## Persistence contract
 
-Save version, tick, cash, map/deposits, entities/orientations, inventories, active cycles, transport arbiters, accounting window, and mission/tutorial progress. Restore without replaying elapsed real time in v0.1. Schema and mission-rule identifiers are independent of chapter progress and build commit. Schema mismatch or corrupt data blocks gameplay and autosave. A confirmed restart atomically replaces the slot with a fresh Mission 1 snapshot and invalidates queued writes from the previous game.
+Save version, tick, cash, map/deposits, entities/orientations, inventories, active cycles, transport arbiters, accounting window, and mission/tutorial progress. Restore without replaying elapsed real time in v0.1. Schema and mission-rule identifiers are independent of chapter progress and build commit. Schema mismatch or corrupt data blocks gameplay and autosave. A confirmed restart atomically replaces the slot with a fresh Mission 1 snapshot and invalidates queued writes from the previous game. The restart epoch shares the snapshot transaction and prevents stale writes from older tabs. The game displays Saved once the last queued operation commits.
 
 ## Simulation implementation notes
 

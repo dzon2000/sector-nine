@@ -3,6 +3,7 @@ import {begin,place,remove,turn} from "../../../src/game/commands";
 import {createGame,DEFINITIONS,ITEMS,stockOnHand,stats,type Direction,type GameState,type Kind} from "../../../src/domain/model";
 import {missionWindow} from "../../../src/game/missionMetrics";
 import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
+import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "../../../src/game/chapterThree";
 import {beginChapterII} from "../../../src/game/chapterTwo";
 import {tick,runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
@@ -501,6 +502,70 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   reportRange("M13 prepared steady state",steady);
   console.info("WP2 PROFIT SENSITIVITY "+JSON.stringify([60000,63000,64000,66000].map(profit=>
     [profit,bestStreak(steady,{...reconstructArchive,profit})])));
+},45000);
+
+it("WP3 completes both approved Chapter III routes using paid factory commands",()=>{
+  const archive=completeChapterII();
+
+  function apply(t:Trace,result:{ok:boolean;message:string;state:GameState}){
+    expect(result.ok,result.message).toBe(true);
+    t.state=result.state;
+  }
+
+  function complete(t:Trace,id:"M11"|"M12"|"M13",expectedTicks:number){
+    const activatedAt=t.state.tick;
+    apply(t,acceptChapterIIIContract(t.state,id));
+    for(let elapsed=1;elapsed<expectedTicks;elapsed++){
+      t.state=tick(t.state);
+      expect(t.state.chapterIII?.active?.id).toBe(id);
+    }
+    expect(t.state.chapterIII?.active?.streakTicks).toBe(29);
+    verifyRestore(t);
+    t.state=tick(t.state);
+    expect(t.state.tick-activatedAt).toBe(expectedTicks);
+    expect(t.state.chapterIII?.completed.at(-1)).toBe(id);
+    expect(t.state.chapterIII?.active).toBeNull();
+    expect(acceptChapterIIIContract(t.state,id).ok).toBe(false);
+    verifyRestore(t);
+    audit(t);
+  }
+
+  apply(archive,beginChapterIII(archive.state));
+  build(archive,...gearLine);
+  complete(archive,"M11",109);
+
+  const independentRoute=structuredClone(archive);
+  apply(independentRoute,chooseChapterIIIRoute(independentRoute.state,"independent",true));
+  demolish(independentRoute,7,2);
+  demolish(independentRoute,8,8);
+  demolish(independentRoute,7,8);
+  build(independentRoute,["conveyor",7,2,"N"],["conveyor",8,8,"W"]);
+  mistake(independentRoute,()=>rotate(independentRoute,8,8));
+  complete(independentRoute,"M12",95);
+
+  const corporateRoute=structuredClone(archive);
+  apply(corporateRoute,chooseChapterIIIRoute(corporateRoute.state,"corporate",true));
+  expandSteel(corporateRoute,true);
+  mistake(corporateRoute,()=>rotate(corporateRoute,2,6));
+  complete(corporateRoute,"M12",89);
+
+  restoreDualCircuits(independentRoute);
+  build(independentRoute,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
+  complete(independentRoute,"M13",107);
+
+  demolish(corporateRoute,2,6);
+  build(corporateRoute,["assembler",2,6,"W"]);
+  complete(corporateRoute,"M13",91);
+
+  for(const route of [independentRoute,corporateRoute]){
+    const completion=structuredClone(route.state.chapterIII);
+    const revenue=route.state.totalRevenueCents!;
+    route.state=runTicks(route.state,60);
+    expect(route.state.chapterIII).toEqual(completion);
+    expect(route.state.chapterIII?.completed).toEqual(["M11","M12","M13"]);
+    expect(route.state.totalRevenueCents).toBeGreaterThan(revenue);
+    audit(route);
+  }
 },45000);
 
 it("WP2 rejects stockpiles that meet sales quotas without current production",()=>{

@@ -2,6 +2,8 @@ import {REVENUE,STEP,recipeFor,stats,emptySales,POWER_CANDIDATE,type DiagnosticE
 import {recordDiagnostics} from "../game/diagnostics";
 import {recordMissionTick} from "../game/missionMetrics";
 import {recordChapterTick} from "../game/chapterTwo";
+import {recordContractTick} from "../game/chapterThree";
+import {contractProducts} from "../domain/contracts";
 import {updateMission} from "../game/missions";
 type Request={source:Entity;target:Entity;item:Item};
 function at(s:GameState,x:number,y:number){return s.entities.find(e=>e.x===x&&e.y===y);}
@@ -23,6 +25,7 @@ export function tick(state:GameState):GameState {
   s.tick++;
   let revenueCents=0,costCents=0;
   const tickSales=emptySales();
+  const contractProduction=s.chapterIII?.active?{circuit:0,gear:0,steel:0}:null;
   const priorCircuitsProduced=s.materialLedger?.circuit.produced??0;
   const completions=new Map<number,number>();
   const completed=(id:number)=>completions.set(id,(completions.get(id)??0)+1);
@@ -62,7 +65,9 @@ export function tick(state:GameState):GameState {
       if(e.cycle===0&&e.output===null){
         const recipe=recipeFor(e.kind)!;
         for(const [item,qty] of Object.entries(e.reservedInputs??recipe.input))audit(item as Item,"consumed",qty);
-        e.output=recipe.output;e.cycle=null;e.reservedInputs={};completed(e.id);audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
+        const product=recipe.output;
+        if(contractProduction&&(product==="circuit"||product==="gear"||product==="steel"))contractProduction[product]++;
+        e.output=product;e.cycle=null;e.reservedInputs={};completed(e.id);audit(recipe.output,"produced");costCents+=recipe.operatingCostCents;if(e.kind==="furnace")s.totalIngotProduced++;
       }
     }
   }
@@ -233,6 +238,10 @@ export function tick(state:GameState):GameState {
     s.power?.demandCovered===true);
   recordDiagnostics(s,observations,tickSales);
   updateMission(s);
+  if(contractProduction){
+    recordContractTick(s,{tick:s.tick,sold:contractProducts(tickSales),produced:contractProduction,
+      demandCovered:powerTick.demandCovered,coalBurned,profitCents:revenueCents-costCents});
+  }
   return s;
 }
 export function runTicks(s:GameState,count:number):GameState {

@@ -1,3 +1,5 @@
+import type {ChapterIIIState} from "./contracts";
+
 export type Direction = "N" | "E" | "S" | "W";
 export type Item = "iron_ore" | "iron_ingot" | "coal" | "gear" | "steel" | "copper_ore" | "silicon" | "circuit";
 export type RecipeId = "iron_ingot" | "gear" | "steel" | "circuit";
@@ -85,6 +87,7 @@ export interface GameState {
   diagnostics?:DiagnosticHistory;
   power?:PowerState;
   chapterII?:ChapterIIState;
+  chapterIII?:ChapterIIIState;
   arbiters: Record<string, number>;
   rollingEvents: Accounting[]; lastEvent: Accounting;
   totalOreProduced: number; totalIngotProduced: number;

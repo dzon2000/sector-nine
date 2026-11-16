@@ -1,4 +1,5 @@
 import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,SAVE_SCHEMA_VERSION,MISSION_RULE_VERSION,recipeFor,type GameState,type Item} from "../domain/model";
+import {assertChapterIIISave} from "./chapterThree";
 // Keep the existing slot address so incompatible saves can be detected and preserved.
 const DATABASE="sector-nine-v0.1";
 const STORE="snapshots";
@@ -291,6 +292,7 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
     if(p.history.length && p.history[p.history.length-1].tick!==n.tick)
       throw Error("Stale power history. Save preserved.");
   }
+  assertChapterIIISave(n);
 }
 export function validateSave(value:unknown):GameState{
   assertCurrentSave(value);

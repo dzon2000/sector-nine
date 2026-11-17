@@ -202,7 +202,8 @@ export function recordPlaytestCommand(session:PlaytestSession,command:PlaytestCo
 export function resumePlaytest(saved:PlaytestSession,game:GameState,now:number):PlaytestSession{
   // Time between browser sessions is excluded. Game is normally paused on unload/hidden tab.
   return {...saved,lastObservedAt:now,lastTick:game.tick,lastMission:game.mission.activeId,
-    lastPaused:game.paused||game.introOpen,lastContractProgress:contractProgress(game)};
+    lastPaused:game.paused||game.introOpen,
+    lastContractProgress:saved.active?contractProgress(game):saved.lastContractProgress};
 }
 export function finishPlaytest(session:PlaytestSession,game:GameState,now:number):PlaytestSession{
   return {...advancePlaytest(session,game,now),active:false};

@@ -67,6 +67,8 @@ describe("Project Prometheus story and evidence",()=>{
     expect(report.contractTransitions).toContainEqual({type:"route_confirmed",route:"independent",tick:89,elapsedMs:400});
     expect(JSON.stringify(report)).not.toMatch(/startedAt|lastObservedAt|lastContractProgress/);
     expect(isPlaytestSession(recording)).toBe(true);
+    const stopped={...recording,active:false};
+    expect(buildPlaytestReport(resumePlaytest(stopped,game,6000))).toEqual(report);
     expect(isPlaytestSession({...recording,contractTransitions:[{type:"route_confirmed",route:"other",tick:89,elapsedMs:0}]})).toBe(false);
   });
 

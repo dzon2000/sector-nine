@@ -7,6 +7,8 @@ import {advancePlaytest,annotatePlaytest,buildPlaytestReport,isPlaytestSession,r
 
 function afterChapterTwo(){
   const game=createGame();
+  game.introSeen=true;
+  game.introOpen=false;
   game.mission.activeId="DONE";
   game.chapterII={foundryCompleted:true,started:true,completed:true,storySeen:true,metrics:null};
   Object.assign(game.technologies!,{coal_extraction:true,mechanical_components:true,advanced_smelting:true,

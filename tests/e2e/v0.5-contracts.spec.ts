@@ -152,9 +152,10 @@ test("WP5 persists the briefing and exports actions from a local opt-in recordin
   const downloaded=page.waitForEvent("download");
   await page.getByTestId("export-playtest").click();
   const stream=await (await downloaded).createReadStream();
-  const chunks:Buffer[]=[];
-  for await(const chunk of stream)chunks.push(Buffer.from(chunk));
-  const report=JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const decoder=new TextDecoder();
+  let json="";
+  for await(const chunk of stream)json+=decoder.decode(chunk,{stream:true});
+  const report=JSON.parse(json+decoder.decode());
   expect(report).toMatchObject({schemaVersion:5,missionRuleVersion:5,chapterIIIRoute:null});
   expect(report.buildCommit===null||/^[a-f0-9]{40}$/.test(report.buildCommit)).toBe(true);
   expect(report.contractTransitions.map(({type}:{type:string})=>type)).toEqual(["chapter_started","contract_accepted"]);

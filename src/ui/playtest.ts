@@ -1,4 +1,5 @@
 import type {GameState,Kind,MissionId} from "../domain/model";
+import {CHAPTER_III_CONTRACTS,CHAPTER_III_ROUTES,type ChapterIIIContractId,type ChapterIIIRoute} from "../domain/contracts";
 import {resolveBuildCommit} from "./buildProvenance";
 
 /** Local UI/test-harness-only timing. Never called by the deterministic simulation. */
@@ -14,6 +15,22 @@ export type PlaytestCommand=
   | {kind:"research";technology:string};
 export type PlaytestCommandEvent = PlaytestCommand & {tick:number;elapsedMs:number};
 export interface PlaytestTransition {tick:number;from:MissionId;to:MissionId}
+type ContractTransition =
+  | {type:"chapter_started"}
+  | {type:"route_confirmed";route:ChapterIIIRoute}
+  | {type:"contract_accepted"|"contract_completed";contract:ChapterIIIContractId};
+type TimedContractTransition=ContractTransition & {tick:number;elapsedMs:number};
+interface ContractProgress {
+  route:ChapterIIIRoute|null;
+  active:ChapterIIIContractId|null;
+  completedCount:number;
+}
+
+function contractProgress(game:GameState):ContractProgress|null {
+  const chapter=game.chapterIII;
+  return chapter?{route:chapter.route,active:chapter.active?.id??null,completedCount:chapter.completed.length}:null;
+}
+
 export interface PlaytestSession {
   active:boolean;
   /** Optional only for recordings created before provenance support. */
@@ -44,6 +61,8 @@ export interface PlaytestSession {
   inputStarvedEntityTicks:number;
   outputBlockedEntityTicks:number;
   missionTransitions:PlaytestTransition[];
+  lastContractProgress?:ContractProgress|null;
+  contractTransitions?:TimedContractTransition[];
 }
 /** Ignore malformed local recorder data; it must never block the game save. */
 export function isPlaytestSession(value:unknown):value is PlaytestSession{
@@ -79,6 +98,26 @@ export function isPlaytestSession(value:unknown):value is PlaytestSession{
     !Number.isSafeInteger(x.tick)||x.tick<0||
     !["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(x.from)||
     !["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(x.to)))return false;
+  if(v.lastContractProgress!==undefined&&v.lastContractProgress!==null){
+    const progress=v.lastContractProgress as Partial<ContractProgress>;
+    if(typeof progress!=="object"||Array.isArray(progress)||
+      (progress.route!==null&&!CHAPTER_III_ROUTES.includes(progress.route!))||
+      (progress.active!==null&&!CHAPTER_III_CONTRACTS.includes(progress.active!))||
+      !Number.isInteger(progress.completedCount)||progress.completedCount!<0||
+      progress.completedCount!>CHAPTER_III_CONTRACTS.length)return false;
+  }
+  if(v.contractTransitions!==undefined&&(!Array.isArray(v.contractTransitions)||
+    v.contractTransitions.length>10000||v.contractTransitions.some(event=>{
+      if(!event||typeof event!=="object"||!Number.isSafeInteger(event.tick)||event.tick<0||
+        !Number.isSafeInteger(event.elapsedMs)||event.elapsedMs<0)return true;
+      switch(event.type){
+        case "chapter_started":return false;
+        case "route_confirmed":return !CHAPTER_III_ROUTES.includes(event.route);
+        case "contract_accepted":
+        case "contract_completed":return !CHAPTER_III_CONTRACTS.includes(event.contract);
+        default:return true;
+      }
+    })))return false;
   return true;
 }
 /** All durations are explicitly classified by prior known state; no subjective inference. */
@@ -103,7 +142,8 @@ export function startPlaytest(game:GameState,now:number,buildCommit:string|null=
     commands:{place:0,turn:0,demolish:0,research:0},commandEvents:[],
     usedDeposits:game.entities.map(e=>extractionDeposit(e.kind,e.x,e.y))
       .filter((d):d is string=>d!==null),
-    inputStarvedEntityTicks:0,outputBlockedEntityTicks:0,missionTransitions:[]};
+    inputStarvedEntityTicks:0,outputBlockedEntityTicks:0,missionTransitions:[],
+    lastContractProgress:contractProgress(game),contractTransitions:[]};
 }
 export function annotatePlaytest(session:PlaytestSession,activity:PlaytestActivity,now:number):PlaytestSession{
   const s=elapsed(session,now);
@@ -114,6 +154,22 @@ export function advancePlaytest(session:PlaytestSession,game:GameState,now:numbe
   if(!session.active)return s;
   const next={...s,lastPaused:game.paused||game.introOpen,lastTick:game.tick,
     lastMission:game.mission.activeId,activeTicks:s.activeTicks+Math.max(0,game.tick-s.lastTick)};
+  const current=contractProgress(game);
+  const previous=s.lastContractProgress;
+  next.lastContractProgress=current;
+  const event=(transition:ContractTransition)=>{
+    next.contractTransitions=[...(s.contractTransitions??[]),{...transition,tick:game.tick,elapsedMs:s.wallMs}];
+  };
+  if(current&&previous===null){
+    event({type:"chapter_started"});
+  }else if(current&&previous){
+    if(current.route&&previous.route===null)event({type:"route_confirmed",route:current.route});
+    else if(current.active&&previous.active===null&&current.completedCount===previous.completedCount)
+      event({type:"contract_accepted",contract:current.active});
+    else if(previous.active&&current.active===null&&current.completedCount===previous.completedCount+1&&
+      game.chapterIII?.completed[previous.completedCount]===previous.active)
+      event({type:"contract_completed",contract:previous.active});
+  }
   // Count recorded demand ticks only; no generated data for history gaps or idle demand.
   for(const sample of game.power?.history??[]){
     if(sample.tick<=s.lastTick||sample.tick>game.tick||sample.demand===0)continue;
@@ -146,7 +202,7 @@ export function recordPlaytestCommand(session:PlaytestSession,command:PlaytestCo
 export function resumePlaytest(saved:PlaytestSession,game:GameState,now:number):PlaytestSession{
   // Time between browser sessions is excluded. Game is normally paused on unload/hidden tab.
   return {...saved,lastObservedAt:now,lastTick:game.tick,lastMission:game.mission.activeId,
-    lastPaused:game.paused||game.introOpen};
+    lastPaused:game.paused||game.introOpen,lastContractProgress:contractProgress(game)};
 }
 export function finishPlaytest(session:PlaytestSession,game:GameState,now:number):PlaytestSession{
   return {...advancePlaytest(session,game,now),active:false};
@@ -161,5 +217,12 @@ export function buildPlaytestReport(s:PlaytestSession){
     poweredTicks:s.poweredTicks??0,unpoweredTicks:s.unpoweredTicks??0,
     commands:{...s.commands},commandEvents:s.commandEvents.map(e=>({...e})),
     usedDeposits:[...s.usedDeposits],missionTransitions:s.missionTransitions.map(e=>({...e})),
+    chapterIIIRoute:s.lastContractProgress?.route??null,
+    contractTransitions:(s.contractTransitions??[]).map(event=>{
+      const {type,tick,elapsedMs}=event;
+      if(type==="route_confirmed")return {type,tick,elapsedMs,route:event.route};
+      if(type==="chapter_started")return {type,tick,elapsedMs};
+      return {type,tick,elapsedMs,contract:event.contract};
+    }),
     inputStarvedEntityTicks:s.inputStarvedEntityTicks,outputBlockedEntityTicks:s.outputBlockedEntityTicks};
 }

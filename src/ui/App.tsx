@@ -7,7 +7,8 @@ import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "..
 import {ChapterThreePanel} from "./ChapterThreePanel";
 import {ConfirmationDialog} from "./ConfirmationDialog";
 import {beginChapterII,chapterWindow} from "../game/chapterTwo";
-import {CHAPTER_TRANSMISSIONS,availableTransmissions,type ChapterTransmissionId} from "../game/chapterNarrative";
+import {ChapterThreeTransmission} from "./ChapterThreeTransmission";
+import {CHAPTER_TRANSMISSIONS,availableTransmissions,isChapterIIITransmission,type ChapterTransmissionId} from "../game/chapterNarrative";
 import {BUILD_COMMIT} from "./buildProvenance";
 import {TECHNOLOGIES,TECHNOLOGY_ORDER,CHAPTER_TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type AnyTechnologyId} from "../game/technologies";
 import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
@@ -214,6 +215,7 @@ export default function App(){
   };
   const kpi=stats(game),mission=MISSIONS[game.mission.activeId];
   const narrativeAvailable=availableTransmissions(game);
+  const latestDispatch=narrativeAvailable.filter(isChapterIIITransmission).at(-1);
   const activeTransmission=transmission&&narrativeAvailable.includes(transmission)?CHAPTER_TRANSMISSIONS[transmission]:null;
   const chapterCompleted=game.chapterII?.started&&game.chapterII.completed&&game.mission.activeId==="DONE";
   const machineCounters=selectedEntity?entityDiagnostics(game,selectedEntity.id):null;
@@ -368,6 +370,9 @@ export default function App(){
       <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
       </aside></div>
     <footer data-testid="mission-hud"><div className="mission-hud-objectives" tabIndex={chapterCompleted?0:undefined} role={chapterCompleted?"region":undefined} aria-label={chapterCompleted?"Operations objectives":undefined}>{chapterCompleted&&<ChapterThreePanel game={game}
+        dispatch={latestDispatch&&<button onClick={()=>openTransmission(latestDispatch)}>
+          Read {CHAPTER_TRANSMISSIONS[latestDispatch].label}
+        </button>}
         onStart={()=>runContractCommand(beginChapterIII)}
         onAccept={id=>runContractCommand(s=>acceptChapterIIIContract(s,id))}
         onChoose={route=>runContractCommand(s=>chooseChapterIIIRoute(s,route,true))}/>}
@@ -394,7 +399,9 @@ export default function App(){
         const result=beginChapterII(latest.current!);
         setMessage(result.message);if(result.ok){persist(result.state);setShowTechnology(true);}
       }}>Begin Chapter II</button>}{!game.chapterIII&&<button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button>}</div></footer>
-    {activeTransmission&&!game.introOpen&&!help&&<div className="overlay" data-testid="chapter-transmission-overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Chapter II Transmission">
+    {activeTransmission&&transmission&&isChapterIIITransmission(transmission)&&!game.introOpen&&!help&&
+      <ChapterThreeTransmission transmission={activeTransmission} onClose={closeTransmission}/>}
+    {activeTransmission&&transmission&&!isChapterIIITransmission(transmission)&&!game.introOpen&&!help&&<div className="overlay" data-testid="chapter-transmission-overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Chapter II Transmission">
       <small>{transmissionPage+1} / {activeTransmission.pages.length} · PROJECT PROMETHEUS</small>
       <h1>{activeTransmission.pages[transmissionPage].heading}</h1>
       <p>{activeTransmission.pages[transmissionPage].text}</p>

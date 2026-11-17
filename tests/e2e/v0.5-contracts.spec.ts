@@ -1,6 +1,6 @@
 import {expect,test,type Page} from "@playwright/test";
 
-type Stage="after-m10"|"after-m11"|"after-m12";
+type Stage="after-m10"|"after-m11"|"after-m12"|"after-m13";
 
 async function openCheckpoint(page:Page,stage:Stage){
   await page.goto("/");
@@ -24,8 +24,9 @@ async function openCheckpoint(page:Page,stage:Stage){
           game.foundryStorySeen=true;
           for(const technology of Object.keys(game.technologies))game.technologies[technology]=true;
           if(stage!=="after-m10"){
-            const corporate=stage==="after-m12";
-            game.chapterIII={route:corporate?"corporate":null,completed:corporate?["M11","M12"]:["M11"],active:null};
+            const corporate=stage==="after-m12"||stage==="after-m13";
+            const completed=stage==="after-m13"?["M11","M12","M13"]:corporate?["M11","M12"]:["M11"];
+            game.chapterIII={route:corporate?"corporate":null,completed,active:null};
           }
           store.put(game,"slot1");
         };
@@ -128,3 +129,53 @@ for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[1280,600],[390,7
     expect(pageSize.height).toBeLessThanOrEqual(height+2);
   });
 }
+
+test("WP5 persists the briefing and exports actions from a local opt-in recording",async({page})=>{
+  await openCheckpoint(page,"after-m10");
+  expect(await page.evaluate(()=>localStorage.getItem("sector-nine-v0.3-local-playtest"))).toBeNull();
+  await page.getByRole("button",{name:/Local playtest/}).click();
+  await page.getByRole("button",{name:"Start recording",exact:true}).click();
+  const contracts=page.getByTestId("chapter-three-contracts");
+  await contracts.getByRole("button",{name:"Start Chapter III"}).click();
+  const briefing=contracts.getByRole("button",{name:"Read Project Prometheus Briefing"});
+  const dialog=page.getByRole("dialog",{name:"Chapter III Transmission"});
+  await briefing.click();
+  await expect(dialog).toContainText("Sublevel 03");
+  await dialog.getByRole("button",{name:"Skip Transmission"}).click();
+  await expect(briefing).toBeFocused();
+  await expect(page.getByTestId("save-status")).toHaveText("Saved");
+  await page.reload();
+  await briefing.click();
+  await dialog.getByRole("button",{name:"Return to Factory"}).click();
+  await contracts.getByRole("button",{name:"Accept Contract",exact:true}).click();
+  await page.getByRole("button",{name:"Stop recording"}).click();
+  const downloaded=page.waitForEvent("download");
+  await page.getByTestId("export-playtest").click();
+  const stream=await (await downloaded).createReadStream();
+  const chunks:Buffer[]=[];
+  for await(const chunk of stream)chunks.push(Buffer.from(chunk));
+  const report=JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  expect(report).toMatchObject({schemaVersion:5,missionRuleVersion:5,chapterIIIRoute:null});
+  expect(report.buildCommit===null||/^[a-f0-9]{40}$/.test(report.buildCommit)).toBe(true);
+  expect(report.contractTransitions.map(({type}:{type:string})=>type)).toEqual(["chapter_started","contract_accepted"]);
+  expect(report).not.toHaveProperty("startedAt");
+  expect(report).not.toHaveProperty("lastContractProgress");
+});
+
+test("WP5 replays the shared conclusion and leaves the completed factory running",async({page})=>{
+  await openCheckpoint(page,"after-m13");
+  const contracts=page.getByTestId("chapter-three-contracts");
+  const conclusion=contracts.getByRole("button",{name:"Read Prometheus Reconstruction"});
+  await conclusion.click();
+  const dialog=page.getByRole("dialog",{name:"Chapter III Transmission"});
+  await expect(dialog).toContainText("RECONSTRUCTION VERIFIED");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(contracts.getByRole("heading",{name:"Project Prometheus Complete"})).toBeVisible();
+  await expect(contracts.getByRole("button",{name:"Accept Contract"})).toHaveCount(0);
+  const tick=page.locator(".board-title").getByText(/^Tick/);
+  const before=await tick.innerText();
+  await page.getByRole("button",{name:/Run$/}).click();
+  await expect.poll(async()=>Number((await tick.innerText()).match(/^Tick (\d+)/)?.[1]))
+    .toBeGreaterThan(Number(before.match(/^Tick (\d+)/)?.[1]));
+});

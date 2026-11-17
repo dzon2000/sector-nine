@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useRef,useState,type ReactNode} from "react";
 import {
   CHAPTER_III_CONTRACTS,CHAPTER_III_PRODUCTS,CHAPTER_III_ROUTES,CONTRACT_STREAK_WINDOWS,CONTRACT_WINDOW_TICKS,
   chapterIIIContractGoal,contractQualifies,summarizeContractTicks,
@@ -44,12 +44,13 @@ function Conditions({goal,progress}:{
 
 interface Props {
   game:GameState;
+  dispatch?:ReactNode;
   onStart:()=>void;
   onAccept:(id:ChapterIIIContractId)=>void;
   onChoose:(route:ChapterIIIRoute)=>void;
 }
 
-export function ChapterThreePanel({game,onStart,onAccept,onChoose}:Props){
+export function ChapterThreePanel({game,dispatch,onStart,onAccept,onChoose}:Props){
   const chapter=game.chapterIII;
   const [pendingRoute,setPendingRoute]=useState<ChapterIIIRoute|null>(null);
   const heading=useRef<HTMLHeadingElement>(null);
@@ -75,6 +76,7 @@ export function ChapterThreePanel({game,onStart,onAccept,onChoose}:Props){
 
   return <section className="chapter-three-contracts" aria-label="Chapter III contracts" data-testid="chapter-three-contracts">
     <h2 ref={heading} tabIndex={-1}>{id?TITLES[id]:chapter?"Project Prometheus Complete":"First Signal Restored"}</h2>
+    {dispatch}
     {!chapter&&<>
       {game.tutorialEnabled&&<p>Investigate the recovered archive in Project Prometheus.</p>}
       <button onClick={()=>run(onStart)}>Start Chapter III</button>

@@ -9,9 +9,8 @@ function afterChapterTwo(){
   const game=createGame();
   game.mission.activeId="DONE";
   game.chapterII={foundryCompleted:true,started:true,completed:true,storySeen:true,metrics:null};
-  for(const key of Object.keys(game.technologies!)){
-    game.technologies![key as keyof typeof game.technologies]=true;
-  }
+  Object.assign(game.technologies!,{coal_extraction:true,mechanical_components:true,advanced_smelting:true,
+    resource_surveying:true,circuit_fabrication:true,industrial_power:true});
   return game;
 }
 

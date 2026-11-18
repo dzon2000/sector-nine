@@ -81,12 +81,12 @@ describe("simulation clock", () => {
     const baseline = replay(tutorial, () => 1, false);
     expect(baseline.state.tick).toBe(150);
     expect(baseline.events.map(([, mission]) => mission)).toEqual(["M2", "M3"]);
-    expect(baseline.state.sales.iron_ore).toBeGreaterThan(0);
+    expect(baseline.state.sales?.iron_ore).toBeGreaterThan(0);
 
     // Synthetic powered starting state, with simulated extraction and fuel transport.
     const powered = begin(createGame());
     powered.balanceCents = 100_000;
-    powered.technologies = {...powered.technologies, coal_extraction: true, industrial_power: true};
+    Object.assign(powered.technologies!, {coal_extraction: true, industrial_power: true});
     const coal = place(powered, "coal_mine", 7, 9, "N");
     expect(coal.ok).toBe(true);
     const generator = place(coal.state, "coal_generator", 7, 8, "E");

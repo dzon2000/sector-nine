@@ -17,7 +17,6 @@ test("M1 keyboard speed control, pause and visibility use fresh tick intervals",
   await page.clock.runFor(900);
   await speed.focus();
   await speed.press("ArrowDown");
-  await speed.press("Enter");
   await expect(speed).toHaveValue("2");
   await page.clock.runFor(499);
   await expect(tickReadout).toContainText("Tick 0");

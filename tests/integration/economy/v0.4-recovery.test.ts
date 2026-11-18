@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {begin,face,place,remove,turn} from "../../../src/game/commands";
+import {begin,face,place,remove,setPause,turn} from "../../../src/game/commands";
 import {createGame,DEFINITIONS,ITEMS,stockOnHand,stats,type Direction,type GameState,type Kind} from "../../../src/domain/model";
 import {missionWindow} from "../../../src/game/missionMetrics";
 import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
@@ -780,4 +780,27 @@ it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 r
     const gearRecovery=await probeObserve(gear,"first gear branch restored, no spend");
     expect(gearRecovery.fixedWindows.slice(1).every(window=>window.m15)).toBe(true);
   }
-},55000);
+},100000);
+
+
+// Keep the test-only Node types local to the exporter.
+declare const process:{
+  env:Record<string,string|undefined>;
+  getBuiltinModule(name:"node:fs/promises"):{
+    writeFile(path:string,data:string,options:{flag:"wx"}):Promise<void>;
+  };
+  getBuiltinModule(name:"node:path"):{join(...paths:string[]):string};
+};
+const checkpointExportDirectory=process.env.SEKTOR9_POST_M13_EXPORT_DIR;
+
+it.runIf(Boolean(checkpointExportDirectory))("exports validated post-M13 checkpoints",async()=>{
+  const {writeFile}=process.getBuiltinModule("node:fs/promises");
+  const {join}=process.getBuiltinModule("node:path");
+  for(const [route,trace] of Object.entries(await paidChapterIIICheckpoints())){
+    const checkpoint=setPause(trace.state,true);
+    const json=JSON.stringify(checkpoint);
+    expect(validateSave(JSON.parse(json))).toEqual(checkpoint);
+    expect(checkpoint.chapterIII).toEqual({route,completed:["M11","M12","M13"],active:null});
+    await writeFile(join(checkpointExportDirectory!,route+".json"),json,{flag:"wx"});
+  }
+},45000);

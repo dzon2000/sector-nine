@@ -30,7 +30,7 @@ function build(layout:readonly Construction[],mission:"M6"|"M7",options?:{cash?:
   let s=createGame();
   s.mission.activeId=mission;
   s.missionMetrics=activateMissionMetrics(s.tick);
-  s.technologies={coal_extraction:true,mechanical_components:true,advanced_smelting:true};
+  s.technologies={...s.technologies!,coal_extraction:true,mechanical_components:true,advanced_smelting:true};
   s.balanceCents=options?.cash??1000000; // Capital-only fixture; not part of profit.
   for(const [kind,x,y,direction] of layout){
     const result=place(s,kind,x,y,direction);

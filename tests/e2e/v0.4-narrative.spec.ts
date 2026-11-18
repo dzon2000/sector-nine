@@ -11,7 +11,8 @@ async function startChapter(page:Page){
         const get=tx.objectStore("snapshots").get("slot1");
         get.onsuccess=()=>{
           const s=get.result;if(!s){reject(Error("No saved game"));return;}
-          s.mission.activeId="DONE";s.foundryStorySeen=true;s.paused=true;
+          s.mission.activeId="DONE";
+          s.chapterII={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};s.foundryStorySeen=true;s.paused=true;
           s.technologies.coal_extraction=true;s.technologies.mechanical_components=true;s.technologies.advanced_smelting=true;
           tx.objectStore("snapshots").put(s,"slot1");
         };
@@ -59,6 +60,7 @@ test("WP5 Chapter II opening optional, skippable and persistently replayable",as
  await expect(page.getByRole("dialog",{name:"Chapter II Transmission"})).toContainText("No external client is registered");
  await page.getByRole("button",{name:"Return to Factory"}).click();
  await expect(page.getByRole("dialog",{name:"Chapter II Transmission"})).toHaveCount(0);
+ await expect(page.getByTestId("save-status")).toHaveText("Saved");
  await page.reload();
  await expect(page.getByRole("dialog",{name:"Chapter II Transmission"})).toHaveCount(0);
  await page.getByRole("button",{name:"Replay Unknown Client Request"}).click();

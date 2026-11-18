@@ -32,6 +32,7 @@ test("WP4 #5 direct rotation cardinal directions and no-op preserve one event",a
  await drag(page,p,0,30);
  await expect(direction).toHaveText("S");
  await expect(page.getByTestId("playtest-panel")).toContainText("rotated 4");
+ await expect(page.getByTestId("save-status")).toHaveText("Saved");
  await page.reload();await page.getByRole("button",{name:"Inspect",exact:true}).click();
  const same=await center(page,4,4);await page.mouse.click(same.x,same.y);
  await expect(page.getByTestId("selected-facing")).toHaveText("S");

@@ -44,7 +44,7 @@ User action -> UI command adapter -> domain command validation
 - `src/game/`: commands, tutorial flow, mission progress, game session orchestration.
 - `src/rendering/`: PixiJS scene, object sprites, belt indicators.
 - `src/ui/`: panels, controls, UI feedback, accessibility.
-- `src/persistence/`: save serialization, validation, IndexedDB adapter and explicit unsupported-version handling. Legacy migration removal is scheduled for v0.5 WP1.
+- `src/persistence/`: save serialization, validation, IndexedDB adapter and explicit unsupported-version handling. As of v0.5 WP1, the game uses one schema across both chapters. Unsupported saves remain in the same IndexedDB slot until the player confirms replacement.
 - `tests/`: unit, integration, and browser E2E tests.
 
 ## Domain rules
@@ -59,7 +59,7 @@ User action -> UI command adapter -> domain command validation
 
 ## Persistence contract
 
-Save version, tick, cash, map/deposits, entities/orientations, inventories, active cycles, transport arbiters, accounting window, and mission/tutorial progress. Restore without replaying elapsed real time in v0.1. On schema mismatch, show an actionable error; never silently overwrite data.
+Save version, tick, cash, map/deposits, entities/orientations, inventories, active cycles, transport arbiters, accounting window, and mission/tutorial progress. Restore without replaying elapsed real time in v0.1. Schema and mission-rule identifiers are independent of chapter progress and build commit. Schema mismatch or corrupt data blocks gameplay and autosave. A confirmed restart atomically replaces the slot with a fresh Mission 1 snapshot and invalidates queued writes from the previous game. The restart epoch shares the snapshot transaction and prevents stale writes from older tabs. The game displays Saved once the last queued operation commits.
 
 ## Simulation implementation notes
 

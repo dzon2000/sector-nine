@@ -13,49 +13,14 @@ function activeMission(id:"M6"|"M7"):GameState {
 }
 
 describe("WP1 mission measurement foundation",()=>{
-  it("starts a fresh campaign with v3 mission rules and bounded empty measurement history",()=>{
+  it("starts a fresh campaign with current mission rules and bounded empty measurement history",()=>{
     const state=createGame();
-    expect(state.schemaVersion).toBe(3);
-    expect(state.missionRuleVersion).toBe(3);
+    expect(state.schemaVersion).toBe(5);
+    expect(state.missionRuleVersion).toBe(5);
     expect(state.missionMetrics).toBeNull();
   });
 
-  it("upgrades active v2 M6 and M7 as legacy missions without changing existing progression or stock",()=>{
-    for(const id of ["M6","M7"] as const){
-      const legacy=createGame() as GameState;
-      legacy.schemaVersion=2;
-      legacy.mission.activeId=id;
-      legacy.mission.soldGear=5;
-      legacy.mission.soldSteel=4;
-      delete (legacy as Partial<GameState>).missionRuleVersion;
-      delete (legacy as Partial<GameState>).missionMetrics;
-      const restored=validateSave(JSON.parse(JSON.stringify(legacy)));
-      expect(restored.schemaVersion).toBe(3);
-      expect(restored.missionRuleVersion).toBe(2);
-      expect(restored.mission.soldGear).toBe(5);
-      expect(restored.mission.soldSteel).toBe(4);
-      expect(restored.entities).toEqual(legacy.entities);
-    }
-  });
 
-  it("migrated M5 adopts new rules when M6 is activated and DONE stays completed",()=>{
-    const prior=createGame() as GameState;
-    prior.schemaVersion=2;
-    delete (prior as Partial<GameState>).missionRuleVersion;
-    delete (prior as Partial<GameState>).missionMetrics;
-    prior.mission.activeId="M5";
-    prior.mission.soldCoal=9;
-    const restored=validateSave(prior);
-    expect(restored.missionRuleVersion).toBe(3);
-    restored.mission.soldCoal=10;
-    const progressed=runTicks({...restored,paused:false},1);
-    expect(progressed.mission.activeId).toBe("M6");
-    expect(progressed.missionMetrics?.activatedAtTick).toBe(progressed.tick);
-    expect(progressed.missionMetrics?.salesTicks).toEqual([]);
-    const finished=structuredClone(prior);
-    finished.mission.activeId="DONE";
-    expect(validateSave(finished).mission.activeId).toBe("DONE");
-  });
 
   it("counts successful physical terminal sales, not production or inventory",()=>{
     let s=activeMission("M6");
@@ -116,7 +81,7 @@ describe("WP1 mission measurement foundation",()=>{
     for(const id of ["M6","M7"] as const){
       const valid=createGame();
       valid.mission.activeId=id;
-      valid.missionRuleVersion=3;
+      
       valid.missionMetrics=null;
       expect(()=>validateSave(valid)).toThrow(/mission metrics/i);
       const missing=structuredClone(valid);
@@ -125,14 +90,6 @@ describe("WP1 mission measurement foundation",()=>{
     }
   });
 
-  it("continues accepting legacy v2-rule M6/M7 with null measurement state",()=>{
-    for(const id of ["M6","M7"] as const){
-      const legacy=createGame();legacy.mission.activeId=id;legacy.missionRuleVersion=2;
-      legacy.missionMetrics=null;
-      expect(validateSave(legacy).missionMetrics).toBeNull();
-      expect(validateSave(legacy).missionRuleVersion).toBe(2);
-    }
-  });
 
   it("does not advance while paused and rejects corrupt v3 rolling metric state",()=>{
     let s=activeMission("M6");

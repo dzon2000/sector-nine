@@ -1,3 +1,5 @@
+import type {ChapterIIIState} from "./contracts";
+
 export type Direction = "N" | "E" | "S" | "W";
 export type Item = "iron_ore" | "iron_ingot" | "coal" | "gear" | "steel" | "copper_ore" | "silicon" | "circuit";
 export type RecipeId = "iron_ingot" | "gear" | "steel" | "circuit";
@@ -75,19 +77,21 @@ export interface MissionMetrics {
 export interface PowerTick { tick:number; supply:number; demand:number; served:number; demandCovered:boolean; unpoweredProcessingTicks:number; coalBurned:number; }
 export interface PowerState extends PowerTick { lastServedFabricatorId:number; history:PowerTick[]; }
 export const POWER_CANDIDATE={fuelTicksPerCoal:12,generatorSupply:1,fabricatorDemand:1} as const;
+export const SAVE_SCHEMA_VERSION=5;
+export const MISSION_RULE_VERSION=5;
 export interface GameState {
-  schemaVersion: 1 | 2 | 3 | 4; width: 12; height: 12; tick: number; paused: boolean;
+  schemaVersion: typeof SAVE_SCHEMA_VERSION; width: 12; height: 12; tick: number; paused: boolean;
   balanceCents: number; entities: Entity[]; nextId: number;
-  missionRuleVersion?:2|3|4;
+  missionRuleVersion:typeof MISSION_RULE_VERSION;
   missionMetrics?:MissionMetrics|null;
   diagnostics?:DiagnosticHistory;
-  /** WP1 headless-only additive state; full schema migration belongs to WP2. */
   power?:PowerState;
   chapterII?:ChapterIIState;
+  chapterIII?:ChapterIIIState;
   arbiters: Record<string, number>;
   rollingEvents: Accounting[]; lastEvent: Accounting;
   totalOreProduced: number; totalIngotProduced: number;
-  mission: { activeId: MissionId; soldOre: number; soldIngot: number; profitStreakTicks: number; soldCoal?:number; soldGear?:number; soldSteel?:number; };
+  mission: { activeId: MissionId; soldOre: number; soldIngot: number; profitStreakTicks: number; soldCoal:number; soldGear:number; soldSteel:number; };
   introSeen: boolean; introOpen: boolean; tutorialEnabled: boolean;
   foundryStorySeen?:boolean;
   coalDeposits?: {x:number;y:number}[];
@@ -122,9 +126,11 @@ export const STEP: Record<Direction,[number,number]> = {N:[0,-1],E:[1,0],S:[0,1]
 export const rotate = (d:Direction):Direction => ({N:"E",E:"S",S:"W",W:"N"})[d] as Direction;
 export const location = (x:number,y:number) => `${x},${y}`;
 export function createGame():GameState {
-  return { schemaVersion:3,missionRuleVersion:3,missionMetrics:null,diagnostics:{samples:[]},width:12,height:12,tick:0,paused:true,balanceCents:30000,
+  return { schemaVersion:SAVE_SCHEMA_VERSION,missionRuleVersion:MISSION_RULE_VERSION,missionMetrics:null,diagnostics:{samples:[]},width:12,height:12,tick:0,paused:true,balanceCents:30000,
     sales:emptySales(),materialLedger:emptyLedger(),totalRevenueCents:0,totalCostCents:0,
-    coalDeposits:COAL_DEPOSITS.map(d=>({...d})),technologies:{coal_extraction:false,mechanical_components:false,advanced_smelting:false},
+    coalDeposits:COAL_DEPOSITS.map(d=>({...d})),copperDeposits:COPPER_DEPOSITS.map(d=>({...d})),
+    siliconDeposits:SILICON_DEPOSITS.map(d=>({...d})),technologies:{coal_extraction:false,mechanical_components:false,advanced_smelting:false,
+      resource_surveying:false,circuit_fabrication:false,industrial_power:false},
     nextId:2,arbiters:{},rollingEvents:[],lastEvent:{tick:0,revenueCents:0,costCents:0},
     totalOreProduced:0,totalIngotProduced:0,
     entities:[{id:1,kind:"sell_terminal",x:10,y:5,direction:"W",output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs"}],

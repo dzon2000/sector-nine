@@ -4,9 +4,8 @@ import {tick,runTicks} from "../../src/simulation/engine";
 import {remove} from "../../src/game/commands";
 import {validateSave} from "../../src/persistence/indexedDb";
 
-function legacy():GameState{
+function populatedFactory():GameState{
  const s=createGame();
- s.schemaVersion=1;
  s.tick=500;s.paused=false;s.introOpen=false;s.mission.activeId="M4";
  s.entities.push(
   {id:2,kind:"conveyor",x:9,y:5,direction:"E",output:null,belt:"iron_ingot",oreInput:0,cycle:null,status:"working"},
@@ -18,9 +17,11 @@ function legacy():GameState{
   {id:8,kind:"conveyor",x:8,y:5,direction:"E",output:null,belt:null,oreInput:0,cycle:null,status:"waiting_for_inputs"}
  );
  s.nextId=9;
- delete s.materialLedger;delete s.sales;delete s.technologies;delete s.coalDeposits;
- delete s.totalRevenueCents;delete s.totalCostCents;delete s.foundryStorySeen;
- for(const e of s.entities){delete e.inputBuffers;delete e.reservedInputs;}
+ for(const e of s.entities){e.inputBuffers={};e.reservedInputs={};}
+ const furnace=s.entities.find(e=>e.kind==="furnace")!;
+ furnace.inputBuffers={iron_ore:1};
+ furnace.reservedInputs={iron_ore:2};
+ for(const item of ITEMS)s.materialLedger![item].opening=onHand(s)[item];
  return s;
 }
 function onHand(s:GameState):Record<Item,number>{
@@ -42,8 +43,8 @@ function conserved(s:GameState){
  }
 }
 describe("PR #2 review regressions",()=>{
- it("migration records opening stock, not fictional production, and conserves through 600 ticks and demolition",()=>{
-  let s=validateSave(legacy());
+ it("preserves opening stock, active reservations and conservation through 600 ticks and demolition",()=>{
+  let s=validateSave(populatedFactory());
   const expected=onHand(s);
   for(const item of ITEMS){
    expect(s.materialLedger![item].opening).toBe(expected[item]);
@@ -62,8 +63,8 @@ describe("PR #2 review regressions",()=>{
   expect(s.materialLedger!.iron_ore.opening).toBe(opening!.iron_ore.opening);
   expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s);
  });
- it("uses typed buffers as authority while keeping a validated legacy furnace mirror",()=>{
-  const s=validateSave(legacy());
+ it("uses typed buffers as authority while keeping a validated furnace ore mirror",()=>{
+  const s=validateSave(populatedFactory());
   const furnace=s.entities.find(e=>e.kind==="furnace")!;
   expect(furnace.inputBuffers?.iron_ore).toBe(furnace.oreInput);
   expect(()=>validateSave({...s,entities:s.entities.map(e=>e.id===furnace.id?{...e,oreInput:3}:e)})).toThrow(/inventory|buffer|legacy/i);

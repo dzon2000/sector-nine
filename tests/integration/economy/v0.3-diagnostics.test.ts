@@ -71,7 +71,7 @@ describe("WP4 authoritative 60-active-tick diagnostic counters",()=>{
   it("distinguishes occupied moving conveyor from occupied-but-stalled; records actual departures",()=>{
     const s=createGame();
     s.paused=false;
-    s.entities.push(raw("conveyor",2,9,5,{belt:"gear"}));
+    s.entities.push(raw("conveyor",s.nextId++,9,5,{belt:"gear"}));
     let n=tick(s);
     expect(entityDiagnostics(n,2)).toMatchObject({ticks:1,conveyorMoves:1,conveyorStalledTicks:0});
     expect(terminalDiagnostics(n).sales.gear).toBe(1);
@@ -93,7 +93,7 @@ describe("WP4 authoritative 60-active-tick diagnostic counters",()=>{
   });
   it("tracks terminal per-material sales and bounds counters to 60 active ticks without wall-clock",()=>{
     let s=createGame();s.paused=false;
-    s.entities.push(raw("conveyor",2,9,5,{belt:"gear"}));
+    s.entities.push(raw("conveyor",s.nextId++,9,5,{belt:"gear"}));
     s=tick(s);
     expect(terminalDiagnostics(s).sales.gear).toBe(1);
     s=runTicks(s,59);
@@ -121,25 +121,13 @@ describe("WP4 authoritative 60-active-tick diagnostic counters",()=>{
     expect(entityDiagnostics(s,replacement.id)?.ticks).toBe(1);
     expect(entityDiagnostics(s,id)).toBeNull();
   });
-  it("resumes machine, belt and terminal diagnostics identically after v3 save/restore",()=>{
+  it("resumes machine, belt and terminal diagnostics identically after current save/restore",()=>{
     let s=createGame();s.paused=false;
-    s.entities.push(raw("conveyor",2,9,5,{belt:"gear"}));
+    s.entities.push(raw("conveyor",s.nextId++,9,5,{belt:"gear"}));
     s=runTicks(s,28);
     const restored=validateSave(JSON.parse(JSON.stringify(s)));
     expect(restored).toEqual(s);
     expect(runTicks(restored,100)).toEqual(runTicks(s,100));
-  });
-  it("migrates previous schema v3 snapshots lacking diagnostics without losing gameplay data",()=>{
-    const s=createGame();
-    delete s.diagnostics;
-    s.mission.activeId="M6";
-    s.missionMetrics={activatedAtTick:s.tick,salesTicks:[],streakTicks:0};
-    s.paused=false;
-    const n=validateSave(s);
-    expect(n.diagnostics).toEqual({samples:[]});
-    expect(n.mission.activeId).toBe("M6");
-    expect(n.balanceCents).toBe(s.balanceCents);
-    expect(n.entities).toEqual(s.entities);
   });
   it("rejects corrupt diagnostic samples without discarding existing save",()=>{
     let s=createGame();s.paused=false;s=runTicks(s,5);

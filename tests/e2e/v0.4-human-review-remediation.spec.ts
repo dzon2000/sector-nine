@@ -70,6 +70,7 @@ test("PR #8: one press-drag places and rotates once, with facing saved after rel
  await page.mouse.up();
  await expect(page.getByTestId("selected-facing")).toHaveText("N");
  await expect(recorder).toContainText("placed 1, rotated 1");
+ await expect(page.getByTestId("save-status")).toHaveText("Saved");
 
  await page.reload();
  await page.getByRole("button",{name:"Inspect",exact:true}).click();
@@ -116,7 +117,8 @@ async function chapterII(page:Page){
        const get=store.get("slot1");
        get.onsuccess=()=>{
          const s=get.result;
-         s.mission.activeId="DONE";s.foundryStorySeen=true;s.paused=true;
+         s.mission.activeId="DONE";
+         s.chapterII={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};s.foundryStorySeen=true;s.paused=true;
          s.technologies.coal_extraction=true;
          s.technologies.mechanical_components=true;
          s.technologies.advanced_smelting=true;

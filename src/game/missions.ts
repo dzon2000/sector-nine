@@ -32,42 +32,34 @@ export function updateMission(s:GameState):string|null {
   }
   if(m.activeId==="M5"&&(m.soldCoal??0)>=10){
     m.activeId="M6";
-    if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
+    s.missionMetrics=activateMissionMetrics(s.tick);
     return "Coal deliveries confirmed. Reconstruct mechanical assembly and increase sustained gear throughput.";
   }
   if(m.activeId==="M6"){
-    if(s.missionRuleVersion===2){
-      if((m.soldGear??0)<8)return null;
-    }else{
-      const window=missionWindow(s);
-      if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
-      s.missionMetrics.lastEvaluatedTick=s.tick;
-      s.missionMetrics.streakTicks=window.sales.gear>=9?s.missionMetrics.streakTicks+1:0;
-      if(s.missionMetrics.streakTicks<120)return null;
-    }
+    const window=missionWindow(s);
+    if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
+    s.missionMetrics.lastEvaluatedTick=s.tick;
+    s.missionMetrics.streakTicks=window.sales.gear>=9?s.missionMetrics.streakTicks+1:0;
+    if(s.missionMetrics.streakTicks<120)return null;
     m.activeId="M7";
-    if(s.missionRuleVersion===3)s.missionMetrics=activateMissionMetrics(s.tick);
+    s.missionMetrics=activateMissionMetrics(s.tick);
     return "Mechanical assembly verified. Restore the foundry while maintaining two profitable product streams.";
   }
   if(m.activeId==="M7"){
-    if(s.missionRuleVersion===2){
-      if(!s.technologies?.advanced_smelting||(m.soldSteel??0)<8)return null;
-    }else{
-      const window=missionWindow(s);
-      if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
-      s.missionMetrics.lastEvaluatedTick=s.tick;
-      const qualifies=Boolean(s.technologies?.advanced_smelting)&&
-        window.sales.gear>=7&&window.sales.steel>=7&&window.profitCents>=17500;
-      s.missionMetrics.streakTicks=qualifies?s.missionMetrics.streakTicks+1:0;
-      if(s.missionMetrics.streakTicks<120)return null;
-    }
+    const window=missionWindow(s);
+    if(!window||!s.missionMetrics||s.missionMetrics.lastEvaluatedTick===s.tick)return null;
+    s.missionMetrics.lastEvaluatedTick=s.tick;
+    const qualifies=Boolean(s.technologies?.advanced_smelting)&&
+      window.sales.gear>=7&&window.sales.steel>=7&&window.profitCents>=17500;
+    s.missionMetrics.streakTicks=qualifies?s.missionMetrics.streakTicks+1:0;
+    if(s.missionMetrics.streakTicks<120)return null;
     m.activeId="DONE";
-    if(s.missionRuleVersion===3)s.missionMetrics=null;
+    s.missionMetrics=null;
     s.chapterII??={foundryCompleted:true,started:false,completed:false,storySeen:false,metrics:null};
     s.chapterII.foundryCompleted=true;
     return "Sustained foundry operations confirmed. A sealed Prometheus engineering archive awaits future investigation.";
   }
-  if(m.activeId==="M8" && s.missionRuleVersion===4 && s.chapterII?.started){
+  if(m.activeId==="M8" && s.chapterII?.started){
     const metrics=s.chapterII.metrics;
     if(s.technologies?.resource_surveying && metrics &&
       (metrics.totals?.copper_ore??0)>=10&&(metrics.totals?.silicon??0)>=10){
@@ -75,7 +67,7 @@ export function updateMission(s:GameState):string|null {
       return "Copper and silicon verified. Prometheus circuit records recovered.";
     }
   }
-  if(m.activeId==="M9" && s.missionRuleVersion===4 && s.chapterII?.started){
+  if(m.activeId==="M9" && s.chapterII?.started){
     const metrics=s.chapterII.metrics;
     if(s.technologies?.circuit_fabrication && s.technologies?.industrial_power &&
       metrics && (metrics.totals?.circuit??0)>=4){
@@ -83,7 +75,7 @@ export function updateMission(s:GameState):string|null {
       return "Signal recovered. Sustain powered electronics and steel throughput.";
     }
   }
-  if(m.activeId==="M10" && s.missionRuleVersion===4 && s.chapterII?.started){
+  if(m.activeId==="M10" && s.chapterII?.started){
     const metrics=s.chapterII.metrics;
     const window=chapterWindow(s);
     if(!metrics||!window||metrics.lastEvaluatedTick===s.tick)return null;

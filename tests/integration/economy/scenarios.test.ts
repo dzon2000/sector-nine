@@ -28,7 +28,7 @@ const steel:Position[]=[
 function setup(layout:readonly Position[]):GameState{
   let state=createGame();
   state.mission.activeId="M3"; // The economic fixture assumes tutorial construction was completed.
-  state.technologies={coal_extraction:true,mechanical_components:true,advanced_smelting:true};
+  state.technologies={...state.technologies!,coal_extraction:true,mechanical_components:true,advanced_smelting:true};
   state.balanceCents=1000000; // Fixture capital only; never included in operating profit.
   for(const [kind,x,y,dir] of layout){
     const result=place(state,kind,x,y,dir);

@@ -7,6 +7,7 @@ import {validateSave} from "../../src/persistence/indexedDb";
 function factory(){
   let s:any=createGame();
   s.mission.activeId="DONE";
+  s.chapterII={foundryCompleted:true,started:true,completed:true,storySeen:false,metrics:null};
   s.balanceCents=1000000;
   s.technologies={...s.technologies,resource_surveying:true,circuit_fabrication:true,industrial_power:true};
   s.paused=false;
@@ -339,7 +340,7 @@ describe("v0.4 WP1 accounting and compatibility contract",()=>{
     conservation(end);
     expect(validateSave(JSON.parse(JSON.stringify(end)))).toEqual(end);
   });
-  it("leaves legacy machines unpowered and preserves original economic state shape",()=>{
+  it("leaves legacy machines unpowered and preserves original economics",()=>{
     const f=factory();
     f.add("iron_mine",3,5,"E");
     f.add("furnace",5,5,"E");

@@ -3,6 +3,7 @@ import {begin,place,remove,turn} from "../../../src/game/commands";
 import {createGame,DEFINITIONS,ITEMS,stockOnHand,stats,type Direction,type GameState,type Kind} from "../../../src/domain/model";
 import {missionWindow} from "../../../src/game/missionMetrics";
 import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
+import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "../../../src/game/chapterThree";
 import {beginChapterII} from "../../../src/game/chapterTwo";
 import {tick,runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
@@ -50,6 +51,13 @@ function finance(t:Trace,cents:number,maxTicks=1800){
   expect(t.state.balanceCents, "Could not finance "+cents+" with existing factory").toBeGreaterThanOrEqual(cents);
   return elapsed;
 }
+function verifyRestore(t:Trace){
+  const before=t.state;
+  const restored=validateSave(JSON.parse(JSON.stringify(before)));
+  expect(restored).toEqual(before);
+  expect(tick(restored)).toEqual(tick(before));
+  t.state=restored;
+}
 function until(t:Trace,mission:GameState["mission"]["activeId"],maxTicks:number){
   const start=t.state.tick;
   // Diagnostic-only shadow calculations; never mutate production rules or economy.
@@ -57,6 +65,7 @@ function until(t:Trace,mission:GameState["mission"]["activeId"],maxTicks:number)
   while(t.state.mission.activeId!==mission&&t.state.tick-start<maxTicks){
     const active=t.state.mission.activeId;
     t.state=tick(t.state);
+    if(t.state.mission.activeId!==active)verifyRestore(t);
     const p=stats(t.state);
     if(active==="M4"||active==="M7"){
       const window=active==="M7"?missionWindow(t.state):null;
@@ -108,8 +117,9 @@ function audit(t:Trace){
   }
   expect(validateSave(JSON.parse(JSON.stringify(s)))).toEqual(s);
 }
-function realV03Done():Trace {
+function completeChapterI():Trace {
   const t=start();
+  verifyRestore(t);
   build(t,["conveyor",0,0,"E"]);demolish(t,0,0);
   build(t,["iron_mine",3,5,"E"],...[4,5,6,7,8,9].map(x=>["conveyor",x,5,"E"] as Built));
   until(t,"M3",120);
@@ -138,12 +148,11 @@ function realV03Done():Trace {
   audit(t);
   return t;
 }
-describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
-  it("pays all research and completes physical M8–M10 after an engine-generated v0.3 DONE save",()=>{
-    const t=realV03Done();
+function completeChapterII():Trace {
+    const t=completeChapterI();
     const done=validateSave(JSON.parse(JSON.stringify(t.state)));
     expect(done.mission.activeId).toBe("DONE");
-    expect(done.technologies).toEqual({
+    expect(done.technologies).toMatchObject({
       coal_extraction:true,mechanical_components:true,advanced_smelting:true
     });
     const occupied=t.state.entities.map(e=>[e.kind,e.x,e.y] as const);
@@ -154,6 +163,7 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
     expect(chapter.ok,chapter.message).toBe(true);
     t.state=chapter.state;
     expect(t.state.mission.activeId).toBe("M8");
+    verifyRestore(t);
     // M8: preserve the profitable steel line while replacing ONE abandoned
     // gear-output conveyor with copper mining. Keep upper route to terminal.
     purchaseChapterResearch(t,"resource_surveying",8000);
@@ -172,6 +182,7 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
     expect(t.state.sales!.silicon-m8Start.silicon).toBeGreaterThanOrEqual(10);
     expect(t.state.sales!.steel).toBeGreaterThan(done.sales!.steel);
     expect(t.state.mission.activeId).toBe("M9");
+    verifyRestore(t);
     observe(t,"M8 physical post-activation sales");
     audit(t);
 
@@ -202,6 +213,7 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
 
     // Check that the initially under-capacity single-fabricator M10 layout
     // fails real rolling-window qualification before expanding the factory.
+    verifyRestore(t);
     const m10StartTick=t.state.tick;
     const initialCircuitSales=t.state.sales!.circuit;
     let probeState=structuredClone(t.state);
@@ -296,12 +308,16 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
     expect(t.state.mission.activeId).toBe("DONE");
     expect(t.state.chapterII?.completed).toBe(true);
     expect(t.state.chapterII?.foundryCompleted).toBe(true);
-    expect(t.state.schemaVersion).toBe(4);
-    expect(t.state.missionRuleVersion).toBe(4);
+    expect(t.state.schemaVersion).toBe(5);
+    expect(t.state.missionRuleVersion).toBe(5);
     expect(t.state.chapterII?.metrics).toBeNull();
     expect(terminalPeak).toBeLessThanOrEqual(1);
     expect(peakDemand).toBeGreaterThanOrEqual(2);
     expect(t.state.balanceCents).toBeGreaterThan(0);
+    verifyRestore(t);
+    expect(t.state.tick).toBe(1728);
+    expect(t.state.balanceCents).toBe(503345);
+    expect(t.minCash).toBe(4655);
     observe(t,"M10 physical mission completed");
     audit(t);
     console.info("V04-OPTION-A-RECOVERY "+JSON.stringify({
@@ -311,14 +327,273 @@ describe("WP6 full 300-Cr v0.3-to-v0.4 real-command campaign and recovery",()=>{
       constructionCount:physicalM10.length,minCashCents:t.minCash,
       bestExpandedStreak,maxGuardedStreak,qualifyingExpandedWindows,peakCircuits60,peakSteel60,
       peakDemand,terminalPeak,finalTick:t.state.tick,cashCents:t.state.balanceCents,
-      caveat:"synthetic engine-generated v0.3 DONE continuation with real paid WP2 research and construction"
+      caveat:"synthetic engine-generated Chapter I continuation with real paid WP2 research and construction"
     }));
     console.info("V04-WP3-RECOVERY "+JSON.stringify({
-      authenticHumanSave:false,source:"actual v0.3 300-Cr engine campaign",
+      authenticHumanSave:false,source:"current 300-Cr engine campaign",
       finalTick:t.state.tick,fromDoneTick:done.tick,
       cashCents:t.state.balanceCents,minCashCents:t.minCash,
       capitalCents:t.capital,refundCents:t.refund,legacyResearchCents:t.legacyResearch,
       paidNewResearchFeesCents:t.estimatedNewResearch,
       m8Ticks,m9Ticks,remainingSteelRoute:true,sales:t.state.sales,notes:t.notes}));
-  },45000);
+    return t;
+}
+
+describe("Full 300-Cr current campaign and recovery",()=>{
+  it("pays all research and completes physical M8–M10 after restoring the Chapter I checkpoint",completeChapterII,45000);
+});
+
+type Observation={circuit:number;gear:number;steel:number;circuitMade:number;gearMade:number;steelMade:number;covered:number;coalBurned:number;profit:number};
+function observeWindows(t:Trace,activeTicks=240,goal?:Goal):Observation[] {
+  const window:Observation[]=[];
+  const windows:Observation[]=[];
+  let streak=0;
+  for(let i=0;i<activeTicks;i++){
+    const before=t.state;
+    t.state=tick(before);
+    const after=t.state;
+    if(after.tick===before.tick)break;
+    const sold=(item:"circuit"|"gear"|"steel")=>after.sales![item]-before.sales![item];
+    const made=(item:"circuit"|"gear"|"steel")=>after.materialLedger![item].produced-before.materialLedger![item].produced;
+    expect(Object.values(after.sales!).reduce((total,n)=>total+n,0)-
+      Object.values(before.sales!).reduce((total,n)=>total+n,0)).toBeLessThanOrEqual(1);
+    window.push({circuit:sold("circuit"),gear:sold("gear"),steel:sold("steel"),
+      circuitMade:made("circuit"),gearMade:made("gear"),steelMade:made("steel"),
+      covered:Number(after.power?.demandCovered===true),coalBurned:after.materialLedger!.coal.burned-before.materialLedger!.coal.burned,profit:after.lastEvent.revenueCents-after.lastEvent.costCents});
+    if(window.length>60)window.shift();
+    if(window.length<60)continue;
+    const complete=window.reduce((acc,event)=>({
+      circuit:acc.circuit+event.circuit,gear:acc.gear+event.gear,steel:acc.steel+event.steel,
+      circuitMade:acc.circuitMade+event.circuitMade,gearMade:acc.gearMade+event.gearMade,
+      steelMade:acc.steelMade+event.steelMade,covered:acc.covered+event.covered,coalBurned:acc.coalBurned+event.coalBurned,profit:acc.profit+event.profit
+    }));
+    windows.push(complete);
+    if(goal){
+      streak=qualifies(complete,goal)?streak+1:0;
+      if(streak===29)verifyRestore(t);
+      if(streak===30)break;
+    }
+  }
+  return windows;
+}
+function reportRange(label:string,windows:Observation[]){
+  const keys=Object.keys(windows[0]) as (keyof Observation)[];
+  console.info("WP2 "+label+" "+JSON.stringify(Object.fromEntries(keys.map(key=>[
+    key,[Math.min(...windows.map(w=>w[key])),Math.max(...windows.map(w=>w[key]))]
+  ]))));
+}
+
+const gearLine:Built[]=[
+  ["iron_mine",2,9,"W"],["furnace",1,9,"N"],["assembler",1,8,"N"],
+  ["conveyor",1,7,"N"],["conveyor",1,6,"N"],["conveyor",1,5,"N"]
+];
+type Goal={circuit:number;gear?:number;steel?:number;covered?:number;coalCap?:number;profit?:number};
+const recoverArchive:Goal={circuit:12,gear:6};
+const independent:Goal={circuit:9,covered:60,coalCap:5};
+const corporate:Goal={circuit:12,steel:10};
+const reconstructArchive:Goal={circuit:13,gear:6,steel:10,profit:60000};
+function qualifies(w:Observation,goal:Goal){
+  return Math.min(w.circuit,w.circuitMade)>=goal.circuit&&
+    Math.min(w.gear,w.gearMade)>=(goal.gear??0)&&
+    Math.min(w.steel,w.steelMade)>=(goal.steel??0)&&
+    w.covered>=(goal.covered??0)&&w.coalBurned<=(goal.coalCap??Infinity)&&
+    w.profit>=(goal.profit??0);
+}
+function bestStreak(windows:Observation[],goal:Goal){
+  let best=0,consecutive=0;
+  for(const window of windows){
+    consecutive=qualifies(window,goal)?consecutive+1:0;
+    best=Math.max(best,consecutive);
+  }
+  return best;
+}
+function evaluate(t:Trace,label:string,goal:Goal){
+  const start=t.state.tick;
+  const windows=observeWindows(t,240,goal);
+  expect(windows.length,label).toBeGreaterThan(0);
+  reportRange(label,windows);
+  const streak=bestStreak(windows,goal);
+  console.info("WP2 STREAK "+JSON.stringify({label,streak,activationTick:start,completionTick:t.state.tick,activeTicks:t.state.tick-start,balance:t.state.balanceCents,
+    capital:t.capital,refund:t.refund,minimumCash:t.minCash}));
+  expect(streak,label).toBe(30);
+  audit(t);
+}
+function mistake(t:Trace,repair:()=>void){
+  const before=t.state.totalRevenueCents!;
+  t.state=runTicks(t.state,60);
+  expect(t.state.totalRevenueCents!).toBeGreaterThan(before);
+  console.info("WP2 RECOVERY "+JSON.stringify({ticks:60,revenue:t.state.totalRevenueCents!-before,cash:t.state.balanceCents}));
+  repair();
+}
+function expandSteel(t:Trace,wrongFacing=false){
+  demolish(t,4,6);
+  build(t,["splitter",4,6,"W"],["conveyor",3,6,"W"],
+    ["iron_mine",3,5,"W"],["furnace",2,5,"S"],["advanced_furnace",2,6,wrongFacing?"S":"W"]);
+}
+function restoreDualCircuits(t:Trace){
+  demolish(t,7,2);
+  demolish(t,8,8);
+  build(t,["splitter",7,2,"W"],["splitter",8,8,"N"],["coal_generator",7,8,"N"]);
+}
+
+it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runtime objectives",()=>{
+  const t=completeChapterII();
+  const baseline=observeWindows(structuredClone(t));
+  reportRange("unchanged M10",baseline);
+  for(const goal of [recoverArchive,independent,corporate,reconstructArchive])
+    expect(bestStreak(baseline,goal)).toBe(0);
+  expect(observeWindows(structuredClone(t),59)).toEqual([]);
+  const paused=structuredClone(t);
+  paused.state.paused=true;
+  expect(observeWindows(paused)).toEqual([]);
+  expect(paused.state.tick).toBe(t.state.tick);
+  build(t,...gearLine);
+  evaluate(t,"M11 gear branch",recoverArchive);
+
+  const underpowered=structuredClone(t);
+  demolish(underpowered,7,8);
+  const deficient=observeWindows(underpowered,120);
+  expect(deficient.some(w=>w.covered<60)).toBe(true);
+  expect(bestStreak(deficient,independent)).toBe(0);
+
+  const noDemand=structuredClone(t);
+  demolish(noDemand,9,3);
+  demolish(noDemand,9,8);
+  const noDemandWindows=observeWindows(noDemand,120);
+  expect(noDemandWindows.every(w=>w.covered===0&&w.circuitMade===0)).toBe(true);
+  expect(bestStreak(noDemandWindows,independent)).toBe(0);
+
+  const independ=structuredClone(t);
+  demolish(independ,7,2);
+  demolish(independ,8,8);
+  demolish(independ,7,8);
+  build(independ,["conveyor",7,2,"N"],["conveyor",8,8,"W"]);
+  mistake(independ,()=>rotate(independ,8,8));
+  evaluate(independ,"M12 independent",independent);
+  expect(bestStreak(observeWindows(structuredClone(independ)),corporate)).toBe(0);
+
+  const corp=structuredClone(t);
+  expect(bestStreak(observeWindows(structuredClone(corp)),corporate)).toBe(0);
+  expandSteel(corp,true);
+  mistake(corp,()=>rotate(corp,2,6));
+  evaluate(corp,"M12 corporate",corporate);
+  expect(bestStreak(observeWindows(structuredClone(corp)),independent)).toBe(0);
+
+  const gearInterlock:Goal={circuit:13,gear:12,steel:7,profit:60000};
+  const independentInterlock=structuredClone(independ);
+  const corporateInterlock=structuredClone(corp);
+  for(const checkpoint of [independentInterlock,corporateInterlock]){
+    expect(bestStreak(observeWindows(structuredClone(checkpoint)),gearInterlock)).toBe(0);
+  }
+
+  restoreDualCircuits(independentInterlock);
+  build(independentInterlock,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
+  evaluate(independentInterlock,"M13 interlock from independent",gearInterlock);
+
+  demolish(corporateInterlock,2,6);
+  build(corporateInterlock,["assembler",2,6,"W"]);
+  evaluate(corporateInterlock,"M13 interlock from corporate",gearInterlock);
+
+  restoreDualCircuits(independ);
+  expandSteel(independ);
+  evaluate(independ,"M13 from independent",reconstructArchive);
+  evaluate(corp,"M13 from corporate",reconstructArchive);
+  const steady=observeWindows(structuredClone(corp));
+  reportRange("M13 prepared steady state",steady);
+  console.info("WP2 PROFIT SENSITIVITY "+JSON.stringify([60000,63000,64000,66000].map(profit=>
+    [profit,bestStreak(steady,{...reconstructArchive,profit})])));
+},45000);
+
+it("WP3 completes both approved Chapter III routes using paid factory commands",()=>{
+  const archive=completeChapterII();
+
+  function apply(t:Trace,result:{ok:boolean;message:string;state:GameState}){
+    expect(result.ok,result.message).toBe(true);
+    t.state=result.state;
+  }
+
+  function complete(t:Trace,id:"M11"|"M12"|"M13",expectedTicks:number){
+    const activatedAt=t.state.tick;
+    apply(t,acceptChapterIIIContract(t.state,id));
+    for(let elapsed=1;elapsed<expectedTicks;elapsed++){
+      t.state=tick(t.state);
+      expect(t.state.chapterIII?.active?.id).toBe(id);
+    }
+    expect(t.state.chapterIII?.active?.streakTicks).toBe(29);
+    verifyRestore(t);
+    t.state=tick(t.state);
+    expect(t.state.tick-activatedAt).toBe(expectedTicks);
+    expect(t.state.chapterIII?.completed.at(-1)).toBe(id);
+    expect(t.state.chapterIII?.active).toBeNull();
+    expect(acceptChapterIIIContract(t.state,id).ok).toBe(false);
+    verifyRestore(t);
+    audit(t);
+  }
+
+  apply(archive,beginChapterIII(archive.state));
+  build(archive,...gearLine);
+  complete(archive,"M11",109);
+
+  const independentRoute=structuredClone(archive);
+  apply(independentRoute,chooseChapterIIIRoute(independentRoute.state,"independent",true));
+  demolish(independentRoute,7,2);
+  demolish(independentRoute,8,8);
+  demolish(independentRoute,7,8);
+  build(independentRoute,["conveyor",7,2,"N"],["conveyor",8,8,"W"]);
+  mistake(independentRoute,()=>rotate(independentRoute,8,8));
+  complete(independentRoute,"M12",95);
+
+  const corporateRoute=structuredClone(archive);
+  apply(corporateRoute,chooseChapterIIIRoute(corporateRoute.state,"corporate",true));
+  expandSteel(corporateRoute,true);
+  mistake(corporateRoute,()=>rotate(corporateRoute,2,6));
+  complete(corporateRoute,"M12",89);
+
+  restoreDualCircuits(independentRoute);
+  build(independentRoute,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
+  complete(independentRoute,"M13",107);
+
+  demolish(corporateRoute,2,6);
+  build(corporateRoute,["assembler",2,6,"W"]);
+  complete(corporateRoute,"M13",91);
+
+  for(const route of [independentRoute,corporateRoute]){
+    const completion=structuredClone(route.state.chapterIII);
+    const revenue=route.state.totalRevenueCents!;
+    route.state=runTicks(route.state,60);
+    expect(route.state.chapterIII).toEqual(completion);
+    expect(route.state.chapterIII?.completed).toEqual(["M11","M12","M13"]);
+    expect(route.state.totalRevenueCents).toBeGreaterThan(revenue);
+    audit(route);
+  }
+},45000);
+
+it("WP2 rejects stockpiles that meet sales quotas without current production",()=>{
+  const qualifying={circuit:12,gear:6,steel:10,circuitMade:12,gearMade:6,steelMade:10,
+    covered:60,coalBurned:5,profit:64000};
+  expect(qualifies(qualifying,recoverArchive)).toBe(true);
+  expect(qualifies({...qualifying,circuitMade:0},recoverArchive)).toBe(false);
+  expect(qualifies({...qualifying,gearMade:0},recoverArchive)).toBe(false);
+  expect(qualifies({...qualifying,steelMade:0},corporate)).toBe(false);
+  expect(qualifies({...qualifying,circuit:0},independent)).toBe(false);
+  expect(qualifies({...qualifying,covered:0},independent)).toBe(false);
+
+  // Adversarial opening stock only. Every item after activation moves via the real terminal.
+  const t=start();
+  const route:Built[]=[
+    ...[8,9,10].map(y=>["conveyor",0,y,"S"] as const),
+    ...Array.from({length:10},(_,x)=>["conveyor",x,11,"E"] as const),
+    ...[11,10,9,8,7,6].map(y=>["conveyor",10,y,"N"] as const)
+  ];
+  build(t,...route);
+  t.state.entities.filter(e=>e.kind==="conveyor").slice(0,18).forEach((belt,i)=>{
+    const item=i<12?"circuit":"gear";
+    belt.belt=item;
+    t.state.materialLedger![item].opening++;
+  });
+  const windows=observeWindows(t,120);
+  expect(windows.some(w=>w.circuit>=12&&w.gear>=6)).toBe(true);
+  expect(windows.every(w=>w.circuitMade===0&&w.gearMade===0)).toBe(true);
+  expect(bestStreak(windows,recoverArchive)).toBe(0);
+  audit(t);
 });

@@ -28,7 +28,7 @@ test("WP4 purchase confirmation is cancellable; successful unlock persists after
         get.onsuccess=()=>{
           const state=get.result;
           if(!state){reject(new Error("Missing initial save"));return;}
-          state.mission.activeId="DONE";
+          state.mission.activeId="M5";state.foundryStorySeen=true;
           state.mission.soldIngot=20;
           state.sales.iron_ingot=20;
           store.put(state,"slot1");
@@ -50,6 +50,7 @@ test("WP4 purchase confirmation is cancellable; successful unlock persists after
   await page.getByTestId("unlock-coal_extraction").click();
   await expect(coal).toContainText("Unlocked");
   await expect(page.getByTestId("cash")).toHaveText("220.00 Cr");
+  await expect(page.getByTestId("save-status")).toHaveText("Saved");
   await page.reload();
   await page.getByRole("button",{name:/Technology \+/}).click();
   await expect(page.getByTestId("technology-coal_extraction")).toContainText("Unlocked");

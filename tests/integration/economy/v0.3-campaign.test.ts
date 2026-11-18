@@ -105,7 +105,7 @@ describe("WP3 new v0.3 campaign from 300 Cr (V03-AC-07)",()=>{
   it("reaches M7 completion with real commands, terminal sales and permanent paid unlocks",()=>{
     const c=campaign();
     expect(c.state.balanceCents).toBe(30000);
-    expect(c.state.schemaVersion).toBe(3);
+    expect(c.state.schemaVersion).toBe(5);
     // Waste a small amount on an ordinary misplaced belt, then recover using demolition.
     construct(c,["conveyor",0,0,"E"]);
     demolish(c,0,0);
@@ -161,7 +161,7 @@ describe("WP3 new v0.3 campaign from 300 Cr (V03-AC-07)",()=>{
     construct(c,["advanced_furnace",7,5,"E"],["conveyor",8,5,"E"],["conveyor",9,5,"E"]);
     until(c,"DONE",400);
     expect(c.state.mission.soldSteel).toBeGreaterThanOrEqual(7);
-    expect(c.state.technologies).toEqual({
+    expect(c.state.technologies).toMatchObject({
       coal_extraction:true,mechanical_components:true,advanced_smelting:true
     });
     expect(c.state.sales!.steel).toBeGreaterThanOrEqual(8);

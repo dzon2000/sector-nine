@@ -34,6 +34,8 @@ export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:
   return {ok:true,message:`${DEFINITIONS[kind].label} constructed for ${(price/100).toFixed(2)} Cr.`,state:n};
 }
 export function setSplitterMode(s:GameState,id:number,mode:SplitterMode):CommandResult {
+  if(!s.chapterIV)
+    return {ok:false,message:"Priority routing becomes available in Chapter IV.",state:s};
   const index=s.entities.findIndex(entity=>entity.id===id&&entity.kind==="splitter");
   if(index<0||!SPLITTER_MODES.includes(mode))
     return {ok:false,message:"Invalid splitter selection or mode.",state:s};

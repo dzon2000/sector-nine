@@ -53,7 +53,7 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
       !(e.output===null||ITEMS.includes(e.output))||!(e.belt===null||ITEMS.includes(e.belt))
     )throw Error("Invalid entity in save. Data preserved.");
     if(e.kind==="splitter"){
-      if(e.splitterMode!==undefined&&!SPLITTER_MODES.includes(e.splitterMode))
+      if(e.splitterMode!==undefined&&(!s.chapterIV||!SPLITTER_MODES.includes(e.splitterMode)))
         throw Error("Invalid splitter mode. Save preserved.");
       if(e.splitterNext!==0&&e.splitterNext!==1)
         throw Error("Invalid splitter arbitration cursor. Save preserved.");

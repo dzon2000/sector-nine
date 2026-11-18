@@ -2,11 +2,30 @@ import {expect,it} from "vitest";
 import {createGame,STEP,type Direction} from "../../src/domain/model";
 import {begin,place,setSplitterMode} from "../../src/game/commands";
 import {validateSave} from "../../src/persistence/indexedDb";
+import {beginChapterIV} from "../../src/game/chapterFour";
 import {tick} from "../../src/simulation/engine";
 
-it.each(["N","E","S","W"] as const)("retains local outlet priority and alternating cursor when facing %s",(direction:Direction)=>{
+function ready(){
+  const state=begin(createGame());
+  state.mission.activeId="DONE";
+  state.chapterII={foundryCompleted:true,started:true,completed:true,storySeen:true,metrics:null};
+  Object.assign(state.technologies!,{resource_surveying:true,circuit_fabrication:true,industrial_power:true});
+  state.chapterIII={route:"independent",completed:["M11","M12","M13"],active:null};
+  return beginChapterIV(state).state;
+}
+
+it("rejects early priority commands and pre-Chapter IV persisted priority",()=>{
   const state=begin(createGame());
   state.technologies!.circuit_fabrication=true;
+  const placed=place(state,"splitter",5,5,"N").state;
+  const splitter=placed.entities[1];
+  expect(setSplitterMode(placed,splitter.id,"forward")).toMatchObject({ok:false,state:placed});
+  splitter.splitterMode="forward";
+  expect(()=>validateSave(placed)).toThrow(/splitter.*mode/i);
+});
+
+it.each(["N","E","S","W"] as const)("retains local outlet priority and alternating cursor when facing %s",(direction:Direction)=>{
+  const state=ready();
   const splitter=place(state,"splitter",5,5,direction).state;
   const [dx,dy]=STEP[direction];
   const forward=place(splitter,"conveyor",5+dx,5+dy,"N").state;
@@ -32,8 +51,7 @@ it.each(["N","E","S","W"] as const)("retains local outlet priority and alternati
 });
 
 it("falls back only on snapshot ineligibility and preserves the existing contested-target arbiter",()=>{
-  const initial=begin(createGame());
-  initial.technologies!.circuit_fabrication=true;
+  const initial=ready();
   const [s,forward,clockwise,other]=[
     ["splitter",5,5,"N"],
     ["conveyor",5,4,"N"],
@@ -41,8 +59,8 @@ it("falls back only on snapshot ineligibility and preserves the existing contest
     ["conveyor",4,4,"E"],
   ] as const;
   let state=initial;
-  for(const [kind,x,y,facing] of [s,forward,clockwise,other]){
-    const command=place(state,kind,x,y,facing);
+  for(const [kind,x,y,direction] of [s,forward,clockwise,other]){
+    const command=place(state,kind,x,y,direction);
     expect(command.ok,command.message).toBe(true);
     state=command.state;
   }

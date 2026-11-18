@@ -1,5 +1,6 @@
+import {beginChapterIV} from "../../../src/game/chapterFour";
 import {describe,expect,it} from "vitest";
-import {begin,face,place,remove,setPause,turn} from "../../../src/game/commands";
+import {begin,face,place,remove,setPause,setSplitterMode,turn} from "../../../src/game/commands";
 import {createGame,DEFINITIONS,ITEMS,stockOnHand,stats,type Direction,type GameState,type Kind} from "../../../src/domain/model";
 import {missionWindow} from "../../../src/game/missionMetrics";
 import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
@@ -804,3 +805,45 @@ it.runIf(Boolean(checkpointExportDirectory))("exports validated post-M13 checkpo
     await writeFile(join(checkpointExportDirectory!,route+".json"),json,{flag:"wx"});
   }
 },45000);
+
+it("V06 WP3 completes fresh Chapter IV windows and recovers a paid one-splitter fault on both routes",async()=>{
+  for(const [route,checkpoint] of Object.entries(await paidChapterIIICheckpoints())){
+    await yieldToRunner();
+    const prepared=beginChapterIV(checkpoint.state);
+    expect(prepared.ok).toBe(true);
+    expect(prepared.state.chapterIV?.route).toBe(route);
+    const partial=runTicks(prepared.state,29);
+    expect(partial.chapterIV?.activeId).toBe("M14");
+    const restored=validateSave(JSON.parse(JSON.stringify(partial)));
+    const m15=tick(restored);
+    expect(m15).toEqual(tick(partial));
+    expect(m15.chapterIV).toMatchObject({activeId:"M15",completed:["M14"],activatedAtTick:m15.tick,ticks:[]});
+    expect(runTicks(m15,29).chapterIV?.activeId).toBe("M15");
+    const complete=runTicks(m15,30);
+    expect(complete.chapterIV).toMatchObject({activeId:null,completed:["M14","M15"],ticks:[]});
+    expect(validateSave(complete)).toEqual(complete);
+    expect(runTicks(complete,5).chapterIV).toEqual(complete.chapterIV);
+    expect(beginChapterIV(complete).ok).toBe(false);
+
+    const routed=structuredClone(checkpoint);
+    demolish(routed,7,1);
+    build(routed,["splitter",7,1,"N"]);
+    const splitter=entityAt(routed.state,7,1);
+    const started=beginChapterIV(routed.state);
+    expect(started.ok).toBe(true);
+    const deprioritized=setSplitterMode(started.state,splitter.id,"forward");
+    expect(deprioritized.ok).toBe(true);
+    const failed=runTicks(deprioritized.state,120);
+    expect(failed.chapterIV).toMatchObject({activeId:"M14",completed:[]});
+    expect(failed.chapterIV?.ticks).toHaveLength(30);
+    const change=setSplitterMode(failed,splitter.id,"clockwise");
+    expect(change.ok).toBe(true);
+    expect(change.state.balanceCents).toBe(failed.balanceCents);
+    expect(layoutOutside(change.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
+    const recovery=validateSave(JSON.parse(JSON.stringify(change.state)));
+    const completed=runTicks(recovery,90);
+    expect(completed.chapterIV?.completed).toEqual(["M14","M15"]);
+    routed.state=completed;
+    audit(routed);
+  }
+},100000);

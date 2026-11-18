@@ -3,6 +3,7 @@ import {createGame, type GameState} from "../../src/domain/model";
 import {summarizeChapterIVTicks,type ChapterIVTick} from "../../src/domain/chapterFour";
 import {beginChapterIV,currentChapterIVWindow,recordChapterIVTick} from "../../src/game/chapterFour";
 import {begin} from "../../src/game/commands";
+import {runTicks} from "../../src/simulation/engine";
 import {validateSave} from "../../src/persistence/indexedDb";
 
 function checkpoint(){
@@ -60,18 +61,19 @@ it("counts both window edges and rejects stockpile-only circuit or gear sales",(
   expect(state.chapterIV?.activeId).toBe("M15");
 });
 it("validates active window, route and ordered archive state on restore",()=>{
-  const state=beginChapterIV(checkpoint()).state;
-  advance(state,window(0).slice(0,12));
+  const state=runTicks(beginChapterIV(checkpoint()).state,12);
   const restored=validateSave(JSON.parse(JSON.stringify(state)));
   expect(restored).toEqual(state);
-  advance(restored,window(0).slice(12));
-  expect(restored.chapterIV?.activeId).toBe("M15");
-  expect(validateSave(restored)).toEqual(restored);
+  expect(runTicks(restored,20)).toEqual(runTicks(state,20));
   const malformed=[
     {...state.chapterIV!,route:"corporate"},
     {...state.chapterIV!,completed:["M15"]},
     {...state.chapterIV!,ticks:state.chapterIV!.ticks.slice(1)},
     {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,gearSales:-1}))},
+    {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,circuitSales:2,gearSales:2}))},
+    {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,circuitSales:1}))},
+    {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,circuitProduced:144}))},
+    {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,gearProduced:1}))},
   ];
   for(const chapterIV of malformed)expect(()=>validateSave({...state,chapterIV})).toThrow(/Chapter IV/);
 });

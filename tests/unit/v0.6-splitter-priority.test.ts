@@ -30,3 +30,41 @@ it.each(["N","E","S","W"] as const)("retains local outlet priority and alternati
   (invalid.entities[1] as {splitterMode?:string}).splitterMode="invalid";
   expect(()=>validateSave(invalid)).toThrow(/splitter.*mode/i);
 });
+
+it("falls back only on snapshot ineligibility and preserves the existing contested-target arbiter",()=>{
+  const initial=begin(createGame());
+  initial.technologies!.circuit_fabrication=true;
+  const [s,forward,clockwise,other]=[
+    ["splitter",5,5,"N"],
+    ["conveyor",5,4,"N"],
+    ["conveyor",6,5,"N"],
+    ["conveyor",4,4,"E"],
+  ] as const;
+  let state=initial;
+  for(const placement of [s,forward,clockwise,other]){
+    const command=place(state,...placement);
+    expect(command.ok,command.message).toBe(true);
+    state=command.state;
+  }
+  const [splitter,preferred,fallback,competitor]=state.entities.slice(1);
+  splitter.belt="iron_ore";
+  competitor.belt="coal";
+  state.materialLedger!.iron_ore.opening++;
+  state.materialLedger!.coal.opening++;
+  state.arbiters[String(preferred.id)]=splitter.id;
+  const priority=setSplitterMode(state,splitter.id,"forward").state;
+  const lost=tick(priority);
+  const cargo=(s:typeof state,id:number)=>s.entities.find(entity=>entity.id===id)?.belt;
+  expect(cargo(lost,preferred.id)).toBe("coal");
+  expect(cargo(lost,fallback.id)).toBeNull();
+  expect(cargo(lost,splitter.id)).toBe("iron_ore");
+  const moved=tick(lost);
+  expect(cargo(moved,fallback.id)).toBe("iron_ore");
+  expect(cargo(moved,splitter.id)).toBeNull();
+  const blocked=structuredClone(lost);
+  blocked.entities.find(entity=>entity.id===fallback.id)!.belt="gear";
+  blocked.materialLedger!.gear.opening++;
+  expect(cargo(tick(blocked),splitter.id)).toBe("iron_ore");
+  const paused={...lost,paused:true};
+  expect(tick(paused)).toBe(paused);
+});

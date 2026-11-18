@@ -1,4 +1,5 @@
-import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,SAVE_SCHEMA_VERSION,MISSION_RULE_VERSION,recipeFor,type GameState,type Item} from "../domain/model";
+import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,SPLITTER_MODES,SAVE_SCHEMA_VERSION,MISSION_RULE_VERSION,recipeFor,type GameState,type Item} from "../domain/model";
+import {assertChapterIVSave} from "./chapterFour";
 import {assertChapterIIISave} from "./chapterThree";
 // Keep the existing slot address so incompatible saves can be detected and preserved.
 const DATABASE="sector-nine-v0.1";
@@ -52,13 +53,15 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
       !(e.output===null||ITEMS.includes(e.output))||!(e.belt===null||ITEMS.includes(e.belt))
     )throw Error("Invalid entity in save. Data preserved.");
     if(e.kind==="splitter"){
+      if(e.splitterMode!==undefined&&!SPLITTER_MODES.includes(e.splitterMode))
+        throw Error("Invalid splitter mode. Save preserved.");
       if(e.splitterNext!==0&&e.splitterNext!==1)
         throw Error("Invalid splitter arbitration cursor. Save preserved.");
       if(e.output!==null||e.oreInput!==0||e.cycle!==null||
         Object.keys(e.inputBuffers??{}).length||Object.keys(e.reservedInputs??{}).length)
         throw Error("Invalid splitter material state. Save preserved.");
-    }else if(e.splitterNext!==undefined)
-      throw Error("Invalid non-splitter cursor. Save preserved.");
+    }else if(e.splitterNext!==undefined||e.splitterMode!==undefined)
+      throw Error("Invalid non-splitter routing state. Save preserved.");
     ids.add(e.id);
     const key=e.x+","+e.y;if(spots.has(key))throw Error("Overlapping entities in save. Data preserved.");spots.add(key);
   }
@@ -293,6 +296,7 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
       throw Error("Stale power history. Save preserved.");
   }
   assertChapterIIISave(n);
+  assertChapterIVSave(n);
 }
 export function validateSave(value:unknown):GameState{
   assertCurrentSave(value);

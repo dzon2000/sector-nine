@@ -8,6 +8,7 @@ import {validateSave} from "../../src/persistence/indexedDb";
 function checkpoint(){
   const state=begin(createGame());
   state.mission.activeId="DONE";
+  Object.assign(state.technologies!,{resource_surveying:true,circuit_fabrication:true,industrial_power:true});
   state.chapterII={foundryCompleted:true,started:true,completed:true,storySeen:true,metrics:null};
   state.chapterIII={completed:["M11","M12","M13"],active:null,route:"independent"};
   return state;

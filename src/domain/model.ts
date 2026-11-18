@@ -1,3 +1,4 @@
+import type {ChapterIVState} from "./chapterFour";
 import type {ChapterIIIState} from "./contracts";
 
 export type Direction = "N" | "E" | "S" | "W";
@@ -40,6 +41,8 @@ export const RECIPES: Record<RecipeId,Recipe> = {
 export type Kind = "iron_mine" | "coal_mine" | "furnace" | "assembler" | "advanced_furnace" | "conveyor" | "sell_terminal" | "copper_mine" | "silicon_extractor" | "circuit_fabricator" | "coal_generator" | "splitter";
 export type Status = "working" | "waiting_for_inputs" | "blocked_output" | "paused";
 export type MissionId = "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8" | "M9" | "M10" | "DONE";
+export const SPLITTER_MODES = ["alternating", "forward", "clockwise"] as const;
+export type SplitterMode = typeof SPLITTER_MODES[number];
 export interface Entity {
   id: number; kind: Kind; x: number; y: number; direction: Direction;
   output: Item | null; belt: Item | null; oreInput: number;
@@ -47,8 +50,9 @@ export interface Entity {
   inputBuffers?: Inventory; reservedInputs?: Inventory;
   /** Generator stored powered ticks, charged only after physical fuel intake. */
   fuelTicksRemaining?: number;
-  /** Experimental splitter outlet cursor: 0=forward, 1=clockwise. */
+  /** Alternating splitter outlet cursor: 0=forward, 1=clockwise. */
   splitterNext?: 0|1;
+  splitterMode?: SplitterMode;
 }
 export interface Accounting { tick: number; revenueCents: number; costCents: number; }
 export type DiagnosticStatus = "working"|"input_starved"|"output_blocked"|"idle";
@@ -88,6 +92,7 @@ export interface GameState {
   power?:PowerState;
   chapterII?:ChapterIIState;
   chapterIII?:ChapterIIIState;
+  chapterIV?:ChapterIVState;
   arbiters: Record<string, number>;
   rollingEvents: Accounting[]; lastEvent: Accounting;
   totalOreProduced: number; totalIngotProduced: number;

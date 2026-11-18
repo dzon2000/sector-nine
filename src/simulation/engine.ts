@@ -2,6 +2,7 @@ import {REVENUE,STEP,recipeFor,stats,emptySales,POWER_CANDIDATE,type DiagnosticE
 import {recordDiagnostics} from "../game/diagnostics";
 import {recordMissionTick} from "../game/missionMetrics";
 import {recordChapterTick} from "../game/chapterTwo";
+import {recordChapterIVTick} from "../game/chapterFour";
 import {recordContractTick} from "../game/chapterThree";
 import {contractProducts} from "../domain/contracts";
 import {updateMission} from "../game/missions";
@@ -25,7 +26,9 @@ export function tick(state:GameState):GameState {
   s.tick++;
   let revenueCents=0,costCents=0;
   const tickSales=emptySales();
-  const contractProduction=s.chapterIII?.active?{circuit:0,gear:0,steel:0}:null;
+  const chapterIIIActive=Boolean(s.chapterIII?.active);
+  const chapterIVActive=Boolean(s.chapterIV?.activeId);
+  const contractProduction=chapterIIIActive||chapterIVActive?{circuit:0,gear:0,steel:0}:null;
   const priorCircuitsProduced=s.materialLedger?.circuit.produced??0;
   const completions=new Map<number,number>();
   const completed=(id:number)=>completions.set(id,(completions.get(id)??0)+1);
@@ -79,7 +82,7 @@ export function tick(state:GameState):GameState {
     if(e.kind==="splitter"){
       const [fx,fy]=STEP[e.direction];
       const outlets:[[number,number],[number,number]]=[[fx,fy],[-fy,fx]];
-      const preferred=e.splitterNext??0;
+      const preferred=e.splitterMode==="forward"?0:e.splitterMode==="clockwise"?1:e.splitterNext??0;
       for(const index of [preferred,1-preferred]){
         const [dx,dy]=outlets[index];
         const target=at(s,e.x+dx,e.y+dy);
@@ -139,9 +142,8 @@ export function tick(state:GameState):GameState {
   // Depart all sources first, then arrive at destinations.
   const transfers=[...planned.values()].filter(r=>approved.has(r.source.id));
   for(const r of transfers){
-    if(r.source.kind==="splitter"){
+    if(r.source.kind==="splitter"&&(r.source.splitterMode??"alternating")==="alternating"){
       const [fx,fy]=STEP[r.source.direction];
-      const side:[number,number]=[-fy,fx];
       const isForward=r.target.x===r.source.x+fx&&r.target.y===r.source.y+fy;
       const chosen=isForward?0:1;
       r.source.splitterNext=(1-chosen) as 0|1;
@@ -238,7 +240,11 @@ export function tick(state:GameState):GameState {
     s.power?.demandCovered===true);
   recordDiagnostics(s,observations,tickSales);
   updateMission(s);
-  if(contractProduction){
+  if(chapterIVActive&&contractProduction){
+    recordChapterIVTick(s,{tick:s.tick,circuitSales:tickSales.circuit,circuitProduced:contractProduction.circuit,
+      gearSales:tickSales.gear,gearProduced:contractProduction.gear});
+  }
+  if(chapterIIIActive&&contractProduction){
     recordContractTick(s,{tick:s.tick,sold:contractProducts(tickSales),produced:contractProduction,
       demandCovered:powerTick.demandCovered,coalBurned,profitCents:revenueCents-costCents});
   }

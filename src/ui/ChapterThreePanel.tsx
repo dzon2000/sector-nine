@@ -95,8 +95,8 @@ export function ChapterThreePanel({game,dispatch,onStart,onAccept,onChoose}:Prop
     {id&&goal&&<>
       {route&&<p>Route: {ROUTE_NAMES[route]}</p>}
       {active
-        ? <p>Window: {active.ticks.length}/{CONTRACT_WINDOW_TICKS} active ticks · Streak: {active.streakTicks}/{CONTRACT_STREAK_WINDOWS} qualifying windows</p>
-        : <p>Meet every condition in the same {CONTRACT_WINDOW_TICKS}-tick window for {CONTRACT_STREAK_WINDOWS} consecutive windows.</p>}
+        ? <p>Window: {active.ticks.length}/{CONTRACT_WINDOW_TICKS} active ticks (simulation time) · Streak: {active.streakTicks}/{CONTRACT_STREAK_WINDOWS} qualifying windows</p>
+        : <p>Meet every condition in the same window of {CONTRACT_WINDOW_TICKS} simulation ticks for {CONTRACT_STREAK_WINDOWS} consecutive windows.</p>}
       <Conditions goal={goal} progress={progress}/>
       {fullWindow&&<p>{contractQualifies(id,route,fullWindow)?"Current window qualifies.":"Current window does not qualify."}</p>}
       <p>Reward: Archive entry unlocked. {id==="M13"?"Return to free play.":"Access to the next step."}</p>

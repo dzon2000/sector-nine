@@ -1,0 +1,493 @@
+{
+  "frames": {
+    "iron_mine": {
+      "frame": {
+        "x": 7,
+        "y": 9,
+        "w": 34,
+        "h": 30
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 7,
+        "w": 34,
+        "h": 30
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "coal_mine": {
+      "frame": {
+        "x": 55,
+        "y": 9,
+        "w": 34,
+        "h": 29
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 7,
+        "w": 34,
+        "h": 29
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "copper_mine": {
+      "frame": {
+        "x": 103,
+        "y": 8,
+        "w": 34,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 6,
+        "w": 34,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "silicon_extractor": {
+      "frame": {
+        "x": 151,
+        "y": 8,
+        "w": 34,
+        "h": 31
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 6,
+        "w": 34,
+        "h": 31
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "furnace": {
+      "frame": {
+        "x": 199,
+        "y": 9,
+        "w": 34,
+        "h": 30
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 7,
+        "w": 34,
+        "h": 30
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "advanced_furnace": {
+      "frame": {
+        "x": 7,
+        "y": 59,
+        "w": 34,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 9,
+        "w": 34,
+        "h": 26
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "assembler": {
+      "frame": {
+        "x": 55,
+        "y": 57,
+        "w": 34,
+        "h": 30
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 7,
+        "w": 34,
+        "h": 30
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "circuit_fabricator": {
+      "frame": {
+        "x": 103,
+        "y": 57,
+        "w": 34,
+        "h": 30
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 7,
+        "w": 34,
+        "h": 30
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "coal_generator": {
+      "frame": {
+        "x": 151,
+        "y": 58,
+        "w": 34,
+        "h": 28
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 8,
+        "w": 34,
+        "h": 28
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "sell_terminal": {
+      "frame": {
+        "x": 199,
+        "y": 59,
+        "w": 34,
+        "h": 26
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 5,
+        "y": 9,
+        "w": 34,
+        "h": 26
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "iron_ore": {
+      "frame": {
+        "x": 17,
+        "y": 113,
+        "w": 15,
+        "h": 14
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 15,
+        "w": 15,
+        "h": 14
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "coal": {
+      "frame": {
+        "x": 65,
+        "y": 114,
+        "w": 15,
+        "h": 12
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 16,
+        "w": 15,
+        "h": 12
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "copper_ore": {
+      "frame": {
+        "x": 113,
+        "y": 114,
+        "w": 15,
+        "h": 13
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 16,
+        "w": 15,
+        "h": 13
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "silicon": {
+      "frame": {
+        "x": 161,
+        "y": 113,
+        "w": 14,
+        "h": 15
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 15,
+        "w": 14,
+        "h": 15
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "iron_ingot": {
+      "frame": {
+        "x": 209,
+        "y": 116,
+        "w": 15,
+        "h": 9
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 18,
+        "w": 15,
+        "h": 9
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "steel": {
+      "frame": {
+        "x": 17,
+        "y": 161,
+        "w": 15,
+        "h": 14
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 15,
+        "w": 15,
+        "h": 14
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "gear": {
+      "frame": {
+        "x": 65,
+        "y": 161,
+        "w": 15,
+        "h": 14
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 15,
+        "w": 15,
+        "h": 14
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "circuit": {
+      "frame": {
+        "x": 113,
+        "y": 162,
+        "w": 15,
+        "h": 13
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 15,
+        "y": 16,
+        "w": 15,
+        "h": 13
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "conveyor": {
+      "frame": {
+        "x": 159,
+        "y": 148,
+        "w": 18,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 13,
+        "y": 2,
+        "w": 18,
+        "h": 40
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "splitter": {
+      "frame": {
+        "x": 200,
+        "y": 148,
+        "w": 31,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 6,
+        "y": 2,
+        "w": 31,
+        "h": 40
+      },
+      "sourceSize": {
+        "w": 44,
+        "h": 44
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    }
+  },
+  "meta": {
+    "image": "sector-nine-v06.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 256,
+      "h": 256
+    },
+    "scale": "1"
+  }
+}

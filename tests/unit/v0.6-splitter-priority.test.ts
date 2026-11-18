@@ -41,8 +41,8 @@ it("falls back only on snapshot ineligibility and preserves the existing contest
     ["conveyor",4,4,"E"],
   ] as const;
   let state=initial;
-  for(const placement of [s,forward,clockwise,other]){
-    const command=place(state,...placement);
+  for(const [kind,x,y,facing] of [s,forward,clockwise,other]){
+    const command=place(state,kind,x,y,facing);
     expect(command.ok,command.message).toBe(true);
     state=command.state;
   }

@@ -1,8 +1,9 @@
 import {useEffect,useRef,useState,type PointerEvent as ReactPointerEvent} from "react";
 import {Application,Container,Graphics,Sprite,Text,TextStyle,type Texture} from "pixi.js";
-import {DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,STEP,rotate,type Direction,type GameState,type Kind} from "../domain/model";
+import {DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,STEP,type Direction,type GameState,type Kind} from "../domain/model";
 import {CARGO_GLYPHS,CARGO_COLORS,processorCargoSummary} from "./cargo";
 import {loadBoardTextures,type BoardTextures} from "./boardAtlas";
+import {splitterOutlets} from "./splitterOutlets";
 import {STRUCTURE_GLYPHS} from "./structureVisuals";
 export type Tool="select"|"demolish"|"iron_mine"|"coal_mine"|"furnace"|"assembler"|"advanced_furnace"|"conveyor"|"copper_mine"|"silicon_extractor"|"circuit_fabricator"|"coal_generator"|"splitter";
 const TILE=44;
@@ -15,11 +16,12 @@ function sprite(texture:Texture,label:string,x:number,y:number){
   return image;
 }
 
-function outlet(x:number,y:number,direction:Direction,color=0xeef8fe){
+function outlet(x:number,y:number,direction:Direction,priority?:"forward"|"clockwise"){
+  const color=priority?0xffcd63:0xeef8fe;
   const [dx,dy]=STEP[direction];
   const tipX=x+dx*17,tipY=y+dy*17;
   const baseX=tipX-dx*6,baseY=tipY-dy*6;
-  return new Graphics({label:`outlet:${direction}`})
+  return new Graphics({label:priority?`outlet:${direction}:${priority}`:`outlet:${direction}`})
     .moveTo(tipX-dx*10,tipY-dy*10).lineTo(tipX,tipY)
     .stroke({width:4,color:0x101a27})
     .moveTo(tipX-dx*10,tipY-dy*10).lineTo(tipX,tipY)
@@ -98,6 +100,7 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
       if(cancelled){app.destroy(true,{children:true});return;}
       ready=true;
       app.canvas.setAttribute("aria-hidden","true");
+      app.canvas.style.imageRendering="pixelated";
       element.current?.appendChild(app.canvas);
       setRenderer({app});
       try{
@@ -176,8 +179,11 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
           reserved.position.set(X+5,Y+23);layer.addChild(reserved);
         }
       }
-      if(e.kind!=="sell_terminal")layer.addChild(outlet(cx,cy,facing));
-      if(e.kind==="splitter")layer.addChild(outlet(cx,cy,rotate(facing)));
+      if(e.kind==="splitter"){
+        for(const branch of splitterOutlets(facing,e.splitterMode)){
+          layer.addChild(outlet(cx,cy,branch.direction,branch.preferred?branch.mode:undefined));
+        }
+      }else if(e.kind!=="sell_terminal")layer.addChild(outlet(cx,cy,facing));
       const cargo=isBelt?e.belt:e.output;
       if(cargo){
         const blocked=isBelt
@@ -186,13 +192,15 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
         const texture=textures?.[cargo];
         const plate=texture?(cargo==="coal"?0x465362:0x101a27):CARGO_COLORS[cargo];
         const border=blocked?0xff9177:0x7999ac;
-        layer.addChild(new Graphics().roundRect(X+2,Y+2,18,18,3).fill(plate).stroke({width:1,color:border}));
+        const badge=new Graphics({label:blocked?"cargo-stalled":"cargo-badge"});
         if(texture){
+          layer.addChild(badge.roundRect(X+2,Y+2,18,18,3).fill(plate).stroke({width:1,color:border}));
           layer.addChild(sprite(texture,`cargo:${cargo}`,X+11,Y+11));
         }else{
+          layer.addChild(badge.roundRect(X+25,Y+5,17,14,3).fill(plate).stroke({width:1,color:border}));
           const label=new Text({label:`cargo:${cargo}`,text:CARGO_GLYPHS[cargo],
             style:{fontSize:10,fontWeight:"bold",fill:0x101a27}});
-          label.position.set(X+4,Y+4);layer.addChild(label);
+          label.position.set(X+27,Y+6);layer.addChild(label);
         }
       }
     }

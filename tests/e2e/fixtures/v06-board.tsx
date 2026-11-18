@@ -1,7 +1,7 @@
 import {StrictMode} from "react";
 import {createRoot} from "react-dom/client";
 import {Application,Container,Sprite,Text} from "pixi.js";
-import {createGame,type Entity} from "../../../src/domain/model";
+import {createGame,emptySales,type Entity,type GameState,type SplitterMode} from "../../../src/domain/model";
 import {Board} from "../../../src/rendering/Board";
 import "../../../src/ui/styles.css";
 
@@ -22,11 +22,14 @@ const root=createRoot(document.getElementById("root")!);
 const base=createGame();
 const entity=(id:number,kind:Entity["kind"],x:number,y:number,options:Partial<Entity>):Entity=>
   ({id,kind,x,y,direction:"N",belt:null,output:null,oreInput:0,cycle:null,status:"working",...options});
-const game={
+let game:GameState={
   ...base,chapterII:{foundryCompleted:true,started:true,completed:false,storySeen:true,metrics:null},
+  diagnostics:{samples:[{tick:base.tick,terminalSales:emptySales(),entities:{
+    2:{status:"idle",completedUnits:0,conveyorMoves:0,conveyorStalledTicks:1},
+  }}]},
   entities:[
     ...base.entities,
-    entity(2,"splitter",8,2,{direction:"W",belt:"coal",splitterNext:0}),
+    entity(2,"splitter",8,2,{direction:"W",belt:"coal",splitterNext:0,splitterMode:"clockwise"}),
     entity(3,"furnace",5,5,{direction:"S",output:"iron_ingot",inputBuffers:{iron_ore:2}}),
     entity(4,"conveyor",6,5,{direction:"E"}),
   ],
@@ -50,11 +53,16 @@ function render(){
     onTile={(x,y)=>{actions.push(`tile:${x},${y}`);return null;}}
     onDragRotate={(id,direction)=>actions.push(`rotate:${id},${direction}`)}/></StrictMode>);
 }
+function updateSplitter(changes:Partial<Entity>){
+  game={...game,entities:game.entities.map(entity=>entity.id===2?{...entity,...changes}:entity)};
+  render();
+}
 render();
 Object.assign(window,{boardTest:{
   snapshot:()=>initialized.find(app=>app.stage)?.stage.children.map(describe)??[],
   lifecycle:()=>({initialized:initialized.length,destroyed}),
   actions:()=>actions,
-  clearCargo:()=>{game.entities[1]={...game.entities[1],belt:null};render();},
+  setMode:(splitterMode:SplitterMode)=>updateSplitter({splitterMode}),
+  clearCargo:()=>updateSplitter({belt:null}),
   unmount:()=>root.unmount(),
 }});

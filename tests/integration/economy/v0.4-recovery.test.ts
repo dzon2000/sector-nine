@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {begin,place,remove,turn} from "../../../src/game/commands";
+import {begin,face,place,remove,turn} from "../../../src/game/commands";
 import {createGame,DEFINITIONS,ITEMS,stockOnHand,stats,type Direction,type GameState,type Kind} from "../../../src/domain/model";
 import {missionWindow} from "../../../src/game/missionMetrics";
 import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
@@ -7,6 +7,8 @@ import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "..
 import {beginChapterII} from "../../../src/game/chapterTwo";
 import {tick,runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
+import {summarizeContractTicks,type ContractTick} from "../../../src/domain/contracts";
+import {tickWithPriority,type PriorityOutlets} from "./v0.6-priority-prototype";
 import {physicalM10} from "./v0.4-option-a-layout";
 
 type Built=readonly [Exclude<Kind,"sell_terminal">,number,number,Direction];
@@ -504,7 +506,7 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
     [profit,bestStreak(steady,{...reconstructArchive,profit})])));
 },45000);
 
-it("WP3 completes both approved Chapter III routes using paid factory commands",()=>{
+function completePaidChapterIII(){
   const archive=completeChapterII();
 
   function apply(t:Trace,result:{ok:boolean;message:string;state:GameState}){
@@ -557,13 +559,17 @@ it("WP3 completes both approved Chapter III routes using paid factory commands",
   build(corporateRoute,["assembler",2,6,"W"]);
   complete(corporateRoute,"M13",91);
 
-  for(const route of [independentRoute,corporateRoute]){
+  return {independent:independentRoute,corporate:corporateRoute};
+}
+
+it("WP3 completes both approved Chapter III routes using paid factory commands",()=>{
+  for(const route of Object.values(completePaidChapterIII())){
     const completion=structuredClone(route.state.chapterIII);
     const revenue=route.state.totalRevenueCents!;
     route.state=runTicks(route.state,60);
     expect(route.state.chapterIII).toEqual(completion);
     expect(route.state.chapterIII?.completed).toEqual(["M11","M12","M13"]);
-    expect(route.state.totalRevenueCents).toBeGreaterThan(revenue);
+    expect(route.state.totalRevenueCents!).toBeGreaterThan(revenue);
     audit(route);
   }
 },45000);
@@ -597,3 +603,143 @@ it("WP2 rejects stockpiles that meet sales quotas without current production",()
   expect(bestStreak(windows,recoverArchive)).toBe(0);
   audit(t);
 });
+
+const probeWindowTicks=30;
+const probeCircuitFloor=6;
+const probeGearFloor=5;
+const probeCircuitGapLimit=5;
+
+type ProbeSample=ContractTick&{copperOreSold:number};
+
+function probeSample(before:GameState, after:GameState):ProbeSample {
+  expect(after.tick).toBe(before.tick+1);
+  expect(ITEMS.reduce((sum,item)=>sum+after.sales![item]-before.sales![item],0)).toBeLessThanOrEqual(1);
+  return {
+    tick:after.tick,
+    sold:{
+      circuit:after.sales!.circuit-before.sales!.circuit,
+      gear:after.sales!.gear-before.sales!.gear,
+      steel:after.sales!.steel-before.sales!.steel,
+    },
+    produced:{
+      circuit:after.materialLedger!.circuit.produced-before.materialLedger!.circuit.produced,
+      gear:after.materialLedger!.gear.produced-before.materialLedger!.gear.produced,
+      steel:after.materialLedger!.steel.produced-before.materialLedger!.steel.produced,
+    },
+    copperOreSold:after.sales!.copper_ore-before.sales!.copper_ore,
+    demandCovered:after.power?.demandCovered===true,
+    coalBurned:after.materialLedger!.coal.burned-before.materialLedger!.coal.burned,
+    profitCents:after.lastEvent.revenueCents-after.lastEvent.costCents,
+  };
+}
+
+function probeSummarize(events:ProbeSample[]){
+  const counts=summarizeContractTicks(events);
+  const circuitSales=events.filter(event=>event.sold.circuit>0).map(event=>event.tick);
+  const start=events[0].tick;
+  const end=events.at(-1)!.tick;
+  let circuitGap=0;
+  let previous=start-1;
+  for(const tick of [...circuitSales,end+1]){
+    circuitGap=Math.max(circuitGap,tick-previous-1);
+    previous=tick;
+  }
+  const copperOreSold=events.reduce((sum,event)=>sum+event.copperOreSold,0);
+  const m14=Math.min(counts.sold.circuit,counts.produced.circuit)>=probeCircuitFloor&&circuitGap<=probeCircuitGapLimit;
+  const m15=m14&&Math.min(counts.sold.gear,counts.produced.gear)>=probeGearFloor;
+  return {start,end,circuitSales,circuitGap,copperOreSold,...counts,m14,m15};
+}
+
+function probeObserve(trace:Trace, label:string, options:{
+  priorities?:PriorityOutlets; rate?:1|2; blocks?:number
+}={}){
+  const {priorities=new Map(),rate=1,blocks=4}=options;
+  const activationTick=trace.state.tick;
+  const intervalMs=1000/rate;
+  const durationMs=probeWindowTicks*intervalMs*blocks;
+  const events:ProbeSample[]=[];
+  const windows:ReturnType<typeof probeSummarize>[]=[];
+  // Drive one real tick per modeled active interval. Scheduler behavior is tested in WP1.
+  for(let elapsedMs=intervalMs;elapsedMs<=durationMs;elapsedMs+=intervalMs){
+    const before=trace.state;
+    trace.state=tickWithPriority(before,priorities);
+    events.push(probeSample(before,trace.state));
+    if(events.length>=probeWindowTicks)windows.push(probeSummarize(events.slice(-probeWindowTicks)));
+  }
+  const elapsedTicks=trace.state.tick-activationTick;
+  const firstM14=windows.find(window=>window.m14)??null;
+  const firstM15=windows.find(window=>window.m15)??null;
+  const counts={m14:windows.filter(window=>window.m14).length,m15:windows.filter(window=>window.m15).length};
+  const fixedWindows=windows.filter(window=>(window.end-activationTick)%probeWindowTicks===0);
+  console.info("V06-WP2 WINDOW "+JSON.stringify({route:trace.state.chapterIII?.route,label,activationTick,rate,
+    elapsedTicks,modeledActiveMs:durationMs,rollingWindowCount:windows.length,counts,firstM14,firstM15,fixedWindows}));
+  audit(trace);
+  return {windows,fixedWindows,counts,firstM14,firstM15};
+}
+
+function entityAt(state:GameState,x:number,y:number){
+  const entity=state.entities.find(entity=>entity.x===x&&entity.y===y);
+  expect(entity,"Expected entity at "+x+","+y).toBeDefined();
+  return entity!;
+}
+
+function reface(trace:Trace,x:number,y:number,direction:Direction){
+  const result=face(trace.state,entityAt(trace.state,x,y).id,direction);
+  expect(result.ok,result.message).toBe(true);
+  trace.state=result.state;
+}
+
+function layoutOutside(state:GameState,x:number,y:number){
+  return state.entities.filter(entity=>entity.x!==x||entity.y!==y)
+    .map(({id,kind,x,y,direction})=>({id,kind,x,y,direction}));
+}
+
+it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 routes",()=>{
+  for(const [route,checkpoint] of Object.entries(completePaidChapterIII())){
+    expect(checkpoint.state.chapterIII).toEqual({route,completed:["M11","M12","M13"],active:null});
+    const prepared=structuredClone(checkpoint);
+    const preparedM14=probeObserve(prepared,"prepared M14 observation",{blocks:1});
+    expect(preparedM14.firstM14?.end).toBe(checkpoint.state.tick+probeWindowTicks);
+    const preparedM15=probeObserve(prepared,"prepared M15 observation after M14",{blocks:1});
+    expect(preparedM15.firstM15?.end).toBe(checkpoint.state.tick+2*probeWindowTicks);
+
+    const routed=structuredClone(checkpoint);
+    demolish(routed,7,1);
+    build(routed,["splitter",7,1,"N"]);
+    expect(layoutOutside(routed.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
+    const splitter=entityAt(routed.state,7,1);
+    console.info("V06-WP2 EDIT "+JSON.stringify({route,checkpointTick:checkpoint.state.tick,
+      checkpointCashCents:checkpoint.state.balanceCents,minimumCampaignCashCents:checkpoint.minCash,
+      checkpointCapitalCents:checkpoint.capital,checkpointResaleCents:checkpoint.refund,
+      placements:1,demolitions:1,tile:[7,1],spendCents:routed.capital-checkpoint.capital,
+      resaleCents:routed.refund-checkpoint.refund,capitalCentsNet:checkpoint.state.balanceCents-routed.state.balanceCents,
+      recovery:"Set clockwise priority on the same splitter, no construction or resale."}));
+    const badOutlets:PriorityOutlets=new Map([[splitter.id,0]]);
+    const goodOutlets:PriorityOutlets=new Map([[splitter.id,1]]);
+    const doubled=structuredClone(routed);
+    const failure=probeObserve(routed,"prioritize raw copper sale",{priorities:badOutlets});
+    const doubleFailure=probeObserve(doubled,"same raw copper priority at 2×",{priorities:badOutlets,rate:2});
+    expect(doubleFailure).toEqual(failure);
+    expect(doubled.state).toEqual(routed.state);
+    expect(failure.counts).toEqual({m14:0,m15:0});
+    expect(failure.fixedWindows.every(window=>window.circuitGap>probeCircuitGapLimit&&window.copperOreSold>0)).toBe(true);
+    const recovery=probeObserve(routed,"prioritize copper to circuit fabricator",{priorities:goodOutlets});
+    expect(recovery.fixedWindows.slice(1).every(window=>window.m14&&window.m15&&window.copperOreSold===0)).toBe(true);
+    expect(recovery.counts.m14).toBeGreaterThan(failure.counts.m14);
+    expect(layoutOutside(routed.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
+
+    const gear=structuredClone(checkpoint);
+    reface(gear,1,7,"E");
+    expect(layoutOutside(gear.state,1,7)).toEqual(layoutOutside(checkpoint.state,1,7));
+    expect(gear.state.balanceCents).toBe(checkpoint.state.balanceCents);
+    console.info("V06-WP2 EDIT "+JSON.stringify({route,tile:[1,7],placements:0,demolitions:0,spendCents:0,
+      resaleCents:0,setup:"Face east into vacant (2,7).",recovery:"Face north into the original gear branch."}));
+    const gearFailure=probeObserve(gear,"first gear branch faces an empty tile",{rate:2});
+    expect(gearFailure.windows.filter(window=>window.start>checkpoint.state.tick+probeWindowTicks)
+      .every(window=>window.m14&&!window.m15)).toBe(true);
+    reface(gear,1,7,"N");
+    expect(layoutOutside(gear.state,-1,-1)).toEqual(layoutOutside(checkpoint.state,-1,-1));
+    const gearRecovery=probeObserve(gear,"first gear branch restored, no spend");
+    expect(gearRecovery.fixedWindows.slice(1).every(window=>window.m15)).toBe(true);
+  }
+},55000);

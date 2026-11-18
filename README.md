@@ -7,6 +7,7 @@ A single-player, browser-based idle factory and economic strategy game. Design c
 - [Game Design Document](docs/GDD.md) — product vision and long-term game systems
 - [Architecture](docs/architecture.md) — technical design and deterministic simulation boundaries
 - [Roadmap](docs/roadmap.md) — incremental releases
+- [v0.6 — The Return Signal](docs/specifications/v0.6.md) · [implementation plan](docs/implementation/v0.6-tasks.md) · [start a paid Chapter IV playtest](docs/validation/v0.6-post-m13-launcher.md)
 - [v0.5 proposal](docs/specifications/v0.5.md) and [work packages](docs/implementation/v0.5-tasks.md) — campaign expansion and save cleanup
 - [Development save policy](docs/decisions/0006-development-save-policy.md) — current-version persistence; no legacy compatibility from v0.5
 - [Specifications](docs/specifications/) — version-specific approved gameplay scope

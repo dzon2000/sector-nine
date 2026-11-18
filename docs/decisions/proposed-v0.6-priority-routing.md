@@ -1,6 +1,6 @@
 # Proposed ADR — Chapter IV priority routing
 
-**Status** — Proposed for Product Owner review. Prototype and paid layouts appear in [WP2 experiments](../validation/v0.6-wp2-probes.md).
+**Status** — Historical proposal. The Product Owner accepted [ADR-0008](0008-return-signal.md) after reviewing both paid routes. Prototype and paid layouts appear in [WP2 experiments](../validation/v0.6-wp2-probes.md).
 
 ## Decision proposed
 

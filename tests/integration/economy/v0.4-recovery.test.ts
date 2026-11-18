@@ -150,8 +150,15 @@ function completeChapterI():Trace {
   audit(t);
   return t;
 }
-function completeChapterII():Trace {
+// Let the test worker service runner messages between batches of deterministic ticks.
+function yieldToRunner():Promise<void>{
+  return new Promise(resolve=>setTimeout(resolve,0));
+}
+
+async function completeChapterII():Promise<Trace> {
+    await yieldToRunner();
     const t=completeChapterI();
+    await yieldToRunner();
     const done=validateSave(JSON.parse(JSON.stringify(t.state)));
     expect(done.mission.activeId).toBe("DONE");
     expect(done.technologies).toMatchObject({
@@ -213,6 +220,7 @@ function completeChapterII():Trace {
     observe(t,"M9 physical post-activation circuits");
     audit(t);
 
+    await yieldToRunner();
     // Check that the initially under-capacity single-fabricator M10 layout
     // fails real rolling-window qualification before expanding the factory.
     verifyRestore(t);
@@ -255,6 +263,7 @@ function completeChapterII():Trace {
       note:"Real engine M10 mission stays incomplete with under-capacity single-fabricator production"
     }));
     audit(t);
+    await yieldToRunner();
     // Real economic recovery: finance and explicitly demolish the legacy/M9
     // structures, then rebuild the validated full M10 12x12 layout. No starting
     // capital injection, fake output stock, or hidden teleport of entities.
@@ -274,12 +283,15 @@ function completeChapterII():Trace {
     expect(interrupted.mission.activeId).toBe("M10");
     expect(interrupted.chapterII?.metrics?.salesTicks.length).toBe(60);
     expect(runTicks(interrupted,20)).toEqual(runTicks(t.state,20));
+    await yieldToRunner();
     t.state=runTicks(interrupted,300);
+    await yieldToRunner();
     const trail:{circuit:number;steel:number;covered:boolean;produced:number}[]=[];
     let winningStreak=0,bestExpandedStreak=0,qualifyingExpandedWindows=0,peakCircuits60=0,peakSteel60=0;
     let guardedStreak=0,maxGuardedStreak=0;
     let terminalPeak=0,peakDemand=0;
     for(let i=0;i<300;i++){
+      if(i%60===0)await yieldToRunner();
       const prior={...t.state.sales!};
       const beforeProduced=t.state.materialLedger!.circuit.produced;
       t.state=tick(t.state);
@@ -341,8 +353,15 @@ function completeChapterII():Trace {
     return t;
 }
 
+let paidChapterII:Promise<Trace>|undefined;
+
+async function paidChapterIICheckpoint():Promise<Trace>{
+  paidChapterII??=completeChapterII();
+  return structuredClone(await paidChapterII);
+}
+
 describe("Full 300-Cr current campaign and recovery",()=>{
-  it("pays all research and completes physical M8–M10 after restoring the Chapter I checkpoint",completeChapterII,45000);
+  it("pays all research and completes physical M8–M10 after restoring the Chapter I checkpoint",paidChapterIICheckpoint,45000);
 });
 
 type Observation={circuit:number;gear:number;steel:number;circuitMade:number;gearMade:number;steelMade:number;covered:number;coalBurned:number;profit:number};
@@ -438,8 +457,8 @@ function restoreDualCircuits(t:Trace){
   build(t,["splitter",7,2,"W"],["splitter",8,8,"N"],["coal_generator",7,8,"N"]);
 }
 
-it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runtime objectives",()=>{
-  const t=completeChapterII();
+it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runtime objectives",async()=>{
+  const t=await paidChapterIICheckpoint();
   const baseline=observeWindows(structuredClone(t));
   reportRange("unchanged M10",baseline);
   for(const goal of [recoverArchive,independent,corporate,reconstructArchive])
@@ -449,9 +468,11 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   paused.state.paused=true;
   expect(observeWindows(paused)).toEqual([]);
   expect(paused.state.tick).toBe(t.state.tick);
+  await yieldToRunner();
   build(t,...gearLine);
   evaluate(t,"M11 gear branch",recoverArchive);
 
+  await yieldToRunner();
   const underpowered=structuredClone(t);
   demolish(underpowered,7,8);
   const deficient=observeWindows(underpowered,120);
@@ -465,6 +486,7 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   expect(noDemandWindows.every(w=>w.covered===0&&w.circuitMade===0)).toBe(true);
   expect(bestStreak(noDemandWindows,independent)).toBe(0);
 
+  await yieldToRunner();
   const independ=structuredClone(t);
   demolish(independ,7,2);
   demolish(independ,8,8);
@@ -474,6 +496,7 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   evaluate(independ,"M12 independent",independent);
   expect(bestStreak(observeWindows(structuredClone(independ)),corporate)).toBe(0);
 
+  await yieldToRunner();
   const corp=structuredClone(t);
   expect(bestStreak(observeWindows(structuredClone(corp)),corporate)).toBe(0);
   expandSteel(corp,true);
@@ -481,6 +504,7 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   evaluate(corp,"M12 corporate",corporate);
   expect(bestStreak(observeWindows(structuredClone(corp)),independent)).toBe(0);
 
+  await yieldToRunner();
   const gearInterlock:Goal={circuit:13,gear:12,steel:7,profit:60000};
   const independentInterlock=structuredClone(independ);
   const corporateInterlock=structuredClone(corp);
@@ -488,17 +512,21 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
     expect(bestStreak(observeWindows(structuredClone(checkpoint)),gearInterlock)).toBe(0);
   }
 
+  await yieldToRunner();
   restoreDualCircuits(independentInterlock);
   build(independentInterlock,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
   evaluate(independentInterlock,"M13 interlock from independent",gearInterlock);
 
+  await yieldToRunner();
   demolish(corporateInterlock,2,6);
   build(corporateInterlock,["assembler",2,6,"W"]);
   evaluate(corporateInterlock,"M13 interlock from corporate",gearInterlock);
 
+  await yieldToRunner();
   restoreDualCircuits(independ);
   expandSteel(independ);
   evaluate(independ,"M13 from independent",reconstructArchive);
+  await yieldToRunner();
   evaluate(corp,"M13 from corporate",reconstructArchive);
   const steady=observeWindows(structuredClone(corp));
   reportRange("M13 prepared steady state",steady);
@@ -506,15 +534,16 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
     [profit,bestStreak(steady,{...reconstructArchive,profit})])));
 },45000);
 
-function completePaidChapterIII(){
-  const archive=completeChapterII();
+async function completePaidChapterIII(){
+  const archive=await paidChapterIICheckpoint();
 
   function apply(t:Trace,result:{ok:boolean;message:string;state:GameState}){
     expect(result.ok,result.message).toBe(true);
     t.state=result.state;
   }
 
-  function complete(t:Trace,id:"M11"|"M12"|"M13",expectedTicks:number){
+  async function complete(t:Trace,id:"M11"|"M12"|"M13",expectedTicks:number){
+    await yieldToRunner();
     const activatedAt=t.state.tick;
     apply(t,acceptChapterIIIContract(t.state,id));
     for(let elapsed=1;elapsed<expectedTicks;elapsed++){
@@ -534,7 +563,7 @@ function completePaidChapterIII(){
 
   apply(archive,beginChapterIII(archive.state));
   build(archive,...gearLine);
-  complete(archive,"M11",109);
+  await complete(archive,"M11",109);
 
   const independentRoute=structuredClone(archive);
   apply(independentRoute,chooseChapterIIIRoute(independentRoute.state,"independent",true));
@@ -543,27 +572,35 @@ function completePaidChapterIII(){
   demolish(independentRoute,7,8);
   build(independentRoute,["conveyor",7,2,"N"],["conveyor",8,8,"W"]);
   mistake(independentRoute,()=>rotate(independentRoute,8,8));
-  complete(independentRoute,"M12",95);
+  await complete(independentRoute,"M12",95);
 
   const corporateRoute=structuredClone(archive);
   apply(corporateRoute,chooseChapterIIIRoute(corporateRoute.state,"corporate",true));
   expandSteel(corporateRoute,true);
   mistake(corporateRoute,()=>rotate(corporateRoute,2,6));
-  complete(corporateRoute,"M12",89);
+  await complete(corporateRoute,"M12",89);
 
   restoreDualCircuits(independentRoute);
   build(independentRoute,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
-  complete(independentRoute,"M13",107);
+  await complete(independentRoute,"M13",107);
 
   demolish(corporateRoute,2,6);
   build(corporateRoute,["assembler",2,6,"W"]);
-  complete(corporateRoute,"M13",91);
+  await complete(corporateRoute,"M13",91);
 
   return {independent:independentRoute,corporate:corporateRoute};
 }
 
-it("WP3 completes both approved Chapter III routes using paid factory commands",()=>{
-  for(const route of Object.values(completePaidChapterIII())){
+let paidChapterIII:ReturnType<typeof completePaidChapterIII>|undefined;
+
+async function paidChapterIIICheckpoints(){
+  paidChapterIII??=completePaidChapterIII();
+  return structuredClone(await paidChapterIII);
+}
+
+it("WP3 completes both approved Chapter III routes using paid factory commands",async()=>{
+  for(const route of Object.values(await paidChapterIIICheckpoints())){
+    await yieldToRunner();
     const completion=structuredClone(route.state.chapterIII);
     const revenue=route.state.totalRevenueCents!;
     route.state=runTicks(route.state,60);
@@ -650,7 +687,7 @@ function probeSummarize(events:ProbeSample[]){
   return {start,end,circuitSales,circuitGap,copperOreSold,...counts,m14,m15};
 }
 
-function probeObserve(trace:Trace, label:string, options:{
+async function probeObserve(trace:Trace, label:string, options:{
   priorities?:PriorityOutlets; rate?:1|2; blocks?:number
 }={}){
   const {priorities=new Map(),rate=1,blocks=4}=options;
@@ -665,6 +702,7 @@ function probeObserve(trace:Trace, label:string, options:{
     trace.state=tickWithPriority(before,priorities);
     events.push(probeSample(before,trace.state));
     if(events.length>=probeWindowTicks)windows.push(probeSummarize(events.slice(-probeWindowTicks)));
+    if(events.length%probeWindowTicks===0)await yieldToRunner();
   }
   const elapsedTicks=trace.state.tick-activationTick;
   const firstM14=windows.find(window=>window.m14)??null;
@@ -694,13 +732,13 @@ function layoutOutside(state:GameState,x:number,y:number){
     .map(({id,kind,x,y,direction})=>({id,kind,x,y,direction}));
 }
 
-it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 routes",()=>{
-  for(const [route,checkpoint] of Object.entries(completePaidChapterIII())){
+it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 routes",async()=>{
+  for(const [route,checkpoint] of Object.entries(await paidChapterIIICheckpoints())){
     expect(checkpoint.state.chapterIII).toEqual({route,completed:["M11","M12","M13"],active:null});
     const prepared=structuredClone(checkpoint);
-    const preparedM14=probeObserve(prepared,"prepared M14 observation",{blocks:1});
+    const preparedM14=await probeObserve(prepared,"prepared M14 observation",{blocks:1});
     expect(preparedM14.firstM14?.end).toBe(checkpoint.state.tick+probeWindowTicks);
-    const preparedM15=probeObserve(prepared,"prepared M15 observation after M14",{blocks:1});
+    const preparedM15=await probeObserve(prepared,"prepared M15 observation after M14",{blocks:1});
     expect(preparedM15.firstM15?.end).toBe(checkpoint.state.tick+2*probeWindowTicks);
 
     const routed=structuredClone(checkpoint);
@@ -717,13 +755,13 @@ it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 r
     const badOutlets:PriorityOutlets=new Map([[splitter.id,0]]);
     const goodOutlets:PriorityOutlets=new Map([[splitter.id,1]]);
     const doubled=structuredClone(routed);
-    const failure=probeObserve(routed,"prioritize raw copper sale",{priorities:badOutlets});
-    const doubleFailure=probeObserve(doubled,"same raw copper priority at 2×",{priorities:badOutlets,rate:2});
+    const failure=await probeObserve(routed,"prioritize raw copper sale",{priorities:badOutlets});
+    const doubleFailure=await probeObserve(doubled,"same raw copper priority at 2×",{priorities:badOutlets,rate:2});
     expect(doubleFailure).toEqual(failure);
     expect(doubled.state).toEqual(routed.state);
     expect(failure.counts).toEqual({m14:0,m15:0});
     expect(failure.fixedWindows.every(window=>window.circuitGap>probeCircuitGapLimit&&window.copperOreSold>0)).toBe(true);
-    const recovery=probeObserve(routed,"prioritize copper to circuit fabricator",{priorities:goodOutlets});
+    const recovery=await probeObserve(routed,"prioritize copper to circuit fabricator",{priorities:goodOutlets});
     expect(recovery.fixedWindows.slice(1).every(window=>window.m14&&window.m15&&window.copperOreSold===0)).toBe(true);
     expect(recovery.counts.m14).toBeGreaterThan(failure.counts.m14);
     expect(layoutOutside(routed.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
@@ -734,12 +772,12 @@ it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 r
     expect(gear.state.balanceCents).toBe(checkpoint.state.balanceCents);
     console.info("V06-WP2 EDIT "+JSON.stringify({route,tile:[1,7],placements:0,demolitions:0,spendCents:0,
       resaleCents:0,setup:"Face east into vacant (2,7).",recovery:"Face north into the original gear branch."}));
-    const gearFailure=probeObserve(gear,"first gear branch faces an empty tile",{rate:2});
+    const gearFailure=await probeObserve(gear,"first gear branch faces an empty tile",{rate:2});
     expect(gearFailure.windows.filter(window=>window.start>checkpoint.state.tick+probeWindowTicks)
       .every(window=>window.m14&&!window.m15)).toBe(true);
     reface(gear,1,7,"N");
     expect(layoutOutside(gear.state,-1,-1)).toEqual(layoutOutside(checkpoint.state,-1,-1));
-    const gearRecovery=probeObserve(gear,"first gear branch restored, no spend");
+    const gearRecovery=await probeObserve(gear,"first gear branch restored, no spend");
     expect(gearRecovery.fixedWindows.slice(1).every(window=>window.m15)).toBe(true);
   }
 },55000);

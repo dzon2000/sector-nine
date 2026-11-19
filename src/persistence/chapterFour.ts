@@ -1,5 +1,5 @@
 import {
-  CHAPTER_IV_MISSIONS, CHAPTER_IV_WINDOW_TICKS, chapterIVQualifies, summarizeChapterIVTicks,
+  CHAPTER_IV_EVIDENCE_VERSION, CHAPTER_IV_MISSIONS, CHAPTER_IV_WINDOW_TICKS, chapterIVQualifies, summarizeChapterIVTicks,
   type ChapterIVTick,
 } from "../domain/chapterFour";
 import {DIAGNOSTIC_HISTORY_TICKS, type GameState} from "../domain/model";
@@ -15,7 +15,14 @@ function hasFields(value: unknown, fields: readonly string[]): boolean {
 
 export function assertChapterIVSave(state: GameState): void {
   const chapter = state.chapterIV;
-  if (chapter === undefined) return;
+  const proof = state.chapterIVEvidence;
+  if (chapter === undefined && proof === undefined) return;
+  if (chapter === undefined) {
+    throw Error("Missing Chapter IV progression. Save preserved.");
+  }
+  if (proof?.version !== CHAPTER_IV_EVIDENCE_VERSION) {
+    throw Error("Unsupported Chapter IV save evidence. Start a new game to continue. Save preserved.");
+  }
   const archived = state.chapterIII;
   if (!hasFields(chapter, ["route","activeId","completed","completedWindows","activatedAtTick","ticks"]) ||
     !archived?.route || archived.completed.at(-1) !== "M13" || archived.active ||
@@ -25,7 +32,11 @@ export function assertChapterIVSave(state: GameState): void {
     !Array.isArray(chapter.completedWindows) || chapter.completedWindows.length !== chapter.completed.length ||
     chapter.activeId !== (CHAPTER_IV_MISSIONS[chapter.completed.length] ?? null) ||
     !count(chapter.activatedAtTick) || chapter.activatedAtTick > state.tick ||
-    !Array.isArray(chapter.ticks)) {
+    !Array.isArray(chapter.ticks) ||
+    !hasFields(proof, ["version","startedAtTick","completions"]) ||
+    !count(proof.startedAtTick) || proof.startedAtTick > chapter.activatedAtTick ||
+    !Array.isArray(proof.completions) || proof.completions.length !== chapter.completed.length ||
+    (chapter.completed.length === 0 && proof.startedAtTick !== chapter.activatedAtTick)) {
     throw Error("Invalid Chapter IV progression. Save preserved.");
   }
 
@@ -56,7 +67,7 @@ export function assertChapterIVSave(state: GameState): void {
     }
   }
 
-  let completedAtTick = 0;
+  let completedAtTick = proof.startedAtTick;
   for (let index = 0; index < chapter.completedWindows.length; index++) {
     const ticks = chapter.completedWindows[index];
     const firstTick = ticks?.[0]?.tick;
@@ -66,10 +77,26 @@ export function assertChapterIVSave(state: GameState): void {
       throw Error("Invalid Chapter IV completion window. Save preserved.");
     }
     validateWindow(ticks, firstTick);
-    if (!chapterIVQualifies(CHAPTER_IV_MISSIONS[index],summarizeChapterIVTicks(ticks))) {
+    completedAtTick = firstTick + ticks.length - 1;
+    const completion = proof.completions[index];
+    if (!hasFields(completion, ["tick","samples"]) || completion.tick !== completedAtTick ||
+      !Array.isArray(completion.samples) || completion.samples.length !== ticks.length ||
+      !ticks.every((sample, position) => {
+        const physical = completion.samples[position];
+        return Array.isArray(physical) && physical.length === 4 &&
+          physical[0] === sample.circuitSales && physical[1] === sample.circuitProduced &&
+          physical[2] === sample.gearSales && physical[3] === sample.gearProduced;
+      }) || !chapterIVQualifies(CHAPTER_IV_MISSIONS[index],summarizeChapterIVTicks(ticks))) {
       throw Error("Invalid Chapter IV completion evidence. Save preserved.");
     }
-    completedAtTick = firstTick + ticks.length - 1;
+  }
+
+  const producerTrackingEnd = chapter.activeId ? state.tick : completedAtTick;
+  for (const sample of diagnosticsByTick.values()) {
+    const tracking = sample.tick > proof.startedAtTick && sample.tick <= producerTrackingEnd;
+    if (tracking !== (sample.chapterIVProduction !== undefined)) {
+      throw Error("Invalid Chapter IV diagnostic interval. Save preserved.");
+    }
   }
 
   const length = chapter.activeId ? Math.min(state.tick - chapter.activatedAtTick, CHAPTER_IV_WINDOW_TICKS) : 0;

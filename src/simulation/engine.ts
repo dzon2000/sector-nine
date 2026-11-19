@@ -1,4 +1,5 @@
 import {REVENUE,STEP,recipeFor,stats,emptySales,POWER_CANDIDATE,type DiagnosticEntityTick,type Entity,type GameState,type Item} from "../domain/model";
+import {CHAPTER_IV_WINDOW_TICKS} from "../domain/chapterFour";
 import {recordDiagnostics} from "../game/diagnostics";
 import {recordMissionTick} from "../game/missionMetrics";
 import {recordChapterTick} from "../game/chapterTwo";
@@ -241,8 +242,16 @@ export function tick(state:GameState):GameState {
   recordDiagnostics(s,observations,tickSales,chapterIVActive&&contractProduction?contractProduction:undefined);
   updateMission(s);
   if(chapterIVActive&&contractProduction){
-    recordChapterIVTick(s,{tick:s.tick,circuitSales:tickSales.circuit,circuitProduced:contractProduction.circuit,
+    const completed=recordChapterIVTick(s,{tick:s.tick,circuitSales:tickSales.circuit,circuitProduced:contractProduction.circuit,
       gearSales:tickSales.gear,gearProduced:contractProduction.gear});
+    if(completed){
+      // Archive the physical diagnostic samples independently of the mission's own window.
+      const diagnostics=s.diagnostics!.samples.slice(-CHAPTER_IV_WINDOW_TICKS);
+      s.chapterIVEvidence!.completions.push({tick:s.tick,samples:diagnostics.map(sample=>[
+        sample.terminalSales.circuit,sample.chapterIVProduction!.circuit,
+        sample.terminalSales.gear,sample.chapterIVProduction!.gear,
+      ])});
+    }
   }
   if(chapterIIIActive&&contractProduction){
     recordContractTick(s,{tick:s.tick,sold:contractProducts(tickSales),produced:contractProduction,

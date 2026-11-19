@@ -3,6 +3,7 @@ import type {ChapterIIIRoute} from "./contracts";
 export const CHAPTER_IV_MISSIONS = ["M14", "M15"] as const;
 export type ChapterIVMissionId = typeof CHAPTER_IV_MISSIONS[number];
 export const CHAPTER_IV_WINDOW_TICKS = 30;
+export const CHAPTER_IV_EVIDENCE_VERSION = 1;
 
 interface ChapterIVWindow {
   circuitSales: number;
@@ -28,6 +29,15 @@ export interface ChapterIVState {
   completedWindows: ChapterIVTick[][];
   activatedAtTick: number;
   ticks: ChapterIVTick[];
+}
+
+export interface ChapterIVEvidence {
+  version: typeof CHAPTER_IV_EVIDENCE_VERSION;
+  startedAtTick: number;
+  completions: {
+    tick: number;
+    samples: [circuitSales: number, circuitProduced: number, gearSales: number, gearProduced: number][];
+  }[];
 }
 
 export function summarizeChapterIVTicks(ticks: readonly ChapterIVTick[]): ChapterIVWindow {

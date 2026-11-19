@@ -1,4 +1,4 @@
-import type {ChapterIVState} from "./chapterFour";
+import type {ChapterIVEvidence,ChapterIVState} from "./chapterFour";
 import type {ChapterIIIState} from "./contracts";
 
 export type Direction = "N" | "E" | "S" | "W";
@@ -95,6 +95,7 @@ export interface GameState {
   chapterII?:ChapterIIState;
   chapterIII?:ChapterIIIState;
   chapterIV?:ChapterIVState;
+  chapterIVEvidence?:ChapterIVEvidence;
   arbiters: Record<string, number>;
   rollingEvents: Accounting[]; lastEvent: Accounting;
   totalOreProduced: number; totalIngotProduced: number;

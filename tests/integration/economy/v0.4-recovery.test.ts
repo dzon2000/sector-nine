@@ -827,7 +827,27 @@ it("V06 WP3 completes fresh Chapter IV windows and recovers a paid one-splitter 
     expect(()=>validateSave(corrupt)).toThrow(/Chapter IV/);
     const afterDiagnosticsExpire=runTicks(complete,60);
     expect(afterDiagnosticsExpire.chapterIV).toEqual(complete.chapterIV);
-    expect(validateSave(afterDiagnosticsExpire)).toEqual(afterDiagnosticsExpire);
+    expect(afterDiagnosticsExpire.diagnostics!.samples.every(sample=>sample.chapterIVProduction===undefined)).toBe(true);
+    expect(validateSave(JSON.parse(JSON.stringify(afterDiagnosticsExpire)))).toEqual(afterDiagnosticsExpire);
+    const beforeActivation=runTicks(checkpoint.state,120);
+    expect(validateSave(JSON.parse(JSON.stringify(beforeActivation)))).toEqual(beforeActivation);
+    expect(beforeActivation.chapterIV).toBeUndefined();
+
+    const erasedChapter=structuredClone(afterDiagnosticsExpire);
+    delete erasedChapter.chapterIV;
+    expect.soft(()=>validateSave(erasedChapter),route+" aged Chapter IV deletion").toThrow(/Chapter IV/);
+
+    const alteredProduction=structuredClone(afterDiagnosticsExpire);
+    alteredProduction.chapterIV!.completedWindows[0][0].circuitProduced++;
+    expect.soft(()=>validateSave(alteredProduction),route+" aged archive production edit").toThrow(/Chapter IV/);
+
+    const alteredEvidence=structuredClone(afterDiagnosticsExpire);
+    alteredEvidence.chapterIVEvidence!.completions[1].samples[0][3]++;
+    expect(()=>validateSave(alteredEvidence)).toThrow(/Chapter IV completion evidence/);
+
+    const preview=structuredClone(afterDiagnosticsExpire);
+    delete preview.chapterIVEvidence;
+    expect(()=>validateSave(preview)).toThrow(/Unsupported Chapter IV save evidence/);
     expect(beginChapterIV(complete).ok).toBe(false);
 
     const routed=structuredClone(checkpoint);

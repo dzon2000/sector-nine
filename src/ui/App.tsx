@@ -1,9 +1,11 @@
 import {Fragment,useCallback,useEffect,useRef,useState} from "react";
-import {begin,place,remove,reset,setPause,turn,face} from "../game/commands";
+import {begin,place,remove,reset,setPause,setSplitterMode,turn,face} from "../game/commands";
 import {MISSIONS} from "../game/missions";
 import {entityDiagnostics,terminalDiagnostics,diagnosticHint} from "../game/diagnostics";
 import {missionWindow} from "../game/missionMetrics";
 import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "../game/chapterThree";
+import {beginChapterIV} from "../game/chapterFour";
+import {ChapterFourPanel} from "./ChapterFourPanel";
 import {ChapterThreePanel} from "./ChapterThreePanel";
 import {ConfirmationDialog} from "./ConfirmationDialog";
 import {beginChapterII,chapterWindow} from "../game/chapterTwo";
@@ -11,10 +13,11 @@ import {ChapterThreeTransmission} from "./ChapterThreeTransmission";
 import {CHAPTER_TRANSMISSIONS,availableTransmissions,isChapterIIITransmission,type ChapterTransmissionId} from "../game/chapterNarrative";
 import {BUILD_COMMIT} from "./buildProvenance";
 import {TECHNOLOGIES,TECHNOLOGY_ORDER,CHAPTER_TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type AnyTechnologyId} from "../game/technologies";
-import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
+import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item,type SplitterMode} from "../domain/model";
 import {tick} from "../simulation/engine";
 import {loadGame,saveGame,restartGame} from "../persistence/indexedDb";
 import {Board,type Tool} from "../rendering/Board";
+import {splitterOutlets} from "../rendering/splitterOutlets";
 import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,activePlaytestWallMs,isPlaytestSession,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
 import {createSimulationClock,type SimulationSpeed} from "./simulationClock";
 const PLAYTEST_KEY="sector-nine-v0.3-local-playtest";
@@ -119,7 +122,11 @@ export default function App(){
       const next=tick(s);latest.current=next;setGame(next);observePlaytest(next);
       const contractCompleted=next.chapterIII?.completed.length!==s.chapterIII?.completed.length;
       if(contractCompleted)setMessage("Contract complete. Archive entry unlocked.");
-      if(contractCompleted||next.tick%10===0)queueSave(next);
+      const chapterIVAdvanced=next.chapterIV?.activeId!==s.chapterIV?.activeId;
+      if(chapterIVAdvanced)setMessage(next.chapterIV?.activeId==="M15"
+        ?"M14 complete. Restore Service started."
+        :"M15 complete. Station reply received.");
+      if(contractCompleted||chapterIVAdvanced||next.tick%10===0)queueSave(next);
     });
     clockRef.current=clock;
     syncClock(latest.current);
@@ -346,6 +353,21 @@ export default function App(){
         {["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind)&&<p>Recipe: {selectedEntity.kind==="furnace"?"2 iron ore → 1 iron ingot (4 ticks)":selectedEntity.kind==="assembler"?"2 iron ingots → 1 gear (5 ticks)":selectedEntity.kind==="advanced_furnace"?"2 iron ingots + 1 coal → 1 steel (8 ticks)":"2 copper ore + 1 silicon → 1 circuit (6 powered ticks)"}</p>}
         {selectedEntity.reservedInputs&&Object.values(selectedEntity.reservedInputs).some(v=>v>0)&&<p>Reserved inputs: {Object.entries(selectedEntity.reservedInputs).map(([item,count])=>`${item}: ${count}`).join(", ")}</p>}
         {COAL_DEPOSITS.some(d=>d.x===selectedEntity.x&&d.y===selectedEntity.y)&&selectedEntity.kind!=="coal_mine"&&<p>A coal deposit is beneath this structure. Demolish it to build a coal mine.</p>}
+        {selectedEntity.kind==="splitter"&&<>
+          {game.chapterIV&&<label className="splitter-routing">Splitter routing
+            <select value={selectedEntity.splitterMode??"alternating"} onChange={event=>{
+              const mode=event.currentTarget.value as SplitterMode;
+              runContractCommand(state=>setSplitterMode(state,selectedEntity.id,mode));
+            }}>
+              <option value="alternating">Alternating</option>
+              {splitterOutlets(selectedEntity.direction).map(({mode,direction})=><option key={mode} value={mode}>
+                {mode==="forward"?"Priority forward":"Priority clockwise"} ({direction})
+              </option>)}
+            </select>
+          </label>}
+          {!selectedEntity.splitterMode&&<p>Next outlet: {selectedEntity.splitterNext===0?"forward":"clockwise"}</p>}
+          <p data-testid="splitter-cargo">Cargo: {selectedEntity.belt??"empty"}</p>
+        </>}
         {selectedEntity.kind!=="sell_terminal"&&<><button onClick={()=>{const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);if(r.ok)persist(r.state,{kind:"turn",entityKind:selectedEntity.kind,x:selectedEntity.x,y:selectedEntity.y});}}>Rotate clockwise</button><button className="danger" onClick={()=>demolish(selectedEntity.id)}>Demolish</button></>}</>:<p>Select a machine or conveyor to view status and controls.</p>}
       <section aria-label="Terminal throughput" data-testid="terminal-throughput" className="diagnostic-panel">
         <h3>Terminal sales / trailing 60 simulation ticks</h3>
@@ -385,7 +407,6 @@ export default function App(){
         </div>}
       </section>
       {selectedEntity?.kind==="coal_generator"&&<p>Fuel: {selectedEntity.fuelTicksRemaining??0}/12 powered ticks · Coal input: {selectedEntity.inputBuffers?.coal??0}</p>}
-      {selectedEntity?.kind==="splitter"&&<p>Next outlet: {selectedEntity.splitterNext===0?"forward":"clockwise"} · Cargo: {selectedEntity.belt??"empty"}</p>}
       {game.power&&<section aria-label="Power diagnostics" data-testid="power-diagnostics" className="diagnostic-panel"><h3>Site-wide power</h3><p>Supply: {game.power.supply} · Demand: {game.power.demand} · Served: {game.power.served}</p><p>Unpowered processing: {game.power.unpoweredProcessingTicks} ticks · Burned coal: {game.power.coalBurned}</p></section>}
       {narrativeAvailable.length>0&&<section className="diagnostic-panel" aria-label="Prometheus transmissions" data-testid="chapter-transmissions">
         <h3>Prometheus transmissions</h3>
@@ -396,13 +417,16 @@ export default function App(){
       </section>}
       <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically. One tick is one simulation second.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
       </aside></div>
-    <footer data-testid="mission-hud"><div className="mission-hud-objectives" tabIndex={chapterCompleted?0:undefined} role={chapterCompleted?"region":undefined} aria-label={chapterCompleted?"Operations objectives":undefined}>{chapterCompleted&&<ChapterThreePanel game={game}
+    <footer data-testid="mission-hud"><div className="mission-hud-objectives" tabIndex={chapterCompleted?0:undefined} role={chapterCompleted?"region":undefined} aria-label={chapterCompleted?"Operations objectives":undefined}>{chapterCompleted&&<>{!game.chapterIV&&<ChapterThreePanel game={game}
         dispatch={latestDispatch&&<button onClick={()=>openTransmission(latestDispatch)}>
           Read {CHAPTER_TRANSMISSIONS[latestDispatch].label}
         </button>}
         onStart={()=>runContractCommand(beginChapterIII)}
+        onStartChapterIV={()=>runContractCommand(beginChapterIV)}
         onAccept={id=>runContractCommand(s=>acceptChapterIIIContract(s,id))}
         onChoose={route=>runContractCommand(s=>chooseChapterIIIRoute(s,route,true))}/>}
+        <ChapterFourPanel chapter={game.chapterIV}/>
+      </>}
       {!chapterCompleted&&<><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{mission.title}</h2><p>{game.tutorialEnabled?mission.hint:"Tutorial hints hidden."}</p>
       {throughputMission&&<section className="mission-throughput" aria-label="Mission throughput diagnostics" data-testid="mission-throughput">
         <h3>Live objective · trailing 60 simulation ticks</h3>

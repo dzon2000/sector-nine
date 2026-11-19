@@ -822,7 +822,12 @@ it("V06 WP3 completes fresh Chapter IV windows and recovers a paid one-splitter 
     const complete=runTicks(m15,30);
     expect(complete.chapterIV).toMatchObject({activeId:null,completed:["M14","M15"],ticks:[]});
     expect(validateSave(complete)).toEqual(complete);
-    expect(runTicks(complete,5).chapterIV).toEqual(complete.chapterIV);
+    const corrupt=structuredClone(complete);
+    corrupt.chapterIV!.completedWindows[0][0].tick++;
+    expect(()=>validateSave(corrupt)).toThrow(/Chapter IV/);
+    const afterDiagnosticsExpire=runTicks(complete,60);
+    expect(afterDiagnosticsExpire.chapterIV).toEqual(complete.chapterIV);
+    expect(validateSave(afterDiagnosticsExpire)).toEqual(afterDiagnosticsExpire);
     expect(beginChapterIV(complete).ok).toBe(false);
 
     const routed=structuredClone(checkpoint);

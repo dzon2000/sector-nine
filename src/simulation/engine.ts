@@ -238,7 +238,7 @@ export function tick(state:GameState):GameState {
   recordMissionTick(s,tickSales);
   recordChapterTick(s,tickSales,(s.materialLedger?.circuit.produced??0)-priorCircuitsProduced,
     s.power?.demandCovered===true);
-  recordDiagnostics(s,observations,tickSales);
+  recordDiagnostics(s,observations,tickSales,chapterIVActive&&contractProduction?contractProduction:undefined);
   updateMission(s);
   if(chapterIVActive&&contractProduction){
     recordChapterIVTick(s,{tick:s.tick,circuitSales:tickSales.circuit,circuitProduced:contractProduction.circuit,

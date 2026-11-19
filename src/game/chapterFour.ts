@@ -15,7 +15,7 @@ export function beginChapterIV(state: GameState): ChapterCommandResult {
     return {ok: false, message: "Chapter IV is unavailable or already started.", state};
   }
   const next = structuredClone(state);
-  next.chapterIV = {route, activeId: "M14", completed: [], activatedAtTick: state.tick, ticks: []};
+  next.chapterIV = {route, activeId: "M14", completed: [], completedWindows: [], activatedAtTick: state.tick, ticks: []};
   return {ok: true, message: "Chapter IV started: The Return Signal.", state: next};
 }
 
@@ -42,6 +42,7 @@ export function recordChapterIVTick(state: GameState, sample: ChapterIVTick): vo
   if (!window || !chapterIVQualifies(chapter.activeId, window)) return;
 
   chapter.completed.push(chapter.activeId);
+  chapter.completedWindows.push(chapter.ticks);
   if (chapter.activeId === "M14") {
     chapter.activeId = "M15";
     chapter.activatedAtTick = state.tick;

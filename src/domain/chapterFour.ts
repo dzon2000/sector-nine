@@ -25,6 +25,7 @@ export interface ChapterIVState {
   route: ChapterIIIRoute;
   activeId: ChapterIVMissionId | null;
   completed: ChapterIVMissionId[];
+  completedWindows: ChapterIVTick[][];
   activatedAtTick: number;
   ticks: ChapterIVTick[];
 }

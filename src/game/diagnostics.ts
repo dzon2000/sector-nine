@@ -1,6 +1,9 @@
-import {emptySales,recipeFor,type DiagnosticEntityTick,type DiagnosticStatus,type DiagnosticTick,type Entity,type GameState,type Item} from "../domain/model";
+import {DIAGNOSTIC_HISTORY_TICKS,emptySales,recipeFor,type DiagnosticEntityTick,type DiagnosticStatus,type DiagnosticTick,type Entity,type GameState,type Item} from "../domain/model";
 
-export function recordDiagnostics(state:GameState,observations:Readonly<Record<string,DiagnosticEntityTick>>,terminalSales:Readonly<Record<Item,number>>):void {
+export function recordDiagnostics(
+  state:GameState,observations:Readonly<Record<string,DiagnosticEntityTick>>,terminalSales:Readonly<Record<Item,number>>,
+  chapterIVProduction?:Readonly<NonNullable<DiagnosticTick["chapterIVProduction"]>>,
+):void {
   if(!state.diagnostics)state.diagnostics={samples:[]};
   // Sample machine states once per active simulation tick, after material transfers and cycle starts.
   const entities:Record<string,DiagnosticEntityTick>={};
@@ -8,8 +11,12 @@ export function recordDiagnostics(state:GameState,observations:Readonly<Record<s
     const sample=observations[String(entity.id)];
     if(sample)entities[String(entity.id)]={...sample};
   }
-  state.diagnostics.samples.push({tick:state.tick,entities,terminalSales:{...terminalSales}});
-  if(state.diagnostics.samples.length>60)state.diagnostics.samples.shift();
+  const sample:DiagnosticTick={tick:state.tick,entities,terminalSales:{...terminalSales}};
+  if(chapterIVProduction){
+    sample.chapterIVProduction={circuit:chapterIVProduction.circuit,gear:chapterIVProduction.gear};
+  }
+  state.diagnostics.samples.push(sample);
+  if(state.diagnostics.samples.length>DIAGNOSTIC_HISTORY_TICKS)state.diagnostics.samples.shift();
 }
 function samples(state:GameState):readonly DiagnosticTick[]{return state.diagnostics?.samples??[];}
 

@@ -117,7 +117,8 @@ test("splitter routing survives reload and rotates relative to its facing", asyn
 });
 
 test("a prepared factory completes fresh M14 and M15 windows and unlocks one reply", async ({ page }) => {
-  await page.clock.install();
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
   await openCheckpoint(page, "independent");
   await page.getByRole("button", { name: "Start Chapter IV" }).click();
   await page.getByRole("button", { name: /Run$/ }).click();

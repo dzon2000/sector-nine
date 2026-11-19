@@ -66,7 +66,9 @@ export interface DiagnosticTick {
   tick:number;
   entities:Record<string,DiagnosticEntityTick>;
   terminalSales:Record<Item,number>;
+  chapterIVProduction?:Record<"circuit"|"gear",number>;
 }
+export const DIAGNOSTIC_HISTORY_TICKS=60;
 export interface DiagnosticHistory { samples:DiagnosticTick[]; }
 export interface MissionSaleTick { tick:number; sales:Record<Item,number>; }
 export interface ChapterTick { tick:number; sales:Record<Item,number>; producedCircuits:number; demandCovered:boolean; }

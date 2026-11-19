@@ -5,6 +5,7 @@ import {
   type ChapterIIIContractId,type ChapterIIIRoute,type ContractWindow,
 } from "../domain/contracts";
 import {money,type GameState} from "../domain/model";
+import {isChapterIVAvailable} from "../game/chapterFour";
 import {currentChapterIIIWindow} from "../game/chapterThree";
 import {ConfirmationDialog} from "./ConfirmationDialog";
 
@@ -46,11 +47,12 @@ interface Props {
   game:GameState;
   dispatch?:ReactNode;
   onStart:()=>void;
+  onStartChapterIV?:()=>void;
   onAccept:(id:ChapterIIIContractId)=>void;
   onChoose:(route:ChapterIIIRoute)=>void;
 }
 
-export function ChapterThreePanel({game,dispatch,onStart,onAccept,onChoose}:Props){
+export function ChapterThreePanel({game,dispatch,onStart,onStartChapterIV,onAccept,onChoose}:Props){
   const chapter=game.chapterIII;
   const [pendingRoute,setPendingRoute]=useState<ChapterIIIRoute|null>(null);
   const heading=useRef<HTMLHeadingElement>(null);
@@ -77,6 +79,7 @@ export function ChapterThreePanel({game,dispatch,onStart,onAccept,onChoose}:Prop
   return <section className="chapter-three-contracts" aria-label="Chapter III contracts" data-testid="chapter-three-contracts">
     <h2 ref={heading} tabIndex={-1}>{id?TITLES[id]:chapter?"Project Prometheus Complete":"First Signal Restored"}</h2>
     {dispatch}
+    {onStartChapterIV&&isChapterIVAvailable(game)&&<button onClick={onStartChapterIV}>Start Chapter IV</button>}
     {!chapter&&<>
       {game.tutorialEnabled&&<p>Investigate the recovered archive in Project Prometheus.</p>}
       <button onClick={()=>run(onStart)}>Start Chapter III</button>

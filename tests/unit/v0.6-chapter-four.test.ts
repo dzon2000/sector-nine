@@ -2,7 +2,7 @@ import {expect,it} from "vitest";
 import {createGame, type GameState} from "../../src/domain/model";
 import {summarizeChapterIVTicks,type ChapterIVTick} from "../../src/domain/chapterFour";
 import {beginChapterIV,currentChapterIVWindow,recordChapterIVTick} from "../../src/game/chapterFour";
-import {begin} from "../../src/game/commands";
+import {begin,place,remove} from "../../src/game/commands";
 import {runTicks} from "../../src/simulation/engine";
 import {validateSave} from "../../src/persistence/indexedDb";
 
@@ -76,4 +76,44 @@ it("validates active window, route and ordered archive state on restore",()=>{
     {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,gearProduced:1}))},
   ];
   for(const chapterIV of malformed)expect(()=>validateSave({...state,chapterIV})).toThrow(/Chapter IV/);
+});
+
+it("rejects fabricated fresh production backed only by historical ledger totals",()=>{
+  const initial=checkpoint();
+  initial.materialLedger!.circuit.produced=20;
+  initial.materialLedger!.circuit.sold=20;
+  initial.sales!.circuit=20;
+  const active=runTicks(beginChapterIV(initial).state,12);
+  expect(validateSave(active)).toEqual(active);
+
+  active.chapterIV!.ticks[0].circuitProduced=6;
+  expect(()=>validateSave(active)).toThrow(/Chapter IV/);
+});
+
+it("rejects Chapter IV completion without qualifying windows",()=>{
+  const state=runTicks(beginChapterIV(checkpoint()).state,65);
+  Object.assign(state.chapterIV!,{
+    completed:["M14","M15"],activeId:null,activatedAtTick:30,ticks:[],
+  });
+  expect(()=>validateSave(state)).toThrow(/Chapter IV/);
+});
+
+it("preserves production evidence when the producing machine is demolished",()=>{
+  const initial=checkpoint();
+  initial.technologies!.mechanical_components=true;
+  const placed=place(initial,"assembler",5,5,"N");
+  expect(placed.ok).toBe(true);
+  const assembler=placed.state.entities[1];
+  assembler.cycle=1;
+  assembler.reservedInputs={iron_ingot:2};
+  placed.state.materialLedger!.iron_ingot.opening=2;
+
+  const produced=runTicks(beginChapterIV(placed.state).state,1);
+  expect(produced.chapterIV!.ticks[0].gearProduced).toBe(1);
+  const demolished=remove(produced,assembler.id,true);
+  expect(demolished.ok).toBe(true);
+  const sample=demolished.state.diagnostics!.samples[0];
+  expect(sample.entities[String(assembler.id)]).toBeUndefined();
+  expect(sample.chapterIVProduction?.gear).toBe(1);
+  expect(validateSave(JSON.parse(JSON.stringify(demolished.state)))).toEqual(demolished.state);
 });

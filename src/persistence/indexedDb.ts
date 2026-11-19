@@ -1,4 +1,4 @@
-import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,SPLITTER_MODES,SAVE_SCHEMA_VERSION,MISSION_RULE_VERSION,recipeFor,type GameState,type Item} from "../domain/model";
+import {COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,DIAGNOSTIC_HISTORY_TICKS,ITEMS,SPLITTER_MODES,SAVE_SCHEMA_VERSION,MISSION_RULE_VERSION,recipeFor,type GameState,type Item} from "../domain/model";
 import {assertChapterIVSave} from "./chapterFour";
 import {assertChapterIIISave} from "./chapterThree";
 // Keep the existing slot address so incompatible saves can be detected and preserved.
@@ -227,13 +227,14 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
   }
   const history=n.diagnostics;
   if(!history||typeof history!=="object"||Array.isArray(history)||
-     Object.keys(history).length!==1||!Array.isArray(history.samples)||history.samples.length>60)
+     Object.keys(history).length!==1||!Array.isArray(history.samples)||history.samples.length>DIAGNOSTIC_HISTORY_TICKS)
     throw Error("Invalid diagnostic history. Data preserved.");
   const diagnosticEntities=new Set(n.entities.map(e=>String(e.id)));
   for(let i=0;i<history.samples.length;i++){
     const sample=history.samples[i];
+    const chapterIVProduction=sample?.chapterIVProduction;
     if(!sample||typeof sample!=="object"||Array.isArray(sample)||
-       Object.keys(sample).length!==3||!Number.isSafeInteger(sample.tick)||
+       Object.keys(sample).length!==(chapterIVProduction===undefined?3:4)||!Number.isSafeInteger(sample.tick)||
        sample.tick<1||sample.tick>n.tick||
        (i>0&&sample.tick!==history.samples[i-1].tick+1)||
        !sample.entities||typeof sample.entities!=="object"||Array.isArray(sample.entities)||
@@ -242,6 +243,13 @@ function assertCurrentSave(value:unknown):asserts value is GameState{
        Object.keys(sample.terminalSales).some(key=>!ITEMS.includes(key as Item))||
        ITEMS.some(item=>!Number.isSafeInteger(sample.terminalSales[item])||sample.terminalSales[item]<0))
       throw Error("Invalid diagnostic sample. Data preserved.");
+    if(chapterIVProduction!==undefined&&(!n.chapterIV||!chapterIVProduction||
+       typeof chapterIVProduction!=="object"||Array.isArray(chapterIVProduction)||
+       Object.keys(chapterIVProduction).length!==2||
+       !Number.isSafeInteger(chapterIVProduction.circuit)||chapterIVProduction.circuit<0||
+       !Number.isSafeInteger(chapterIVProduction.gear)||chapterIVProduction.gear<0||
+       chapterIVProduction.circuit+chapterIVProduction.gear>n.width*n.height-1))
+      throw Error("Invalid Chapter IV diagnostic production. Data preserved.");
     for(const [id,entry] of Object.entries(sample.entities)){
       if(!diagnosticEntities.has(id)||!entry||typeof entry!=="object"||Array.isArray(entry)||
          Object.keys(entry).length!==4||

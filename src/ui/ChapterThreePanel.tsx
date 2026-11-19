@@ -5,6 +5,7 @@ import {
   type ChapterIIIContractId,type ChapterIIIRoute,type ContractWindow,
 } from "../domain/contracts";
 import {money,type GameState} from "../domain/model";
+import {isChapterIVAvailable} from "../game/chapterFour";
 import {currentChapterIIIWindow} from "../game/chapterThree";
 import {ConfirmationDialog} from "./ConfirmationDialog";
 
@@ -46,11 +47,12 @@ interface Props {
   game:GameState;
   dispatch?:ReactNode;
   onStart:()=>void;
+  onStartChapterIV?:()=>void;
   onAccept:(id:ChapterIIIContractId)=>void;
   onChoose:(route:ChapterIIIRoute)=>void;
 }
 
-export function ChapterThreePanel({game,dispatch,onStart,onAccept,onChoose}:Props){
+export function ChapterThreePanel({game,dispatch,onStart,onStartChapterIV,onAccept,onChoose}:Props){
   const chapter=game.chapterIII;
   const [pendingRoute,setPendingRoute]=useState<ChapterIIIRoute|null>(null);
   const heading=useRef<HTMLHeadingElement>(null);
@@ -77,6 +79,7 @@ export function ChapterThreePanel({game,dispatch,onStart,onAccept,onChoose}:Prop
   return <section className="chapter-three-contracts" aria-label="Chapter III contracts" data-testid="chapter-three-contracts">
     <h2 ref={heading} tabIndex={-1}>{id?TITLES[id]:chapter?"Project Prometheus Complete":"First Signal Restored"}</h2>
     {dispatch}
+    {onStartChapterIV&&isChapterIVAvailable(game)&&<button onClick={onStartChapterIV}>Start Chapter IV</button>}
     {!chapter&&<>
       {game.tutorialEnabled&&<p>Investigate the recovered archive in Project Prometheus.</p>}
       <button onClick={()=>run(onStart)}>Start Chapter III</button>
@@ -95,8 +98,8 @@ export function ChapterThreePanel({game,dispatch,onStart,onAccept,onChoose}:Prop
     {id&&goal&&<>
       {route&&<p>Route: {ROUTE_NAMES[route]}</p>}
       {active
-        ? <p>Window: {active.ticks.length}/{CONTRACT_WINDOW_TICKS} active ticks · Streak: {active.streakTicks}/{CONTRACT_STREAK_WINDOWS} qualifying windows</p>
-        : <p>Meet every condition in the same {CONTRACT_WINDOW_TICKS}-tick window for {CONTRACT_STREAK_WINDOWS} consecutive windows.</p>}
+        ? <p>Window: {active.ticks.length}/{CONTRACT_WINDOW_TICKS} active ticks (simulation time) · Streak: {active.streakTicks}/{CONTRACT_STREAK_WINDOWS} qualifying windows</p>
+        : <p>Meet every condition in the same window of {CONTRACT_WINDOW_TICKS} simulation ticks for {CONTRACT_STREAK_WINDOWS} consecutive windows.</p>}
       <Conditions goal={goal} progress={progress}/>
       {fullWindow&&<p>{contractQualifies(id,route,fullWindow)?"Current window qualifies.":"Current window does not qualify."}</p>}
       <p>Reward: Archive entry unlocked. {id==="M13"?"Return to free play.":"Access to the next step."}</p>

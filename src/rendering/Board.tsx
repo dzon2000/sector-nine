@@ -3,10 +3,12 @@ import {Application,Container,Graphics,Sprite,Text,TextStyle,type Texture} from 
 import {DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,STEP,type Direction,type GameState,type Kind} from "../domain/model";
 import {CARGO_GLYPHS,CARGO_COLORS,processorCargoSummary} from "./cargo";
 import {loadBoardTextures,type BoardTextures} from "./boardAtlas";
+import {conveyorTexture,splitterLinkTexture} from "./conveyorSprites";
+import {beltConnections,TRACK_TILE} from "./conveyorTracks";
 import {splitterOutlets} from "./splitterOutlets";
 import {STRUCTURE_GLYPHS} from "./structureVisuals";
 export type Tool="select"|"demolish"|"iron_mine"|"coal_mine"|"furnace"|"assembler"|"advanced_furnace"|"conveyor"|"copper_mine"|"silicon_extractor"|"circuit_fabricator"|"coal_generator"|"splitter";
-const TILE=44;
+const TILE=TRACK_TILE;
 const fill:Record<Kind,number>={iron_mine:0xc58d53,coal_mine:0x676c79,furnace:0xd76446,assembler:0xc3a4e8,advanced_furnace:0xb64c4c,conveyor:0x508fa3,sell_terminal:0x68b98a,copper_mine:0xd69b57,silicon_extractor:0x8196b2,circuit_fabricator:0xbda0ed,coal_generator:0xdfc278,splitter:0x65c0b4};
 const ROTATION:Record<Direction,number>={N:0,E:90,S:180,W:270};
 
@@ -144,6 +146,7 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
       }
     }
     const lastTick=state.diagnostics?.samples.at(-1);
+    const links=textures?beltConnections(state.entities,preview):undefined;
     for(const e of state.entities){
       const X=e.x*TILE,Y=e.y*TILE;
       const cx=X+22,cy=Y+22;
@@ -153,10 +156,16 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
       const layer=new Container({label:`entity:${e.id}`});
       root.addChild(layer);
       const isBelt=e.kind==="conveyor"||e.kind==="splitter";
-      const structureTexture=textures?.[e.kind];
+      const connections=links?.get(e.id);
+      const structureTexture=e.kind==="conveyor"&&connections
+        ?conveyorTexture(facing,connections)
+        :textures?.[e.kind];
       if(structureTexture){
+        if(e.kind==="splitter"&&connections&&(connections.inputs.length||connections.outputs.length)){
+          layer.addChild(sprite(splitterLinkTexture(connections),"track:splitter-links",cx,cy));
+        }
         const image=sprite(structureTexture,`structure:${e.kind}`,cx,cy);
-        if(isBelt)image.angle=ROTATION[facing];
+        if(e.kind==="splitter")image.angle=ROTATION[facing];
         layer.addChild(image);
       }else{
         layer.addChild(new Graphics().roundRect(X+4,Y+4,36,36,5).fill(fill[e.kind])

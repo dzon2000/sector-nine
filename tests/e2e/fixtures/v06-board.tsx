@@ -32,6 +32,9 @@ let game:GameState={
     entity(2,"splitter",8,2,{direction:"W",belt:"coal",splitterNext:0,splitterMode:"clockwise"}),
     entity(3,"furnace",5,5,{direction:"S",output:"iron_ingot",inputBuffers:{iron_ore:2}}),
     entity(4,"conveyor",6,5,{direction:"E"}),
+    entity(5,"conveyor",2,8,{direction:"E"}),
+    entity(6,"conveyor",3,8,{direction:"N",belt:"gear"}),
+    entity(7,"conveyor",3,7,{direction:"N"}),
   ],
 };
 
@@ -39,7 +42,7 @@ function describe(node:Container):unknown{
   return {
     label:node.label,
     ...(node instanceof Sprite?{
-      frame:[node.texture.frame.width,node.texture.frame.height],
+      textureLabel:node.texture.label,frame:[node.texture.frame.width,node.texture.frame.height],
       anchor:[node.anchor.x,node.anchor.y],angle:node.angle,scaleMode:node.texture.source.scaleMode,
       x:node.x,y:node.y,
     }:{}),

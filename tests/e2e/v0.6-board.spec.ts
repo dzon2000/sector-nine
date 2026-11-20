@@ -1,7 +1,7 @@
 import {test,expect,type Page} from "@playwright/test";
 
 type Node = {
-  label:string; children:Node[]; text?:string; frame?:[number,number];
+  label:string; textureLabel?:string; children:Node[]; text?:string; frame?:[number,number];
   anchor?:[number,number]; angle?:number; scaleMode?:string; x?:number; y?:number;
 };
 type BoardTest = {
@@ -98,4 +98,23 @@ test("unmount destroys Pixi applications even while the atlas is pending",async(
   }finally{
     release();
   }
+});
+
+test("renders linked corner sprites and updates both joins during rotation preview",async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto(fixture);
+  const track=async(id:number)=>(await scene(page,`entity:${id}`))?.children.find(node=>node.label==="structure:conveyor");
+  await expect.poll(()=>track(6)).toMatchObject({frame:[44,44],scaleMode:"nearest",textureLabel:"conveyor:N:W:N"});
+  await expect.poll(()=>track(7)).toMatchObject({textureLabel:"conveyor:N:S:"});
+  expect((await scene(page,"entity:6"))?.children.some(node=>node.label==="cargo:gear")).toBe(true);
+  const bounds=(await page.getByTestId("factory-board").boundingBox())!;
+  const x=bounds.x+bounds.width*3.5/12, y=bounds.y+bounds.height*8.5/12;
+  await page.mouse.move(x,y);
+  await page.mouse.down();
+  await page.mouse.move(x+26,y);
+  await expect.poll(()=>track(6)).toMatchObject({textureLabel:"conveyor:E:W:"});
+  await expect.poll(()=>track(7)).toMatchObject({textureLabel:"conveyor:N::"});
+  await page.mouse.up();
+  await page.setViewportSize({width:680,height:700});
+  await expect.poll(()=>track(6)).toMatchObject({frame:[44,44],scaleMode:"nearest",textureLabel:"conveyor:N:W:N"});
 });

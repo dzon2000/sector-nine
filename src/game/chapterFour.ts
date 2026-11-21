@@ -1,5 +1,6 @@
 import {
-  CHAPTER_IV_EVIDENCE_VERSION, CHAPTER_IV_WINDOW_TICKS, chapterIVQualifies, summarizeChapterIVTicks, type ChapterIVTick,
+  CHAPTER_IV_EVIDENCE_VERSION, CHAPTER_IV_WINDOW_TICKS, chapterIVQualifies, chapterIVWindowBoundary,
+  summarizeChapterIVTicks, type ChapterIVTick,
 } from "../domain/chapterFour";
 import type {GameState} from "../domain/model";
 import type {ChapterCommandResult} from "./chapterTwo";
@@ -15,8 +16,8 @@ export function beginChapterIV(state: GameState): ChapterCommandResult {
     return {ok: false, message: "Chapter IV is unavailable or already started.", state};
   }
   const next = structuredClone(state);
-  next.chapterIVEvidence = {version: CHAPTER_IV_EVIDENCE_VERSION, startedAtTick: state.tick, completions: []};
-  next.chapterIV = {route, activeId: "M14", completed: [], completedWindows: [], activatedAtTick: state.tick, ticks: []};
+  next.chapterIVEvidence = {version: CHAPTER_IV_EVIDENCE_VERSION, startedAtTick: state.tick, copperShipmentTicks: [], completions: []};
+  next.chapterIV = {route, activeId: "M14", completed: [], completedWindows: [], activatedAtTick: state.tick, copperShipmentTicks: [], ticks: []};
   return {ok: true, message: "Chapter IV started: The Return Signal.", state: next};
 }
 
@@ -24,7 +25,8 @@ export function currentChapterIVWindow(state: GameState) {
   const chapter = state.chapterIV;
   if (!chapter?.activeId || chapter.ticks.length !== CHAPTER_IV_WINDOW_TICKS) return null;
   const first = state.tick - CHAPTER_IV_WINDOW_TICKS + 1;
-  if (first <= chapter.activatedAtTick || chapter.ticks.some((sample, index) => sample.tick !== first + index)) {
+  const boundary = chapterIVWindowBoundary(chapter);
+  if (boundary === undefined || first <= boundary || chapter.ticks.some((sample, index) => sample.tick !== first + index)) {
     return null;
   }
   return summarizeChapterIVTicks(chapter.ticks);
@@ -34,7 +36,12 @@ export function currentChapterIVWindow(state: GameState) {
 export function recordChapterIVTick(state: GameState, sample: ChapterIVTick): boolean {
   const chapter = state.chapterIV;
   if (!chapter?.activeId || state.paused || sample.tick !== state.tick) return false;
-  const previousTick = chapter.ticks.at(-1)?.tick ?? chapter.activatedAtTick;
+  const boundary = chapterIVWindowBoundary(chapter);
+  if (boundary === undefined) {
+    if (sample.tick > chapter.activatedAtTick && sample.copperSales === 1) chapter.copperShipmentTicks.push(sample.tick);
+    return false;
+  }
+  const previousTick = chapter.ticks.at(-1)?.tick ?? boundary;
   if (sample.tick !== previousTick + 1) return false;
 
   chapter.ticks.push(sample);

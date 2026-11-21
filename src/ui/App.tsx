@@ -126,7 +126,8 @@ export default function App(){
       if(chapterIVAdvanced)setMessage(next.chapterIV?.activeId==="M15"
         ?"M14 complete. Restore Service started."
         :"M15 complete. Station reply received.");
-      if(contractCompleted||chapterIVAdvanced||next.tick%10===0)queueSave(next);
+      const copperShipmentAdvanced=next.chapterIV?.copperShipmentTicks.length!==s.chapterIV?.copperShipmentTicks.length;
+      if(contractCompleted||chapterIVAdvanced||copperShipmentAdvanced||next.tick%10===0)queueSave(next);
     });
     clockRef.current=clock;
     syncClock(latest.current);

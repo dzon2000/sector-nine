@@ -116,7 +116,7 @@ test("splitter routing survives reload and rotates relative to its facing", asyn
   await expect(routing).toHaveValue("clockwise");
 });
 
-test("a prepared factory completes fresh M14 and M15 windows and unlocks one reply", async ({ page }) => {
+test("M15 ships copper, restores circuit service after reload, and unlocks one reply", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
   await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
   await openCheckpoint(page, "independent");
@@ -124,11 +124,45 @@ test("a prepared factory completes fresh M14 and M15 windows and unlocks one rep
   await page.getByRole("button", { name: /Run$/ }).click();
   await page.clock.runFor(29_000);
   await expect(page.getByRole("heading", { name: "M14 — Answer the Call" })).toBeVisible();
-  await page.clock.runFor(1_000);
+  await page.clock.runFor(2_000);
   await expect(page.getByRole("heading", { name: "M15 — Restore Service" })).toBeVisible();
-  await expect(page.getByText(/0 of 30 simulation ticks/)).toBeVisible();
-  await expect(page.getByText(/gears produced/i)).toBeVisible();
-  await page.clock.runFor(30_000);
+  await expect(page.getByText("Copper ore shipped · 0 / 3")).toBeVisible();
+  await page.clock.runFor(35_000);
+  await expect(page.getByText("Copper ore shipped · 0 / 3")).toBeVisible();
+  await page.getByRole("button", { name: /Pause$/ }).click();
+
+  const board = page.getByTestId("factory-board");
+  const tile = async () => {
+    const bounds = (await board.boundingBox())!;
+    return { x: bounds.x + bounds.width * 7.5 / 12, y: bounds.y + bounds.height * 1.5 / 12 };
+  };
+  await page.getByRole("button", { name: /^Demolish/ }).first().click();
+  page.once("dialog", dialog => dialog.accept());
+  const point = await tile();
+  await page.mouse.click(point.x, point.y);
+  await page.getByRole("button", { name: /^Splitter(?:\s|$)/ }).click();
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x, point.y - 18);
+  await page.mouse.up();
+  await page.getByRole("button", { name: /^Inspect/ }).first().click();
+  await page.mouse.click(point.x, point.y);
+  const routing = page.getByRole("combobox", { name: "Splitter routing" });
+  await expect(routing.locator('option[value="forward"]')).toHaveText("Priority forward (N)");
+  await page.getByRole("button", { name: /Run$/ }).click();
+  await page.clock.runFor(50_000);
+  await expect(page.getByText("Copper ore shipped · 3 / 3")).toBeVisible();
+  await expect(page.getByText("Restore circuit continuity", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /Pause$/ }).click();
+  await expect(page.getByTestId("save-status")).toHaveText("Saved");
+  await page.reload();
+  await expect(page.getByText("Restore circuit continuity", { exact: true })).toBeVisible();
+  const restoredPoint = await tile();
+  await page.mouse.click(restoredPoint.x, restoredPoint.y);
+  await page.getByRole("combobox", { name: "Splitter routing" }).selectOption("clockwise");
+  await page.getByRole("button", { name: /Run$/ }).click();
+  await page.clock.runFor(65_000);
   const reply = page.getByText("Sector 9, we can see your line again.", { exact: true });
   await expect(reply).toHaveCount(1);
   await expect(page.getByTestId("save-status")).toHaveText("Saved");

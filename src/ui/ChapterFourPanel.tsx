@@ -1,5 +1,5 @@
 import {useEffect,useRef} from "react";
-import {CHAPTER_IV_GOALS,CHAPTER_IV_WINDOW_TICKS,summarizeChapterIVTicks,type ChapterIVState} from "../domain/chapterFour";
+import {CHAPTER_IV_GOALS,CHAPTER_IV_COPPER_SALES,CHAPTER_IV_WINDOW_TICKS,summarizeChapterIVTicks,type ChapterIVState} from "../domain/chapterFour";
 
 const titles={M14:"M14 — Answer the Call",M15:"M15 — Restore Service"};
 const requests={
@@ -34,21 +34,25 @@ export function ChapterFourPanel({chapter}:{chapter:ChapterIVState|undefined}){
   const request=requests[chapter.route];
   const progress=summarizeChapterIVTicks(chapter.ticks);
   const goal=CHAPTER_IV_GOALS[mission];
+  const copperShipped=chapter.copperShipmentTicks.length;
+  const shipping=mission==="M15"&&copperShipped<CHAPTER_IV_COPPER_SALES;
   return <section className="chapter-four-contracts" aria-label="Chapter IV objectives">
     <h2 ref={heading} tabIndex={-1}>{titles[mission]}</h2>
-    {mission==="M15"&&<p>Keep circuit service running while restoring the gear order.</p>}
-    <p>Window · {chapter.ticks.length} of {CHAPTER_IV_WINDOW_TICKS} simulation ticks</p>
-    <ul className="contract-conditions">
-      <li>Circuits produced · {progress.circuitProduced} / {goal.circuitProduced}</li>
-      <li>Circuits sold · {progress.circuitSales} / {goal.circuitSales}</li>
-      <li className={progress.maxCircuitGap>goal.maxCircuitGap?"progress":undefined}>
-        Longest circuit-sales gap · {progress.maxCircuitGap} simulation ticks (maximum {goal.maxCircuitGap})
-      </li>
-      {mission==="M15"&&<>
-        <li>Gears produced · {progress.gearProduced} / {goal.gearProduced}</li>
-        <li>Gears sold · {progress.gearSales} / {goal.gearSales}</li>
-      </>}
-    </ul>
+    {mission==="M15"&&<>
+      <h3>{shipping?"Ship raw copper":"Restore circuit continuity"}</h3>
+      <p>Copper ore shipped · {copperShipped} / {CHAPTER_IV_COPPER_SALES}</p>
+      <p>{shipping?"Send raw copper ore to the sale terminal for station repairs.":"Copper shipment received. Restore circuit service for a fresh 30-tick window."}</p>
+    </>}
+    {!shipping&&<>
+      <p>Window · {chapter.ticks.length} of {CHAPTER_IV_WINDOW_TICKS} simulation ticks</p>
+      <ul className="contract-conditions">
+        <li>Circuits produced · {progress.circuitProduced} / {goal.circuitProduced}</li>
+        <li>Circuits sold · {progress.circuitSales} / {goal.circuitSales}</li>
+        <li className={progress.maxCircuitGap>goal.maxCircuitGap?"progress":undefined}>
+          Longest circuit-sales gap · {progress.maxCircuitGap} simulation ticks (maximum {goal.maxCircuitGap})
+        </li>
+      </ul>
+    </>}
     <h3>{request.title}</h3>
     <p>{request.text}</p>
   </section>;

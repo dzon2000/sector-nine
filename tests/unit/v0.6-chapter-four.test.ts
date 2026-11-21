@@ -18,29 +18,36 @@ function window(offset:number,gear=true):ChapterIVTick[]{
   return Array.from({length:30},(_,i)=>{
     const circuit=Number(i%5===0);
     const gears=Number(gear&&i%6===0);
-    return {tick:offset+i+1,circuitSales:circuit,circuitProduced:circuit,gearSales:gears,gearProduced:gears};
+    return {tick:offset+i+1,circuitSales:circuit,circuitProduced:circuit,gearSales:gears,gearProduced:gears,copperSales:0};
   });
 }
 function advance(state:GameState,samples:ChapterIVTick[]){
   for(const sample of samples){state.tick=sample.tick;recordChapterIVTick(state,sample);}
 }
-it("allows explicit activation only after M13 and requires two independent full windows",()=>{
+it("requires three post-M14 copper sales and starts a fresh 30-tick circuit window",()=>{
   expect(beginChapterIV(begin(createGame())).ok).toBe(false);
   const initial=checkpoint();
+  initial.sales!.copper_ore=3;
   const state=beginChapterIV(initial).state;
   expect(initial.chapterIV).toBeUndefined();
   expect(beginChapterIV(state).ok).toBe(false);
   advance(state,window(0).slice(0,29));
   expect(currentChapterIVWindow(state)).toBeNull();
   expect(state.chapterIV?.activeId).toBe("M14");
-  advance(state,window(0).slice(29));
-  expect(state.chapterIV).toMatchObject({completed:["M14"],activeId:"M15",activatedAtTick:30,ticks:[]});
+  advance(state,window(0,false).slice(29).map(s=>({...s,copperSales:1})));
+  expect(state.chapterIV).toMatchObject({completed:["M14"],activeId:"M15",activatedAtTick:30,copperShipmentTicks:[],ticks:[]});
   advance(state,window(30));
+  expect(state.chapterIV?.activeId).toBe("M15");
+  advance(state,window(60,false).slice(0,3).map(s=>({...s,circuitSales:0,circuitProduced:6,copperSales:1})));
+  expect(state.chapterIV).toMatchObject({activeId:"M15",copperShipmentTicks:[61,62,63],ticks:[]});
+  advance(state,window(63,false).slice(0,29));
+  expect(state.chapterIV?.activeId).toBe("M15");
+  advance(state,window(63,false).slice(29));
   expect(state.chapterIV).toMatchObject({completed:["M14","M15"],activeId:null,ticks:[]});
-  advance(state,window(60));
+  advance(state,window(93));
   expect(state.chapterIV?.completed).toEqual(["M14","M15"]);
 });
-it("counts both window edges and rejects stockpile-only circuit or gear sales",()=>{
+it("counts both window edges and rejects stockpile-only circuit sales",()=>{
   const gapped=window(0);
   gapped[0].circuitSales=0;
   gapped[29].circuitSales=1;
@@ -57,7 +64,8 @@ it("counts both window edges and rejects stockpile-only circuit or gear sales",(
   expect(state.chapterIV?.activeId).toBe("M14");
   advance(state,window(30));
   expect(state.chapterIV?.activeId).toBe("M15");
-  advance(state,window(60).map(s=>({...s,gearProduced:0})));
+  advance(state,window(60,false).slice(0,3).map(s=>({...s,circuitSales:0,copperSales:1})));
+  advance(state,window(63,false).map(s=>({...s,circuitProduced:0})));
   expect(state.chapterIV?.activeId).toBe("M15");
 });
 it("validates active window, route and ordered archive state on restore",()=>{
@@ -68,6 +76,8 @@ it("validates active window, route and ordered archive state on restore",()=>{
   const malformed=[
     {...state.chapterIV!,route:"corporate"},
     {...state.chapterIV!,completed:["M15"]},
+    {...state.chapterIV!,copperShipmentTicks:[1,2,3]},
+    {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,copperSales:1}))},
     {...state.chapterIV!,ticks:state.chapterIV!.ticks.slice(1)},
     {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,gearSales:-1}))},
     {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,circuitSales:2,gearSales:2}))},
@@ -76,6 +86,10 @@ it("validates active window, route and ordered archive state on restore",()=>{
     {...state.chapterIV!,ticks:state.chapterIV!.ticks.map(s=>({...s,gearProduced:1}))},
   ];
   for(const chapterIV of malformed)expect(()=>validateSave({...state,chapterIV})).toThrow(/Chapter IV/);
+  const preview=structuredClone(state);
+  Object.assign(preview.chapterIVEvidence!,{version:1});
+  expect(()=>validateSave(preview)).toThrow(/Unsupported Chapter IV save evidence/);
+  expect(validateSave(checkpoint()).chapterIV).toBeUndefined();
 });
 
 it("rejects fabricated fresh production backed only by historical ledger totals",()=>{

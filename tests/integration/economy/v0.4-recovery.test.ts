@@ -818,10 +818,39 @@ it("V06 WP3 completes fresh Chapter IV windows and recovers a paid one-splitter 
     const m15=tick(restored);
     expect(m15).toEqual(tick(partial));
     expect(m15.chapterIV).toMatchObject({activeId:"M15",completed:["M14"],activatedAtTick:m15.tick,ticks:[]});
-    expect(runTicks(m15,29).chapterIV?.activeId).toBe("M15");
-    const complete=runTicks(m15,30);
+    const untouched=runTicks(m15,180);
+    expect(untouched.chapterIV).toMatchObject({activeId:"M15",copperShipmentTicks:[],ticks:[]});
+
+    const shipment=structuredClone(checkpoint);
+    shipment.state=m15;
+    demolish(shipment,7,1);
+    build(shipment,["splitter",7,1,"N"]);
+    const splitterId=entityAt(shipment.state,7,1).id;
+    expect(layoutOutside(shipment.state,7,1)).toEqual(layoutOutside(m15,7,1));
+    expect((shipment.capital-checkpoint.capital)-(shipment.refund-checkpoint.refund)).toBe(525);
+    const expectedShipmentTicks=route==="independent"?34:29;
+    const beforeBatch=runTicks(shipment.state,expectedShipmentTicks-1);
+    expect(beforeBatch.chapterIV).toMatchObject({activeId:"M15",ticks:[]});
+    expect(beforeBatch.chapterIV!.copperShipmentTicks).toHaveLength(2);
+    const batch=tick(validateSave(JSON.parse(JSON.stringify(beforeBatch))));
+    expect(batch).toEqual(tick(beforeBatch));
+    expect(batch.chapterIV!.copperShipmentTicks.at(-1)).toBe(batch.tick);
+    expect(batch.chapterIV!.ticks).toEqual([]);
+    expect(runTicks(batch,120).chapterIV?.activeId).toBe("M15");
+
+    const prioritized=setSplitterMode(batch,splitterId,"clockwise");
+    expect(prioritized.ok).toBe(true);
+    expect(prioritized.state.balanceCents).toBe(batch.balanceCents);
+    const resumed=validateSave(JSON.parse(JSON.stringify(prioritized.state)));
+    const completionTicks=route==="independent"?72:59;
+    const almost=runTicks(resumed,completionTicks-expectedShipmentTicks-1);
+    expect(almost.chapterIV?.activeId).toBe("M15");
+    const complete=tick(validateSave(JSON.parse(JSON.stringify(almost))));
+    expect(complete).toEqual(tick(almost));
     expect(complete.chapterIV).toMatchObject({activeId:null,completed:["M14","M15"],ticks:[]});
     expect(validateSave(complete)).toEqual(complete);
+    shipment.state=complete;
+    audit(shipment);
     const corrupt=structuredClone(complete);
     corrupt.chapterIV!.completedWindows[0][0].tick++;
     expect(()=>validateSave(corrupt)).toThrow(/Chapter IV/);
@@ -867,7 +896,7 @@ it("V06 WP3 completes fresh Chapter IV windows and recovers a paid one-splitter 
     expect(layoutOutside(change.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
     const recovery=validateSave(JSON.parse(JSON.stringify(change.state)));
     const completed=runTicks(recovery,90);
-    expect(completed.chapterIV?.completed).toEqual(["M14","M15"]);
+    expect(completed.chapterIV).toMatchObject({activeId:"M15",completed:["M14"]});
     routed.state=completed;
     audit(routed);
   }

@@ -242,14 +242,19 @@ export function tick(state:GameState):GameState {
   recordDiagnostics(s,observations,tickSales,chapterIVActive&&contractProduction?contractProduction:undefined);
   updateMission(s);
   if(chapterIVActive&&contractProduction){
+    const shipmentCount=s.chapterIV!.copperShipmentTicks.length;
     const completed=recordChapterIVTick(s,{tick:s.tick,circuitSales:tickSales.circuit,circuitProduced:contractProduction.circuit,
-      gearSales:tickSales.gear,gearProduced:contractProduction.gear});
+      gearSales:tickSales.gear,gearProduced:contractProduction.gear,copperSales:tickSales.copper_ore});
+    const diagnostic=s.diagnostics!.samples.at(-1)!;
+    if(s.chapterIV!.copperShipmentTicks.length!==shipmentCount&&diagnostic.terminalSales.copper_ore===1){
+      s.chapterIVEvidence!.copperShipmentTicks.push(diagnostic.tick);
+    }
     if(completed){
       // Archive the physical diagnostic samples independently of the mission's own window.
       const diagnostics=s.diagnostics!.samples.slice(-CHAPTER_IV_WINDOW_TICKS);
       s.chapterIVEvidence!.completions.push({tick:s.tick,samples:diagnostics.map(sample=>[
         sample.terminalSales.circuit,sample.chapterIVProduction!.circuit,
-        sample.terminalSales.gear,sample.chapterIVProduction!.gear,
+        sample.terminalSales.gear,sample.chapterIVProduction!.gear,sample.terminalSales.copper_ore,
       ])});
     }
   }

@@ -1,4 +1,4 @@
-import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,STEP,rotate,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
+import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,SPLITTER_MODES,STEP,rotate,type SplitterMode,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
 export type CommandResult={ok:boolean;message:string;state:GameState};
 function copy(s:GameState):GameState{return structuredClone(s);}
 export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:number,direction:Direction):CommandResult {
@@ -32,6 +32,19 @@ export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:
       unpoweredProcessingTicks:0,coalBurned:0,lastServedFabricatorId:0,history:[]};
   n.entities.push({id:n.nextId++,kind,x,y,direction,output:null,belt:null,oreInput:0,inputBuffers:{},reservedInputs:{},cycle:null,status:"waiting_for_inputs",...(kind==="coal_generator"?{fuelTicksRemaining:0}:{}),...(kind==="splitter"?{splitterNext:0 as const}:{})});
   return {ok:true,message:`${DEFINITIONS[kind].label} constructed for ${(price/100).toFixed(2)} Cr.`,state:n};
+}
+export function setSplitterMode(s:GameState,id:number,mode:SplitterMode):CommandResult {
+  if(!s.chapterIV)
+    return {ok:false,message:"Priority routing becomes available in Chapter IV.",state:s};
+  const index=s.entities.findIndex(entity=>entity.id===id&&entity.kind==="splitter");
+  if(index<0||!SPLITTER_MODES.includes(mode))
+    return {ok:false,message:"Invalid splitter selection or mode.",state:s};
+  if((s.entities[index].splitterMode??"alternating")===mode)
+    return {ok:true,message:"Splitter mode unchanged.",state:s};
+  const next=copy(s);
+  if(mode==="alternating")delete next.entities[index].splitterMode;
+  else next.entities[index].splitterMode=mode;
+  return {ok:true,message:"Splitter mode set.",state:next};
 }
 export function turn(s:GameState,id:number):CommandResult {
   const n=copy(s), e=n.entities.find(e=>e.id===id);

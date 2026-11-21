@@ -1,9 +1,11 @@
 import {Fragment,useCallback,useEffect,useRef,useState} from "react";
-import {begin,place,remove,reset,setPause,turn,face} from "../game/commands";
+import {begin,place,remove,reset,setPause,setSplitterMode,turn,face} from "../game/commands";
 import {MISSIONS} from "../game/missions";
 import {entityDiagnostics,terminalDiagnostics,diagnosticHint} from "../game/diagnostics";
 import {missionWindow} from "../game/missionMetrics";
 import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "../game/chapterThree";
+import {beginChapterIV} from "../game/chapterFour";
+import {ChapterFourPanel} from "./ChapterFourPanel";
 import {ChapterThreePanel} from "./ChapterThreePanel";
 import {ConfirmationDialog} from "./ConfirmationDialog";
 import {beginChapterII,chapterWindow} from "../game/chapterTwo";
@@ -11,11 +13,13 @@ import {ChapterThreeTransmission} from "./ChapterThreeTransmission";
 import {CHAPTER_TRANSMISSIONS,availableTransmissions,isChapterIIITransmission,type ChapterTransmissionId} from "../game/chapterNarrative";
 import {BUILD_COMMIT} from "./buildProvenance";
 import {TECHNOLOGIES,TECHNOLOGY_ORDER,CHAPTER_TECHNOLOGY_ORDER,technologyStatus,purchaseTechnology,type AnyTechnologyId} from "../game/technologies";
-import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item} from "../domain/model";
+import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,RECIPES,money,rotate,stats,type Direction,type GameState,type Kind,type Item,type SplitterMode} from "../domain/model";
 import {tick} from "../simulation/engine";
 import {loadGame,saveGame,restartGame} from "../persistence/indexedDb";
 import {Board,type Tool} from "../rendering/Board";
-import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,isPlaytestSession,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
+import {splitterOutlets} from "../rendering/splitterOutlets";
+import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,activePlaytestWallMs,isPlaytestSession,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
+import {createSimulationClock,type SimulationSpeed} from "./simulationClock";
 const PLAYTEST_KEY="sector-nine-v0.3-local-playtest";
 const FOUNDRY_NARRATIVE=[
  ["OPERATIONS DIRECTIVE // FOUNDRY RESTORATION","Your first deliveries have restored confidence in Sector 9. A retired foundry blueprint has surfaced in the maintenance archive. It references coal-fired metallurgy and mechanical assemblies once used by Project Prometheus."],
@@ -45,6 +49,12 @@ export default function App(){
   const [foundryPanel,setFoundryPanel]=useState(0);
   const [ready,setReady]=useState(false);
   const resetting=useRef(false);
+  const [speed,setSpeed]=useState<SimulationSpeed>(1);
+  const speedRef=useRef<SimulationSpeed>(1);
+  const clockRef=useRef<ReturnType<typeof createSimulationClock>|null>(null);
+  const syncClock=(state:GameState)=>{
+    clockRef.current?.update(!resetting.current&&!state.paused&&!state.introOpen&&!document.hidden,speedRef.current);
+  };
   const [confirmRestart,setConfirmRestart]=useState(false);
   const [saveStatus,setSaveStatus]=useState<"Saving…"|"Saved"|null>(null);
   const saveRequest=useRef(0);
@@ -71,7 +81,7 @@ export default function App(){
     const session=playtestRef.current;
     if(!session?.active)return;
     const now=Date.now();
-    let updated=advancePlaytest(session,next,now);
+    let updated=advancePlaytest(session,next,now,speedRef.current,document.hidden);
     if(command)updated=recordPlaytestCommand(updated,command,now);
     savePlaytest(updated);
   };
@@ -84,7 +94,7 @@ export default function App(){
   };
   const change=useCallback((f:(s:GameState)=>GameState)=>{
     const s=latest.current;if(!s||resetting.current)return;
-    const next=f(s);latest.current=next;setGame(next);observePlaytest(next);
+    const next=f(s);latest.current=next;setGame(next);syncClock(next);observePlaytest(next);
   },[]);
   useEffect(()=>{
     loadGame().then(s=>{
@@ -93,7 +103,7 @@ export default function App(){
         if(saved){
           const parsed:unknown=JSON.parse(saved);
           if(!isPlaytestSession(parsed))throw new Error("Invalid optional playtest state");
-          const session=resumePlaytest(parsed,initial,Date.now());
+          const session=resumePlaytest(parsed,initial,Date.now(),document.hidden);
           playtestRef.current=session;setPlaytest(session);setShowPlaytest(true);
         }
       }catch{
@@ -105,31 +115,50 @@ export default function App(){
       .catch(e=>{setError(String(e));setReady(true);});
   },[]);
   useEffect(()=>{
-    if(!ready||!game||error)return;
-    const id=window.setInterval(()=>{
+    if(!ready||!latest.current||error)return;
+    const clock=createSimulationClock(()=>{
       const s=latest.current;
-      if(!s||resetting.current)return;
-      if(s.paused||s.introOpen||document.hidden){observePlaytest(s);return;}
+      if(!s||resetting.current||s.paused||s.introOpen||document.hidden)return;
       const next=tick(s);latest.current=next;setGame(next);observePlaytest(next);
       const contractCompleted=next.chapterIII?.completed.length!==s.chapterIII?.completed.length;
       if(contractCompleted)setMessage("Contract complete. Archive entry unlocked.");
-      if(contractCompleted||next.tick%10===0)queueSave(next);
-    },1000);
-    return ()=>clearInterval(id);
-  },[ready,game?.paused,game?.introOpen,error,queueSave]);
+      const chapterIVAdvanced=next.chapterIV?.activeId!==s.chapterIV?.activeId;
+      if(chapterIVAdvanced)setMessage(next.chapterIV?.activeId==="M15"
+        ?"M14 complete. Restore Service started."
+        :"M15 complete. Station reply received.");
+      const copperShipmentAdvanced=next.chapterIV?.copperShipmentTicks.length!==s.chapterIV?.copperShipmentTicks.length;
+      if(contractCompleted||chapterIVAdvanced||copperShipmentAdvanced||next.tick%10===0)queueSave(next);
+    });
+    clockRef.current=clock;
+    syncClock(latest.current);
+    return ()=>{clock.dispose();clockRef.current=null;};
+  },[ready,error,queueSave]);
   useEffect(()=>{
     const onVisibility=()=>{
-      if(document.hidden&&latest.current&&!resetting.current){
+      const current=latest.current;
+      if(!current||resetting.current)return;
+      if(document.hidden){
         change(s=>setPause(s,true));
-        queueSave({...latest.current!,paused:true});
+        queueSave(latest.current!);
+      }else{
+        syncClock(current);
+        observePlaytest(current);
       }
     };
     document.addEventListener("visibilitychange",onVisibility);
     return ()=>document.removeEventListener("visibilitychange",onVisibility);
   },[change,queueSave]);
   const persist=(s:GameState,command?:PlaytestCommand)=>{
-    if(resetting.current)return;latest.current=s;setGame(s);observePlaytest(s,command);
+    if(resetting.current)return;latest.current=s;setGame(s);syncClock(s);observePlaytest(s,command);
     queueSave(s);
+  };
+  const selectSpeed=(next:SimulationSpeed)=>{
+    const current=latest.current;
+    if(!current||resetting.current||next===speedRef.current)return;
+    speedRef.current=next;
+    setSpeed(next);
+    syncClock(current);
+    observePlaytest(current);
   };
   const selectedEntity=game?.entities.find(e=>e.id===selected);
   const directRotate=(id:number,desired:Direction)=>{
@@ -153,7 +182,7 @@ export default function App(){
   };
   useEffect(()=>{
     const listener=(e:KeyboardEvent)=>{
-      if(document.querySelector("dialog:modal")||e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement||e.target instanceof HTMLButtonElement||game?.introOpen||error)return;
+      if(document.querySelector("dialog:modal")||e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement||e.target instanceof HTMLButtonElement||e.target instanceof HTMLSelectElement||game?.introOpen||error)return;
       if(e.key.toLowerCase()==="r"){e.preventDefault();rotateChoice();}
       if(e.key==="Escape"){setTool("select");setSelected(null);}
       if(e.key==="Delete"&&selectedEntity)demolish(selectedEntity.id);
@@ -195,8 +224,9 @@ export default function App(){
   const go=()=>{change(begin);setPanel(0);const s=latest.current;if(s)queueSave(s);};
   const fresh=async()=>{if(resetting.current)return;
     resetting.current=true;
+    clockRef.current?.dispose();
     saveRequest.current++;
-    try{const s=reset();await restartGame(s);setSaveStatus("Saved");setConfirmRestart(false);savePlaytest(null);setShowPlaytest(false);latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+    try{const s=reset();await restartGame(s);speedRef.current=1;setSpeed(1);setSaveStatus("Saved");setConfirmRestart(false);savePlaytest(null);setShowPlaytest(false);latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
   if(!ready)return <main>Loading Sector 9...</main>;
   if(error)return <main className="error">
     <h1>Save error</h1><p role="alert">{error}</p>
@@ -251,8 +281,13 @@ export default function App(){
   const foundryStoryOpen=(["M5","M6","M7"].includes(game.mission.activeId)&&!game.foundryStorySeen)||(foundryActive&&replayFoundry);
   return <div className="app">
     <header><div className="brand">SEKTOR <strong>9</strong><small>INDUSTRIAL OPERATIONS</small></div>
-      <div className="kpis"><div>Cash<strong data-testid="cash">{money(game.balanceCents)}</strong></div><div>Revenue / min<strong>{kpi?money(kpi.revenueCents):"Collecting data"}</strong></div><div>Operating cost / min<strong>{kpi?money(kpi.costCents):"Collecting data"}</strong></div><div>Profit / min<strong data-testid="profit">{kpi?money(kpi.profitCents):"Collecting data"}</strong></div></div>
-      <button onClick={()=>{const n=setPause(game,!game.paused);persist(n);}}>{game.paused?"▶ Run":"Ⅱ Pause"}</button>
+      <div className="kpis"><div>Cash<strong data-testid="cash">{money(game.balanceCents)}</strong></div><div>Revenue / sim min<strong>{kpi?money(kpi.revenueCents):"Collecting data"}</strong></div><div>Operating cost / sim min<strong>{kpi?money(kpi.costCents):"Collecting data"}</strong></div><div>Profit / sim min<strong data-testid="profit">{kpi?money(kpi.profitCents):"Collecting data"}</strong></div></div>
+      <div className="clock-controls">
+        <label>Simulation speed <select value={speed} onChange={e=>selectSpeed(e.target.value==="2"?2:1)}>
+          <option value="1">1×</option><option value="2">2×</option>
+        </select></label>
+        <button onClick={()=>change(s=>{const n=setPause(s,!s.paused);queueSave(n);return n;})}>{game.paused?"▶ Run":"Ⅱ Pause"}</button>
+      </div>
     </header>
     <div className="mobile-panel-actions" aria-label="Factory panels">
       <button aria-expanded={mobilePanel==="construction"} onClick={()=>setMobilePanel(v=>v==="construction"?null:"construction")}>Construction panel</button>
@@ -300,7 +335,7 @@ export default function App(){
       <aside className={"inspector"+(mobilePanel==="inspector"?" mobile-open":"")} aria-label="Inspector and diagnostics panel"><h2>Inspector</h2>{selectedEntity?<><h3>{DEFINITIONS[selectedEntity.kind].label}</h3><dl><dt>Position</dt><dd>({selectedEntity.x}, {selectedEntity.y})</dd><dt>Facing</dt><dd data-testid="selected-facing">{selectedEntity.direction}</dd><dt>Status</dt><dd>{game.paused?"paused":selectedEntity.status}</dd><dt>Output</dt><dd>{selectedEntity.output??selectedEntity.belt??"empty"}</dd>{(["furnace","assembler","advanced_furnace","circuit_fabricator"].includes(selectedEntity.kind))&&Object.entries(selectedEntity.kind==="furnace"?RECIPES.iron_ingot.input:selectedEntity.kind==="assembler"?RECIPES.gear.input:selectedEntity.kind==="advanced_furnace"?RECIPES.steel.input:RECIPES.circuit.input).map(([item,required])=><Fragment key={item}><dt>{item.replaceAll("_"," ")} buffer</dt><dd>{selectedEntity.inputBuffers?.[item as Item]??0}/4 (needs {required})</dd></Fragment>)}
         <dt>Cycle</dt><dd>{selectedEntity.cycle===null?"idle":selectedEntity.cycle+" ticks remaining"}</dd></dl>
         <section aria-label="Selected structure diagnostics" data-testid="entity-diagnostics" className="diagnostic-panel">
-          <h3>Trailing 60 active ticks</h3>
+          <h3>Trailing 60 simulation ticks</h3>
           {machineCounters?<>
             <p>Observed {machineCounters.ticks}/60 active ticks.</p>
             {selectedEntity.kind==="conveyor"?
@@ -319,9 +354,24 @@ export default function App(){
         {["furnace","assembler","advanced_furnace"].includes(selectedEntity.kind)&&<p>Recipe: {selectedEntity.kind==="furnace"?"2 iron ore → 1 iron ingot (4 ticks)":selectedEntity.kind==="assembler"?"2 iron ingots → 1 gear (5 ticks)":selectedEntity.kind==="advanced_furnace"?"2 iron ingots + 1 coal → 1 steel (8 ticks)":"2 copper ore + 1 silicon → 1 circuit (6 powered ticks)"}</p>}
         {selectedEntity.reservedInputs&&Object.values(selectedEntity.reservedInputs).some(v=>v>0)&&<p>Reserved inputs: {Object.entries(selectedEntity.reservedInputs).map(([item,count])=>`${item}: ${count}`).join(", ")}</p>}
         {COAL_DEPOSITS.some(d=>d.x===selectedEntity.x&&d.y===selectedEntity.y)&&selectedEntity.kind!=="coal_mine"&&<p>A coal deposit is beneath this structure. Demolish it to build a coal mine.</p>}
+        {selectedEntity.kind==="splitter"&&<>
+          {game.chapterIV&&<label className="splitter-routing">Splitter routing
+            <select value={selectedEntity.splitterMode??"alternating"} onChange={event=>{
+              const mode=event.currentTarget.value as SplitterMode;
+              runContractCommand(state=>setSplitterMode(state,selectedEntity.id,mode));
+            }}>
+              <option value="alternating">Alternating</option>
+              {splitterOutlets(selectedEntity.direction).map(({mode,direction})=><option key={mode} value={mode}>
+                {mode==="forward"?"Priority forward":"Priority clockwise"} ({direction})
+              </option>)}
+            </select>
+          </label>}
+          {!selectedEntity.splitterMode&&<p>Next outlet: {selectedEntity.splitterNext===0?"forward":"clockwise"}</p>}
+          <p data-testid="splitter-cargo">Cargo: {selectedEntity.belt??"empty"}</p>
+        </>}
         {selectedEntity.kind!=="sell_terminal"&&<><button onClick={()=>{const r=turn(latest.current!,selectedEntity.id);setMessage(r.message);if(r.ok)persist(r.state,{kind:"turn",entityKind:selectedEntity.kind,x:selectedEntity.x,y:selectedEntity.y});}}>Rotate clockwise</button><button className="danger" onClick={()=>demolish(selectedEntity.id)}>Demolish</button></>}</>:<p>Select a machine or conveyor to view status and controls.</p>}
       <section aria-label="Terminal throughput" data-testid="terminal-throughput" className="diagnostic-panel">
-        <h3>Terminal sales / trailing 60 active ticks</h3>
+        <h3>Terminal sales / trailing 60 simulation ticks</h3>
         <p>Observed: {terminalCounters.ticks}/60 ticks. Total intake: {terminalCounters.totalSales} items.</p>
         <p>{(["iron_ore","iron_ingot","coal","gear","steel"] as const).map(item=>
           `${item.replaceAll("_"," ")}: ${terminalCounters.sales[item]}`).join(" · ")}</p>
@@ -332,14 +382,14 @@ export default function App(){
         {showPlaytest&&<div id="playtest-controls">
           <p>Opt-in. Data stays in this browser; no server telemetry. Export a JSON report when finished.</p>
           {!playtest?.active&&<button data-testid="start-playtest" onClick={()=>{
-            savePlaytest(startPlaytest(latest.current!,Date.now(),BUILD_COMMIT));
+            savePlaytest(startPlaytest(latest.current!,Date.now(),BUILD_COMMIT,speedRef.current,document.hidden));
           }}>{playtest?"Start new recording":"Start recording"}</button>}
           {playtest?.active&&<button data-testid="stop-playtest" onClick={()=>{
-            savePlaytest(finishPlaytest(playtestRef.current!,latest.current!,Date.now()));
+            savePlaytest(finishPlaytest(playtestRef.current!,latest.current!,Date.now(),document.hidden));
           }}>Stop recording</button>}
           {playtest&&<>
             <p data-testid="playtest-status">{playtest.active?"Recording":"Stopped"} · Active ticks: {playtest.activeTicks} · Wall time: {(playtest.wallMs/1000).toFixed(1)} s</p>
-            <p>Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s · Waiting for mission/stability: {((playtest.waitingForMissionMs??0)/1000).toFixed(1)} s</p>
+            <p>Active wall time: {(activePlaytestWallMs(playtest)/1000).toFixed(1)} s · Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s · Waiting for mission/stability: {((playtest.waitingForMissionMs??0)/1000).toFixed(1)} s</p>
             <p>Power: {playtest.poweredTicks??0} fully powered ticks · {playtest.unpoweredTicks??0} underpowered ticks (observed nonzero demand only)</p>
             <p>Recorded build: {playtest.buildCommit??"unverified local build"} · Schema at start: {playtest.schemaVersion??"legacy"} · Rules at start: {playtest.missionRuleVersion??"legacy"}</p>
             <p>Commands: placed {playtest.commands.place}, rotated {playtest.commands.turn}, demolished {playtest.commands.demolish}, researched {playtest.commands.research}</p>
@@ -358,7 +408,6 @@ export default function App(){
         </div>}
       </section>
       {selectedEntity?.kind==="coal_generator"&&<p>Fuel: {selectedEntity.fuelTicksRemaining??0}/12 powered ticks · Coal input: {selectedEntity.inputBuffers?.coal??0}</p>}
-      {selectedEntity?.kind==="splitter"&&<p>Next outlet: {selectedEntity.splitterNext===0?"forward":"clockwise"} · Cargo: {selectedEntity.belt??"empty"}</p>}
       {game.power&&<section aria-label="Power diagnostics" data-testid="power-diagnostics" className="diagnostic-panel"><h3>Site-wide power</h3><p>Supply: {game.power.supply} · Demand: {game.power.demand} · Served: {game.power.served}</p><p>Unpowered processing: {game.power.unpoweredProcessingTicks} ticks · Burned coal: {game.power.coalBurned}</p></section>}
       {narrativeAvailable.length>0&&<section className="diagnostic-panel" aria-label="Prometheus transmissions" data-testid="chapter-transmissions">
         <h3>Prometheus transmissions</h3>
@@ -367,19 +416,22 @@ export default function App(){
           {id==="opening"&&!game.chapterII?.storySeen?"Inspect Request":"Replay "+CHAPTER_TRANSMISSIONS[id].label}
         </button>)}
       </section>}
-      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
+      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically. One tick is one simulation second.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
       </aside></div>
-    <footer data-testid="mission-hud"><div className="mission-hud-objectives" tabIndex={chapterCompleted?0:undefined} role={chapterCompleted?"region":undefined} aria-label={chapterCompleted?"Operations objectives":undefined}>{chapterCompleted&&<ChapterThreePanel game={game}
+    <footer data-testid="mission-hud"><div className="mission-hud-objectives" tabIndex={chapterCompleted?0:undefined} role={chapterCompleted?"region":undefined} aria-label={chapterCompleted?"Operations objectives":undefined}>{chapterCompleted&&<>{!game.chapterIV&&<ChapterThreePanel game={game}
         dispatch={latestDispatch&&<button onClick={()=>openTransmission(latestDispatch)}>
           Read {CHAPTER_TRANSMISSIONS[latestDispatch].label}
         </button>}
         onStart={()=>runContractCommand(beginChapterIII)}
+        onStartChapterIV={()=>runContractCommand(beginChapterIV)}
         onAccept={id=>runContractCommand(s=>acceptChapterIIIContract(s,id))}
         onChoose={route=>runContractCommand(s=>chooseChapterIIIRoute(s,route,true))}/>}
+        <ChapterFourPanel chapter={game.chapterIV}/>
+      </>}
       {!chapterCompleted&&<><small>OPERATIONS CONSOLE // {game.mission.activeId}</small><h2>{mission.title}</h2><p>{game.tutorialEnabled?mission.hint:"Tutorial hints hidden."}</p>
       {throughputMission&&<section className="mission-throughput" aria-label="Mission throughput diagnostics" data-testid="mission-throughput">
-        <h3>Live objective · trailing 60 active ticks</h3>
-        <p>{currentWindow?"Complete 60-tick window":"Collecting mission-local window"}</p>
+        <h3>Live objective · trailing 60 simulation ticks</h3>
+        <p>{currentWindow?"Complete 60-simulation-tick window":"Collecting mission-local window"}</p>
         <ul>
           <li>Gear sales: {currentWindow?.sales.gear??0}/{isM7?7:9} per 60 ticks</li>
           {isM7&&<li>Steel sales: {currentWindow?.sales.steel??0}/7 per 60 ticks</li>}
@@ -389,7 +441,7 @@ export default function App(){
         </ul>
         <p data-testid="mission-bottleneck">{unmetRequirements[0]??"All conditions met in current window; maintain stable throughput."}</p>
       </section>}
-      {activeChapterMission&&<section className="mission-throughput" aria-label="Chapter II objectives" data-testid="chapter-objectives"><h3>Chapter II objectives</h3>{game.mission.activeId==="M8"?<p>Copper sold: {chapterMetrics?.totals?.copper_ore??0}/10 · Silicon sold: {chapterMetrics?.totals?.silicon??0}/10</p>:game.mission.activeId==="M9"?<p>Circuits sold: {chapterMetrics?.totals?.circuit??0}/4 · Fabrication: {game.technologies?.circuit_fabrication?"Unlocked":"Locked"} · Power: {game.technologies?.industrial_power?"Unlocked":"Locked"}</p>:<><p>{chapterWindowProgress?"Complete 60-tick window":"Collecting 60 active mission ticks"}</p><ul><li>Circuits sold: {chapterWindowProgress?.sales.circuit??0}/11</li><li>Circuits produced: {chapterWindowProgress?.producedCircuits??0}/11</li><li>Steel sold: {chapterWindowProgress?.sales.steel??0}/5</li><li>Demand covered: {chapterWindowProgress?.coveredTicks??0}/57 of 60</li><li>Stable: {chapterMetrics?.streakTicks??0}/60 consecutive windows</li></ul></>}</section>}
+      {activeChapterMission&&<section className="mission-throughput" aria-label="Chapter II objectives" data-testid="chapter-objectives"><h3>Chapter II objectives</h3>{game.mission.activeId==="M8"?<p>Copper sold: {chapterMetrics?.totals?.copper_ore??0}/10 · Silicon sold: {chapterMetrics?.totals?.silicon??0}/10</p>:game.mission.activeId==="M9"?<p>Circuits sold: {chapterMetrics?.totals?.circuit??0}/4 · Fabrication: {game.technologies?.circuit_fabrication?"Unlocked":"Locked"} · Power: {game.technologies?.industrial_power?"Unlocked":"Locked"}</p>:<><p>{chapterWindowProgress?"Complete 60-simulation-tick window":"Collecting 60 simulation ticks"}</p><ul><li>Circuits sold: {chapterWindowProgress?.sales.circuit??0}/11</li><li>Circuits produced: {chapterWindowProgress?.producedCircuits??0}/11</li><li>Steel sold: {chapterWindowProgress?.sales.steel??0}/5</li><li>Demand covered: {chapterWindowProgress?.coveredTicks??0}/57 of 60</li><li>Stable: {chapterMetrics?.streakTicks??0}/60 consecutive windows</li></ul></>}</section>}
       <div className="progress">{game.mission.activeId==="M2"?`${game.mission.soldOre} / 10 ore sold`:game.mission.activeId==="M3"?`${game.mission.soldIngot} / 20 ingots sold`:game.mission.activeId==="M4"?`${game.mission.profitStreakTicks} / 60 qualifying ticks`:game.mission.activeId==="M5"?`${game.mission.soldCoal??0} / 10 coal sold`:game.mission.activeId==="M6"&&!throughputMission?`${game.mission.soldGear??0} / 8 gears sold`:game.mission.activeId==="M7"&&!throughputMission?`${game.mission.soldSteel??0} / 8 steel sold`:""}</div></>}
       {!game.chapterIII&&narrativeAvailable.length>0&&<p data-testid="latest-transmission" className="transmission-notice">
         Latest archive dispatch: {CHAPTER_TRANSMISSIONS[narrativeAvailable[narrativeAvailable.length-1]].pages[0].heading}.

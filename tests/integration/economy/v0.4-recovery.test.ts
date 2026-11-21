@@ -1,5 +1,6 @@
+import {beginChapterIV} from "../../../src/game/chapterFour";
 import {describe,expect,it} from "vitest";
-import {begin,place,remove,turn} from "../../../src/game/commands";
+import {begin,face,place,remove,setPause,setSplitterMode,turn} from "../../../src/game/commands";
 import {createGame,DEFINITIONS,ITEMS,stockOnHand,stats,type Direction,type GameState,type Kind} from "../../../src/domain/model";
 import {missionWindow} from "../../../src/game/missionMetrics";
 import {purchaseTechnology,type TechnologyId,type ChapterTechnologyId} from "../../../src/game/technologies";
@@ -7,6 +8,8 @@ import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "..
 import {beginChapterII} from "../../../src/game/chapterTwo";
 import {tick,runTicks} from "../../../src/simulation/engine";
 import {validateSave} from "../../../src/persistence/indexedDb";
+import {summarizeContractTicks,type ContractTick} from "../../../src/domain/contracts";
+import {tickWithPriority,type PriorityOutlets} from "./v0.6-priority-prototype";
 import {physicalM10} from "./v0.4-option-a-layout";
 
 type Built=readonly [Exclude<Kind,"sell_terminal">,number,number,Direction];
@@ -148,8 +151,15 @@ function completeChapterI():Trace {
   audit(t);
   return t;
 }
-function completeChapterII():Trace {
+// Let the test worker service runner messages between batches of deterministic ticks.
+function yieldToRunner():Promise<void>{
+  return new Promise(resolve=>setTimeout(resolve,0));
+}
+
+async function completeChapterII():Promise<Trace> {
+    await yieldToRunner();
     const t=completeChapterI();
+    await yieldToRunner();
     const done=validateSave(JSON.parse(JSON.stringify(t.state)));
     expect(done.mission.activeId).toBe("DONE");
     expect(done.technologies).toMatchObject({
@@ -211,6 +221,7 @@ function completeChapterII():Trace {
     observe(t,"M9 physical post-activation circuits");
     audit(t);
 
+    await yieldToRunner();
     // Check that the initially under-capacity single-fabricator M10 layout
     // fails real rolling-window qualification before expanding the factory.
     verifyRestore(t);
@@ -253,6 +264,7 @@ function completeChapterII():Trace {
       note:"Real engine M10 mission stays incomplete with under-capacity single-fabricator production"
     }));
     audit(t);
+    await yieldToRunner();
     // Real economic recovery: finance and explicitly demolish the legacy/M9
     // structures, then rebuild the validated full M10 12x12 layout. No starting
     // capital injection, fake output stock, or hidden teleport of entities.
@@ -272,12 +284,15 @@ function completeChapterII():Trace {
     expect(interrupted.mission.activeId).toBe("M10");
     expect(interrupted.chapterII?.metrics?.salesTicks.length).toBe(60);
     expect(runTicks(interrupted,20)).toEqual(runTicks(t.state,20));
+    await yieldToRunner();
     t.state=runTicks(interrupted,300);
+    await yieldToRunner();
     const trail:{circuit:number;steel:number;covered:boolean;produced:number}[]=[];
     let winningStreak=0,bestExpandedStreak=0,qualifyingExpandedWindows=0,peakCircuits60=0,peakSteel60=0;
     let guardedStreak=0,maxGuardedStreak=0;
     let terminalPeak=0,peakDemand=0;
     for(let i=0;i<300;i++){
+      if(i%60===0)await yieldToRunner();
       const prior={...t.state.sales!};
       const beforeProduced=t.state.materialLedger!.circuit.produced;
       t.state=tick(t.state);
@@ -339,8 +354,15 @@ function completeChapterII():Trace {
     return t;
 }
 
+let paidChapterII:Promise<Trace>|undefined;
+
+async function paidChapterIICheckpoint():Promise<Trace>{
+  paidChapterII??=completeChapterII();
+  return structuredClone(await paidChapterII);
+}
+
 describe("Full 300-Cr current campaign and recovery",()=>{
-  it("pays all research and completes physical M8–M10 after restoring the Chapter I checkpoint",completeChapterII,45000);
+  it("pays all research and completes physical M8–M10 after restoring the Chapter I checkpoint",paidChapterIICheckpoint,45000);
 });
 
 type Observation={circuit:number;gear:number;steel:number;circuitMade:number;gearMade:number;steelMade:number;covered:number;coalBurned:number;profit:number};
@@ -436,8 +458,8 @@ function restoreDualCircuits(t:Trace){
   build(t,["splitter",7,2,"W"],["splitter",8,8,"N"],["coal_generator",7,8,"N"]);
 }
 
-it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runtime objectives",()=>{
-  const t=completeChapterII();
+it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runtime objectives",async()=>{
+  const t=await paidChapterIICheckpoint();
   const baseline=observeWindows(structuredClone(t));
   reportRange("unchanged M10",baseline);
   for(const goal of [recoverArchive,independent,corporate,reconstructArchive])
@@ -447,9 +469,11 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   paused.state.paused=true;
   expect(observeWindows(paused)).toEqual([]);
   expect(paused.state.tick).toBe(t.state.tick);
+  await yieldToRunner();
   build(t,...gearLine);
   evaluate(t,"M11 gear branch",recoverArchive);
 
+  await yieldToRunner();
   const underpowered=structuredClone(t);
   demolish(underpowered,7,8);
   const deficient=observeWindows(underpowered,120);
@@ -463,6 +487,7 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   expect(noDemandWindows.every(w=>w.covered===0&&w.circuitMade===0)).toBe(true);
   expect(bestStreak(noDemandWindows,independent)).toBe(0);
 
+  await yieldToRunner();
   const independ=structuredClone(t);
   demolish(independ,7,2);
   demolish(independ,8,8);
@@ -472,6 +497,7 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   evaluate(independ,"M12 independent",independent);
   expect(bestStreak(observeWindows(structuredClone(independ)),corporate)).toBe(0);
 
+  await yieldToRunner();
   const corp=structuredClone(t);
   expect(bestStreak(observeWindows(structuredClone(corp)),corporate)).toBe(0);
   expandSteel(corp,true);
@@ -479,6 +505,7 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
   evaluate(corp,"M12 corporate",corporate);
   expect(bestStreak(observeWindows(structuredClone(corp)),independent)).toBe(0);
 
+  await yieldToRunner();
   const gearInterlock:Goal={circuit:13,gear:12,steel:7,profit:60000};
   const independentInterlock=structuredClone(independ);
   const corporateInterlock=structuredClone(corp);
@@ -486,17 +513,21 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
     expect(bestStreak(observeWindows(structuredClone(checkpoint)),gearInterlock)).toBe(0);
   }
 
+  await yieldToRunner();
   restoreDualCircuits(independentInterlock);
   build(independentInterlock,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
   evaluate(independentInterlock,"M13 interlock from independent",gearInterlock);
 
+  await yieldToRunner();
   demolish(corporateInterlock,2,6);
   build(corporateInterlock,["assembler",2,6,"W"]);
   evaluate(corporateInterlock,"M13 interlock from corporate",gearInterlock);
 
+  await yieldToRunner();
   restoreDualCircuits(independ);
   expandSteel(independ);
   evaluate(independ,"M13 from independent",reconstructArchive);
+  await yieldToRunner();
   evaluate(corp,"M13 from corporate",reconstructArchive);
   const steady=observeWindows(structuredClone(corp));
   reportRange("M13 prepared steady state",steady);
@@ -504,15 +535,16 @@ it("WP2 evaluates two paid routes from one 300 Cr campaign without changing runt
     [profit,bestStreak(steady,{...reconstructArchive,profit})])));
 },45000);
 
-it("WP3 completes both approved Chapter III routes using paid factory commands",()=>{
-  const archive=completeChapterII();
+async function completePaidChapterIII(){
+  const archive=await paidChapterIICheckpoint();
 
   function apply(t:Trace,result:{ok:boolean;message:string;state:GameState}){
     expect(result.ok,result.message).toBe(true);
     t.state=result.state;
   }
 
-  function complete(t:Trace,id:"M11"|"M12"|"M13",expectedTicks:number){
+  async function complete(t:Trace,id:"M11"|"M12"|"M13",expectedTicks:number){
+    await yieldToRunner();
     const activatedAt=t.state.tick;
     apply(t,acceptChapterIIIContract(t.state,id));
     for(let elapsed=1;elapsed<expectedTicks;elapsed++){
@@ -532,7 +564,7 @@ it("WP3 completes both approved Chapter III routes using paid factory commands",
 
   apply(archive,beginChapterIII(archive.state));
   build(archive,...gearLine);
-  complete(archive,"M11",109);
+  await complete(archive,"M11",109);
 
   const independentRoute=structuredClone(archive);
   apply(independentRoute,chooseChapterIIIRoute(independentRoute.state,"independent",true));
@@ -541,29 +573,41 @@ it("WP3 completes both approved Chapter III routes using paid factory commands",
   demolish(independentRoute,7,8);
   build(independentRoute,["conveyor",7,2,"N"],["conveyor",8,8,"W"]);
   mistake(independentRoute,()=>rotate(independentRoute,8,8));
-  complete(independentRoute,"M12",95);
+  await complete(independentRoute,"M12",95);
 
   const corporateRoute=structuredClone(archive);
   apply(corporateRoute,chooseChapterIIIRoute(corporateRoute.state,"corporate",true));
   expandSteel(corporateRoute,true);
   mistake(corporateRoute,()=>rotate(corporateRoute,2,6));
-  complete(corporateRoute,"M12",89);
+  await complete(corporateRoute,"M12",89);
 
   restoreDualCircuits(independentRoute);
   build(independentRoute,["iron_mine",3,5,"W"],["furnace",2,5,"S"],["assembler",2,6,"W"]);
-  complete(independentRoute,"M13",107);
+  await complete(independentRoute,"M13",107);
 
   demolish(corporateRoute,2,6);
   build(corporateRoute,["assembler",2,6,"W"]);
-  complete(corporateRoute,"M13",91);
+  await complete(corporateRoute,"M13",91);
 
-  for(const route of [independentRoute,corporateRoute]){
+  return {independent:independentRoute,corporate:corporateRoute};
+}
+
+let paidChapterIII:ReturnType<typeof completePaidChapterIII>|undefined;
+
+async function paidChapterIIICheckpoints(){
+  paidChapterIII??=completePaidChapterIII();
+  return structuredClone(await paidChapterIII);
+}
+
+it("WP3 completes both approved Chapter III routes using paid factory commands",async()=>{
+  for(const route of Object.values(await paidChapterIIICheckpoints())){
+    await yieldToRunner();
     const completion=structuredClone(route.state.chapterIII);
     const revenue=route.state.totalRevenueCents!;
     route.state=runTicks(route.state,60);
     expect(route.state.chapterIII).toEqual(completion);
     expect(route.state.chapterIII?.completed).toEqual(["M11","M12","M13"]);
-    expect(route.state.totalRevenueCents).toBeGreaterThan(revenue);
+    expect(route.state.totalRevenueCents!).toBeGreaterThan(revenue);
     audit(route);
   }
 },45000);
@@ -597,3 +641,266 @@ it("WP2 rejects stockpiles that meet sales quotas without current production",()
   expect(bestStreak(windows,recoverArchive)).toBe(0);
   audit(t);
 });
+
+const probeWindowTicks=30;
+const probeCircuitFloor=6;
+const probeGearFloor=5;
+const probeCircuitGapLimit=5;
+
+type ProbeSample=ContractTick&{copperOreSold:number};
+
+function probeSample(before:GameState, after:GameState):ProbeSample {
+  expect(after.tick).toBe(before.tick+1);
+  expect(ITEMS.reduce((sum,item)=>sum+after.sales![item]-before.sales![item],0)).toBeLessThanOrEqual(1);
+  return {
+    tick:after.tick,
+    sold:{
+      circuit:after.sales!.circuit-before.sales!.circuit,
+      gear:after.sales!.gear-before.sales!.gear,
+      steel:after.sales!.steel-before.sales!.steel,
+    },
+    produced:{
+      circuit:after.materialLedger!.circuit.produced-before.materialLedger!.circuit.produced,
+      gear:after.materialLedger!.gear.produced-before.materialLedger!.gear.produced,
+      steel:after.materialLedger!.steel.produced-before.materialLedger!.steel.produced,
+    },
+    copperOreSold:after.sales!.copper_ore-before.sales!.copper_ore,
+    demandCovered:after.power?.demandCovered===true,
+    coalBurned:after.materialLedger!.coal.burned-before.materialLedger!.coal.burned,
+    profitCents:after.lastEvent.revenueCents-after.lastEvent.costCents,
+  };
+}
+
+function probeSummarize(events:ProbeSample[]){
+  const counts=summarizeContractTicks(events);
+  const circuitSales=events.filter(event=>event.sold.circuit>0).map(event=>event.tick);
+  const start=events[0].tick;
+  const end=events.at(-1)!.tick;
+  let circuitGap=0;
+  let previous=start-1;
+  for(const tick of [...circuitSales,end+1]){
+    circuitGap=Math.max(circuitGap,tick-previous-1);
+    previous=tick;
+  }
+  const copperOreSold=events.reduce((sum,event)=>sum+event.copperOreSold,0);
+  const m14=Math.min(counts.sold.circuit,counts.produced.circuit)>=probeCircuitFloor&&circuitGap<=probeCircuitGapLimit;
+  const m15=m14&&Math.min(counts.sold.gear,counts.produced.gear)>=probeGearFloor;
+  return {start,end,circuitSales,circuitGap,copperOreSold,...counts,m14,m15};
+}
+
+async function probeObserve(trace:Trace, label:string, options:{
+  priorities?:PriorityOutlets; rate?:1|2; blocks?:number
+}={}){
+  const {priorities=new Map(),rate=1,blocks=4}=options;
+  const activationTick=trace.state.tick;
+  const intervalMs=1000/rate;
+  const durationMs=probeWindowTicks*intervalMs*blocks;
+  const events:ProbeSample[]=[];
+  const windows:ReturnType<typeof probeSummarize>[]=[];
+  // Drive one real tick per modeled active interval. Scheduler behavior is tested in WP1.
+  for(let elapsedMs=intervalMs;elapsedMs<=durationMs;elapsedMs+=intervalMs){
+    const before=trace.state;
+    trace.state=tickWithPriority(before,priorities);
+    events.push(probeSample(before,trace.state));
+    if(events.length>=probeWindowTicks)windows.push(probeSummarize(events.slice(-probeWindowTicks)));
+    if(events.length%probeWindowTicks===0)await yieldToRunner();
+  }
+  const elapsedTicks=trace.state.tick-activationTick;
+  const firstM14=windows.find(window=>window.m14)??null;
+  const firstM15=windows.find(window=>window.m15)??null;
+  const counts={m14:windows.filter(window=>window.m14).length,m15:windows.filter(window=>window.m15).length};
+  const fixedWindows=windows.filter(window=>(window.end-activationTick)%probeWindowTicks===0);
+  console.info("V06-WP2 WINDOW "+JSON.stringify({route:trace.state.chapterIII?.route,label,activationTick,rate,
+    elapsedTicks,modeledActiveMs:durationMs,rollingWindowCount:windows.length,counts,firstM14,firstM15,fixedWindows}));
+  audit(trace);
+  return {windows,fixedWindows,counts,firstM14,firstM15};
+}
+
+function entityAt(state:GameState,x:number,y:number){
+  const entity=state.entities.find(entity=>entity.x===x&&entity.y===y);
+  expect(entity,"Expected entity at "+x+","+y).toBeDefined();
+  return entity!;
+}
+
+function reface(trace:Trace,x:number,y:number,direction:Direction){
+  const result=face(trace.state,entityAt(trace.state,x,y).id,direction);
+  expect(result.ok,result.message).toBe(true);
+  trace.state=result.state;
+}
+
+function layoutOutside(state:GameState,x:number,y:number){
+  return state.entities.filter(entity=>entity.x!==x||entity.y!==y)
+    .map(({id,kind,x,y,direction})=>({id,kind,x,y,direction}));
+}
+
+it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 routes",async()=>{
+  for(const [route,checkpoint] of Object.entries(await paidChapterIIICheckpoints())){
+    expect(checkpoint.state.chapterIII).toEqual({route,completed:["M11","M12","M13"],active:null});
+    const prepared=structuredClone(checkpoint);
+    const preparedM14=await probeObserve(prepared,"prepared M14 observation",{blocks:1});
+    expect(preparedM14.firstM14?.end).toBe(checkpoint.state.tick+probeWindowTicks);
+    const preparedM15=await probeObserve(prepared,"prepared M15 observation after M14",{blocks:1});
+    expect(preparedM15.firstM15?.end).toBe(checkpoint.state.tick+2*probeWindowTicks);
+
+    const routed=structuredClone(checkpoint);
+    demolish(routed,7,1);
+    build(routed,["splitter",7,1,"N"]);
+    expect(layoutOutside(routed.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
+    const splitter=entityAt(routed.state,7,1);
+    console.info("V06-WP2 EDIT "+JSON.stringify({route,checkpointTick:checkpoint.state.tick,
+      checkpointCashCents:checkpoint.state.balanceCents,minimumCampaignCashCents:checkpoint.minCash,
+      checkpointCapitalCents:checkpoint.capital,checkpointResaleCents:checkpoint.refund,
+      placements:1,demolitions:1,tile:[7,1],spendCents:routed.capital-checkpoint.capital,
+      resaleCents:routed.refund-checkpoint.refund,capitalCentsNet:checkpoint.state.balanceCents-routed.state.balanceCents,
+      recovery:"Set clockwise priority on the same splitter, no construction or resale."}));
+    const badOutlets:PriorityOutlets=new Map([[splitter.id,0]]);
+    const goodOutlets:PriorityOutlets=new Map([[splitter.id,1]]);
+    const doubled=structuredClone(routed);
+    const failure=await probeObserve(routed,"prioritize raw copper sale",{priorities:badOutlets});
+    const doubleFailure=await probeObserve(doubled,"same raw copper priority at 2×",{priorities:badOutlets,rate:2});
+    expect(doubleFailure).toEqual(failure);
+    expect(doubled.state).toEqual(routed.state);
+    expect(failure.counts).toEqual({m14:0,m15:0});
+    expect(failure.fixedWindows.every(window=>window.circuitGap>probeCircuitGapLimit&&window.copperOreSold>0)).toBe(true);
+    const recovery=await probeObserve(routed,"prioritize copper to circuit fabricator",{priorities:goodOutlets});
+    expect(recovery.fixedWindows.slice(1).every(window=>window.m14&&window.m15&&window.copperOreSold===0)).toBe(true);
+    expect(recovery.counts.m14).toBeGreaterThan(failure.counts.m14);
+    expect(layoutOutside(routed.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
+
+    const gear=structuredClone(checkpoint);
+    reface(gear,1,7,"E");
+    expect(layoutOutside(gear.state,1,7)).toEqual(layoutOutside(checkpoint.state,1,7));
+    expect(gear.state.balanceCents).toBe(checkpoint.state.balanceCents);
+    console.info("V06-WP2 EDIT "+JSON.stringify({route,tile:[1,7],placements:0,demolitions:0,spendCents:0,
+      resaleCents:0,setup:"Face east into vacant (2,7).",recovery:"Face north into the original gear branch."}));
+    const gearFailure=await probeObserve(gear,"first gear branch faces an empty tile",{rate:2});
+    expect(gearFailure.windows.filter(window=>window.start>checkpoint.state.tick+probeWindowTicks)
+      .every(window=>window.m14&&!window.m15)).toBe(true);
+    reface(gear,1,7,"N");
+    expect(layoutOutside(gear.state,-1,-1)).toEqual(layoutOutside(checkpoint.state,-1,-1));
+    const gearRecovery=await probeObserve(gear,"first gear branch restored, no spend");
+    expect(gearRecovery.fixedWindows.slice(1).every(window=>window.m15)).toBe(true);
+  }
+},100000);
+
+
+// Keep the test-only Node types local to the exporter.
+declare const process:{
+  env:Record<string,string|undefined>;
+  getBuiltinModule(name:"node:fs/promises"):{
+    writeFile(path:string,data:string,options:{flag:"wx"}):Promise<void>;
+  };
+  getBuiltinModule(name:"node:path"):{join(...paths:string[]):string};
+};
+const checkpointExportDirectory=process.env.SEKTOR9_POST_M13_EXPORT_DIR;
+
+it.runIf(Boolean(checkpointExportDirectory))("exports validated post-M13 checkpoints",async()=>{
+  const {writeFile}=process.getBuiltinModule("node:fs/promises");
+  const {join}=process.getBuiltinModule("node:path");
+  for(const [route,trace] of Object.entries(await paidChapterIIICheckpoints())){
+    const checkpoint=setPause(trace.state,true);
+    const json=JSON.stringify(checkpoint);
+    expect(validateSave(JSON.parse(json))).toEqual(checkpoint);
+    expect(checkpoint.chapterIII).toEqual({route,completed:["M11","M12","M13"],active:null});
+    await writeFile(join(checkpointExportDirectory!,route+".json"),json,{flag:"wx"});
+  }
+},45000);
+
+it("V06 WP3 completes fresh Chapter IV windows and recovers a paid one-splitter fault on both routes",async()=>{
+  for(const [route,checkpoint] of Object.entries(await paidChapterIIICheckpoints())){
+    await yieldToRunner();
+    const prepared=beginChapterIV(checkpoint.state);
+    expect(prepared.ok).toBe(true);
+    expect(prepared.state.chapterIV?.route).toBe(route);
+    const partial=runTicks(prepared.state,29);
+    expect(partial.chapterIV?.activeId).toBe("M14");
+    const restored=validateSave(JSON.parse(JSON.stringify(partial)));
+    const m15=tick(restored);
+    expect(m15).toEqual(tick(partial));
+    expect(m15.chapterIV).toMatchObject({activeId:"M15",completed:["M14"],activatedAtTick:m15.tick,ticks:[]});
+    const untouched=runTicks(m15,180);
+    expect(untouched.chapterIV).toMatchObject({activeId:"M15",copperShipmentTicks:[],ticks:[]});
+
+    const shipment=structuredClone(checkpoint);
+    shipment.state=m15;
+    demolish(shipment,7,1);
+    build(shipment,["splitter",7,1,"N"]);
+    const splitterId=entityAt(shipment.state,7,1).id;
+    expect(layoutOutside(shipment.state,7,1)).toEqual(layoutOutside(m15,7,1));
+    expect((shipment.capital-checkpoint.capital)-(shipment.refund-checkpoint.refund)).toBe(525);
+    const expectedShipmentTicks=route==="independent"?34:29;
+    const beforeBatch=runTicks(shipment.state,expectedShipmentTicks-1);
+    expect(beforeBatch.chapterIV).toMatchObject({activeId:"M15",ticks:[]});
+    expect(beforeBatch.chapterIV!.copperShipmentTicks).toHaveLength(2);
+    const batch=tick(validateSave(JSON.parse(JSON.stringify(beforeBatch))));
+    expect(batch).toEqual(tick(beforeBatch));
+    expect(batch.chapterIV!.copperShipmentTicks.at(-1)).toBe(batch.tick);
+    expect(batch.chapterIV!.ticks).toEqual([]);
+    expect(runTicks(batch,120).chapterIV?.activeId).toBe("M15");
+
+    const prioritized=setSplitterMode(batch,splitterId,"clockwise");
+    expect(prioritized.ok).toBe(true);
+    expect(prioritized.state.balanceCents).toBe(batch.balanceCents);
+    const resumed=validateSave(JSON.parse(JSON.stringify(prioritized.state)));
+    const completionTicks=route==="independent"?72:59;
+    const almost=runTicks(resumed,completionTicks-expectedShipmentTicks-1);
+    expect(almost.chapterIV?.activeId).toBe("M15");
+    const complete=tick(validateSave(JSON.parse(JSON.stringify(almost))));
+    expect(complete).toEqual(tick(almost));
+    expect(complete.chapterIV).toMatchObject({activeId:null,completed:["M14","M15"],ticks:[]});
+    expect(validateSave(complete)).toEqual(complete);
+    shipment.state=complete;
+    audit(shipment);
+    const corrupt=structuredClone(complete);
+    corrupt.chapterIV!.completedWindows[0][0].tick++;
+    expect(()=>validateSave(corrupt)).toThrow(/Chapter IV/);
+    // Return to default routing so progression evidence is the only guard against deleting Chapter IV.
+    const alternating=setSplitterMode(complete,splitterId,"alternating");
+    expect(alternating.ok).toBe(true);
+    const afterDiagnosticsExpire=runTicks(alternating.state,60);
+    expect(afterDiagnosticsExpire.chapterIV).toEqual(complete.chapterIV);
+    expect(afterDiagnosticsExpire.diagnostics!.samples.every(sample=>sample.chapterIVProduction===undefined)).toBe(true);
+    expect(validateSave(JSON.parse(JSON.stringify(afterDiagnosticsExpire)))).toEqual(afterDiagnosticsExpire);
+    const beforeActivation=runTicks(checkpoint.state,120);
+    expect(validateSave(JSON.parse(JSON.stringify(beforeActivation)))).toEqual(beforeActivation);
+    expect(beforeActivation.chapterIV).toBeUndefined();
+
+    const erasedChapter=structuredClone(afterDiagnosticsExpire);
+    delete erasedChapter.chapterIV;
+    expect.soft(()=>validateSave(erasedChapter),route+" aged Chapter IV deletion").toThrow(/Chapter IV/);
+
+    const alteredProduction=structuredClone(afterDiagnosticsExpire);
+    alteredProduction.chapterIV!.completedWindows[0][0].circuitProduced++;
+    expect.soft(()=>validateSave(alteredProduction),route+" aged archive production edit").toThrow(/Chapter IV/);
+
+    const alteredEvidence=structuredClone(afterDiagnosticsExpire);
+    alteredEvidence.chapterIVEvidence!.completions[1].samples[0][3]++;
+    expect(()=>validateSave(alteredEvidence)).toThrow(/Chapter IV completion evidence/);
+
+    const preview=structuredClone(afterDiagnosticsExpire);
+    delete preview.chapterIVEvidence;
+    expect(()=>validateSave(preview)).toThrow(/Unsupported Chapter IV save evidence/);
+    expect(beginChapterIV(complete).ok).toBe(false);
+
+    const routed=structuredClone(checkpoint);
+    demolish(routed,7,1);
+    build(routed,["splitter",7,1,"N"]);
+    const splitter=entityAt(routed.state,7,1);
+    const started=beginChapterIV(routed.state);
+    expect(started.ok).toBe(true);
+    const deprioritized=setSplitterMode(started.state,splitter.id,"forward");
+    expect(deprioritized.ok).toBe(true);
+    const failed=runTicks(deprioritized.state,120);
+    expect(failed.chapterIV).toMatchObject({activeId:"M14",completed:[]});
+    expect(failed.chapterIV?.ticks).toHaveLength(30);
+    const change=setSplitterMode(failed,splitter.id,"clockwise");
+    expect(change.ok).toBe(true);
+    expect(change.state.balanceCents).toBe(failed.balanceCents);
+    expect(layoutOutside(change.state,7,1)).toEqual(layoutOutside(checkpoint.state,7,1));
+    const recovery=validateSave(JSON.parse(JSON.stringify(change.state)));
+    const completed=runTicks(recovery,90);
+    expect(completed.chapterIV).toMatchObject({activeId:"M15",completed:["M14"]});
+    routed.state=completed;
+    audit(routed);
+  }
+},100000);

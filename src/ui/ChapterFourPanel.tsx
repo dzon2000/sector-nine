@@ -1,7 +1,7 @@
 import {useEffect,useRef} from "react";
 import {CHAPTER_IV_GOALS,CHAPTER_IV_COPPER_SALES,CHAPTER_IV_WINDOW_TICKS,summarizeChapterIVTicks,type ChapterIVState} from "../domain/chapterFour";
 
-const titles={M14:"M14 — Answer the Call",M15:"M15 — Restore Service"};
+const titles={M14:"Answer the Call",M15:"Restore Service"};
 const requests={
   independent:{
     title:"Maintenance-channel transmission",
@@ -37,6 +37,7 @@ export function ChapterFourPanel({chapter}:{chapter:ChapterIVState|undefined}){
   const copperShipped=chapter.copperShipmentTicks.length;
   const shipping=mission==="M15"&&copperShipped<CHAPTER_IV_COPPER_SALES;
   return <section className="chapter-four-contracts" aria-label="Chapter IV objectives">
+    <small>OPERATIONS CONSOLE // {mission}</small>
     <h2 ref={heading} tabIndex={-1}>{titles[mission]}</h2>
     {mission==="M15"&&<>
       <h3>{shipping?"Ship raw copper":"Restore circuit continuity"}</h3>

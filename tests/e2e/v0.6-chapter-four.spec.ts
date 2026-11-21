@@ -65,11 +65,12 @@ test("Chapter IV is optional, starts by keyboard, and persists on the paid indep
   await expect(page.getByText(/continue operating in free play/i)).toBeVisible();
   const start = page.getByRole("button", { name: "Start Chapter IV" });
   await expect(start).toBeVisible();
-  await expect(page.getByRole("heading", { name: "M14 — Answer the Call" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Answer the Call" })).toHaveCount(0);
   await start.press("Enter");
   const dispatch = page.getByRole("heading", { name: "Maintenance-channel transmission" });
   await expect(dispatch).toBeVisible();
-  await expect(page.getByRole("heading", { name: "M14 — Answer the Call" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Answer the Call" })).toBeFocused();
+  await expect(page.getByTestId("mission-hud").getByText("OPERATIONS CONSOLE // M14", { exact: true })).toBeVisible();
   await expect(page.getByText(/0 of 30 simulation ticks/)).toBeVisible();
   await expect(page.getByText(/longest circuit-sales gap/i)).toBeVisible();
   await expect(page.getByText(`Tick ${checkpoint.tick} · PAUSED`, { exact: true })).toBeVisible();
@@ -123,9 +124,10 @@ test("M15 ships copper, restores circuit service after reload, and unlocks one r
   await page.getByRole("button", { name: "Start Chapter IV" }).click();
   await page.getByRole("button", { name: /Run$/ }).click();
   await page.clock.runFor(29_000);
-  await expect(page.getByRole("heading", { name: "M14 — Answer the Call" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Answer the Call" })).toBeVisible();
   await page.clock.runFor(2_000);
-  await expect(page.getByRole("heading", { name: "M15 — Restore Service" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Restore Service" })).toBeVisible();
+  await expect(page.getByTestId("mission-hud").getByText("OPERATIONS CONSOLE // M15", { exact: true })).toBeVisible();
   await expect(page.getByText("Copper ore shipped · 0 / 3")).toBeVisible();
   await page.clock.runFor(35_000);
   await expect(page.getByText("Copper ore shipped · 0 / 3")).toBeVisible();
@@ -169,4 +171,5 @@ test("M15 ships copper, restores circuit service after reload, and unlocks one r
   await page.reload();
   await expect(reply).toBeVisible();
   await expect(page.getByText(/return to free play/i)).toBeVisible();
+  await expect(page.getByTestId("mission-hud").getByText(/^OPERATIONS CONSOLE \/\/ M1[1-5]$/)).toHaveCount(0);
 });

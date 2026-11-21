@@ -46,6 +46,7 @@ test("WP4 enters Chapter III explicitly and restores accepted M11 progress",asyn
   await page.keyboard.press("Enter");
   const contracts=page.getByTestId("chapter-three-contracts");
   await expect(contracts.getByRole("heading",{name:"Recover the Archive"})).toBeFocused();
+  await expect(contracts.getByText("OPERATIONS CONSOLE // M11",{exact:true})).toBeVisible();
   await expect(contracts).toContainText(/circuits/i);
   await expect(contracts).toContainText(/gears/i);
   await expect(contracts).toContainText(/archive/i);
@@ -69,6 +70,7 @@ for(const route of ["Independent","Corporate"] as const){
     await openCheckpoint(page,"after-m11");
     const contracts=page.getByTestId("chapter-three-contracts");
     await expect(contracts.getByRole("heading",{name:"Choose the Recipient"})).toBeVisible();
+    await expect(contracts.getByText("OPERATIONS CONSOLE // M12",{exact:true})).toBeVisible();
     const routeButton=contracts.getByRole("button",{name:route,exact:true});
     await routeButton.click();
     const confirmation=page.getByRole("dialog",{name:"Confirm Route",exact:true});
@@ -112,6 +114,7 @@ for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[1280,600],[390,7
     await openCheckpoint(page,"after-m12");
     const contracts=page.getByTestId("chapter-three-contracts");
     await expect(contracts.getByRole("heading",{name:"Reconstruct Prometheus"})).toBeVisible();
+    await expect(contracts.getByText("OPERATIONS CONSOLE // M13",{exact:true})).toBeVisible();
     await contracts.getByRole("button",{name:"Accept Contract",exact:true}).click();
     await expect(contracts).toContainText(/profit/i);
     const [board,mission]=await Promise.all([

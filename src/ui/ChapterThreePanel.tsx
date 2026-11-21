@@ -77,6 +77,7 @@ export function ChapterThreePanel({game,dispatch,onStart,onStartChapterIV,onAcce
   const progress=active?(fullWindow??summarizeContractTicks(active.ticks)):undefined;
 
   return <section className="chapter-three-contracts" aria-label="Chapter III contracts" data-testid="chapter-three-contracts">
+    {id&&<small>OPERATIONS CONSOLE // {id}</small>}
     <h2 ref={heading} tabIndex={-1}>{id?TITLES[id]:chapter?"Project Prometheus Complete":"First Signal Restored"}</h2>
     {dispatch}
     {onStartChapterIV&&isChapterIVAvailable(game)&&<button onClick={onStartChapterIV}>Start Chapter IV</button>}

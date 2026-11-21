@@ -854,7 +854,10 @@ it("V06 WP3 completes fresh Chapter IV windows and recovers a paid one-splitter 
     const corrupt=structuredClone(complete);
     corrupt.chapterIV!.completedWindows[0][0].tick++;
     expect(()=>validateSave(corrupt)).toThrow(/Chapter IV/);
-    const afterDiagnosticsExpire=runTicks(complete,60);
+    // Return to default routing so progression evidence is the only guard against deleting Chapter IV.
+    const alternating=setSplitterMode(complete,splitterId,"alternating");
+    expect(alternating.ok).toBe(true);
+    const afterDiagnosticsExpire=runTicks(alternating.state,60);
     expect(afterDiagnosticsExpire.chapterIV).toEqual(complete.chapterIV);
     expect(afterDiagnosticsExpire.diagnostics!.samples.every(sample=>sample.chapterIVProduction===undefined)).toBe(true);
     expect(validateSave(JSON.parse(JSON.stringify(afterDiagnosticsExpire)))).toEqual(afterDiagnosticsExpire);

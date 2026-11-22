@@ -70,20 +70,18 @@ try {
       selected: scene.selected && { x: scene.selected.x, y: scene.selected.y, cargo: scene.selected.belt },
       diagnostic: scene.diagnostic,
     }));
-    const board = await captureArtwork(scene, origin);
     for (const viewport of dimensions) {
       const size = viewport.width + "x" + viewport.height;
-      await usingPage(viewport, async page => {
-        await openGame(page, origin, scene);
-        await page.screenshot({ path: join(output, `baseline-${scene.id}-${size}.png`) });
-      });
+      const board = await captureArtwork(scene, origin, viewport, join(output, `baseline-${scene.id}-${size}.png`));
       await usingPage(viewport, async page => {
         await openPreview(page, scene, board, origin, domain, atlas);
-        await verifyPreview(page);
         await page.screenshot({ path: join(output, `preview-${scene.id}-${size}.png`) });
+        await verifyPreview(page);
       });
     }
-    await usingPage({ width: 1024, height: 576 }, async page => {
+    const zoomViewport = { width: 1024, height: 576 };
+    const board = await captureArtwork(scene, origin, zoomViewport);
+    await usingPage(zoomViewport, async page => {
       await openPreview(page, scene, board, origin, domain, atlas);
       await verifyPreview(page);
     });
@@ -125,7 +123,7 @@ async function seed(page, origin, state) {
   }), state);
 }
 
-async function openGame(page, origin, scene, captureOnly = false) {
+async function openGame(page, origin, scene) {
   await seed(page, origin, scene.state);
   const atlasLoaded = page.waitForResponse(response =>
     response.url().includes("sector-nine-v06.png") && response.headers()["content-type"]?.startsWith("image/"));
@@ -146,41 +144,25 @@ async function openGame(page, origin, scene, captureOnly = false) {
     await page.getByRole("button", { name: /^Iron Mine/ }).click();
     if (compact) await page.getByRole("button", { name: "Construction panel" }).click();
   }
-  if (captureOnly) {
-    await page.addStyleTag({ content: ".center .board { width: 528px; max-height: none; }" });
-  }
   await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 }
 
-async function captureArtwork(scene, origin) {
+async function captureArtwork(scene, origin, viewport, baselinePath) {
   let image;
-  await usingPage({ width: 1440, height: 900 }, async page => {
-    await openGame(page, origin, scene, true);
-    const capture = await page.locator(".board canvas").screenshot();
-    const shaded = await page.evaluate(async encoded => {
-      const source = new Image();
-      source.src = "data:image/png;base64," + encoded;
-      await source.decode();
-      const canvas = document.createElement("canvas");
-      canvas.width = source.width;
-      canvas.height = source.height;
-      const context = canvas.getContext("2d");
-      context.drawImage(source, 0, 0);
-      const pixels = context.getImageData(0, 0, source.width, source.height);
-      const fills = new Map([[0x101a27, [34, 44, 50]], [0x1a2938, [41, 53, 60]], [0x203144, [43, 56, 63]]]);
-      let remapped = 0;
-      for (let i = 0; i < pixels.data.length; i += 4) {
-        const rgb = (pixels.data[i] << 16) | (pixels.data[i + 1] << 8) | pixels.data[i + 2];
-        const fill = fills.get(rgb);
-        if (!fill) continue;
-        pixels.data.set(fill, i);
-        remapped++;
-      }
-      context.putImageData(pixels, 0, 0);
-      return { url: canvas.toDataURL(), remapped, total: source.width * source.height };
-    }, capture.toString("base64"));
-    assert.ok(shaded.remapped > shaded.total / 2, "preview map uses the lower-contrast grid");
-    image = Buffer.from(shaded.url.split(",")[1], "base64");
+  await usingPage(viewport, async page => {
+    await openGame(page, origin, scene);
+    if (baselinePath) await page.screenshot({ path: baselinePath });
+    const canvas = page.locator(".board canvas");
+    await canvas.evaluate((element, fitToFrame) => {
+      const size = fitToFrame ? element.parentElement.clientWidth : element.width;
+      // Isolate the canvas at integer coordinates for a clean capture.
+      document.body.append(element);
+      Object.assign(element.style, {
+        position: "fixed", inset: "0 auto auto 0", width: size + "px", height: size + "px",
+        zIndex: "100", imageRendering: "pixelated",
+      });
+    }, viewport.width < 1280);
+    image = await page.locator("body > canvas").screenshot({ scale: "css" });
   });
   return image;
 }
@@ -207,6 +189,8 @@ function toolGroups(scene, domain, atlas) {
 
 async function openPreview(page, scene, board, origin, domain, atlas) {
   const { state, selected, diagnostic } = scene;
+  const boardWidth = board.readUInt32BE(16);
+  const boardHeight = board.readUInt32BE(20);
   const power = state.power;
   const kpi = domain.stats(state);
   const isLate = scene.id === "m15";
@@ -246,9 +230,9 @@ async function openPreview(page, scene, board, origin, domain, atlas) {
     <main class="workspace">
       <aside class="panel tools"><h2>Construction</h2>${groups}</aside>
       <section class="stage" aria-label="Sector map">
-        <div class="board-frame"><div class="board-title"><h2>Factory map</h2>
+        <div class="board-frame" style="--board-width:${boardWidth}px"><div class="board-title"><h2>Factory map</h2>
           <span class="micro">12 × 12 · Tick ${state.tick}</span></div>
-          <div class="board"><img class="map" src="data:image/png;base64,${board.toString("base64")}" alt="12 by 12 factory sprite board">
+          <div class="board"><img class="map" width="${boardWidth}" height="${boardHeight}" src="data:image/png;base64,${board.toString("base64")}" alt="12 by 12 factory sprite board">
             ${selected ? `<div class="map-blockage" style="--x:${selected.x / 12 * 100}%;--y:${selected.y / 12 * 100}%" aria-label="Blocked conveyor"><span aria-hidden="true">!</span></div>` : ""}
           </div><p class="map-help"><span>Tool · ${scene.tool}</span>
             ${selected ? '<span class="signal">! Output blocked</span>' : '<span>Fe · Iron deposit</span>'}</p>
@@ -278,11 +262,17 @@ async function openPreview(page, scene, board, origin, domain, atlas) {
 
 async function verifyPreview(page) {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "horizontal overflow");
-  assert.equal(await page.evaluate(() => {
+  const layout = await page.evaluate(() => {
     const map = document.querySelector(".board").getBoundingClientRect();
-    const stage = document.querySelector(".objective").getBoundingClientRect();
-    return map.top >= 0 && map.bottom <= innerHeight && stage.bottom <= innerHeight;
-  }), true, "map and stage visible together");
+    const objective = document.querySelector(".objective").getBoundingClientRect();
+    return { mapTop: map.top, mapBottom: map.bottom, objectiveBottom: objective.bottom, height: innerHeight };
+  });
+  assert.ok(layout.mapTop >= 0 && layout.mapBottom <= layout.height && layout.objectiveBottom <= layout.height,
+    "map and objective visible together: " + JSON.stringify(layout));
+  assert.equal(await page.locator(".map").evaluate(map =>
+    map.getBoundingClientRect().width === map.naturalWidth &&
+    map.getBoundingClientRect().height === map.naturalHeight
+  ), true, "preview board matches released capture pixel for pixel without resizing");
   assert.equal(await page.evaluate(() => [...document.fonts].every(font => font.status === "loaded")), true, "preview fonts");
   await page.keyboard.press("Tab");
   assert.equal(await page.locator(":focus-visible").getAttribute("data-opens"), "operations");

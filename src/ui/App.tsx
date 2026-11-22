@@ -7,6 +7,9 @@ import {acceptChapterIIIContract,beginChapterIII,chooseChapterIIIRoute} from "..
 import {beginChapterIV} from "../game/chapterFour";
 import {ChapterFourPanel} from "./ChapterFourPanel";
 import {ChapterThreePanel} from "./ChapterThreePanel";
+import {chapterPlaytestSlot,fetchChapterCheckpoint} from "../persistence/chapterPlaytest";
+import type {ChapterPlaytestOrigin} from "../game/chapterPlaytest";
+import {ChapterPlaytestPicker} from "./ChapterPlaytestPicker";
 import {ConfirmationDialog} from "./ConfirmationDialog";
 import {beginChapterII,chapterWindow} from "../game/chapterTwo";
 import {ChapterThreeTransmission} from "./ChapterThreeTransmission";
@@ -18,7 +21,7 @@ import {tick} from "../simulation/engine";
 import {loadGame,saveGame,restartGame} from "../persistence/indexedDb";
 import {Board,type Tool} from "../rendering/Board";
 import {splitterOutlets} from "../rendering/splitterOutlets";
-import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,activePlaytestWallMs,isPlaytestSession,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
+import {startPlaytest,resumePlaytest,advancePlaytest,annotatePlaytest,recordPlaytestCommand,finishPlaytest,buildPlaytestReport,activePlaytestWallMs,isPlaytestSession,chapterPlaytestRecorderKey,discardChapterPlaytestRecording,type PlaytestSession,type PlaytestCommand,type PlaytestActivity} from "./playtest";
 import {createSimulationClock,type SimulationSpeed} from "./simulationClock";
 const PLAYTEST_KEY="sector-nine-v0.3-local-playtest";
 const FOUNDRY_NARRATIVE=[
@@ -32,6 +35,17 @@ const NARRATIVE=[
  ["MAINTENANCE ARCHIVE","An archived maintenance record mentions PROJECT PROMETHEUS. Access denied. Restore production before requesting clearance."]
 ];
 export default function App(){
+  const [chapterMode]=useState(()=>new URLSearchParams(window.location.search).has("playtest"));
+  const chapterStart=useRef<{origin:ChapterPlaytestOrigin;epoch:number}|null>(null);
+  const [showChapterPicker,setShowChapterPicker]=useState(false);
+  const [confirmChapterReset,setConfirmChapterReset]=useState(false);
+  const [chapterResetError,setChapterResetError]=useState<string>();
+  const recorderKey=()=>chapterStart.current?chapterPlaytestRecorderKey(chapterStart.current.epoch):PLAYTEST_KEY;
+  useEffect(()=>{
+    const refreshRestoredPage=(event:PageTransitionEvent)=>{if(event.persisted)window.location.reload();};
+    window.addEventListener("pageshow",refreshRestoredPage);
+    return ()=>window.removeEventListener("pageshow",refreshRestoredPage);
+  },[]);
   const [game,setGame]=useState<GameState|null>(null);
   const latest=useRef<GameState|null>(null);
   const [tool,setTool]=useState<Tool>("select");
@@ -62,7 +76,9 @@ export default function App(){
     if(resetting.current)return;
     const request=++saveRequest.current;
     setSaveStatus("Saving…");
-    void saveGame(state).then(()=>{
+    const start=chapterStart.current;
+    const saved=start?chapterPlaytestSlot.save({game:state,origin:start.origin}):saveGame(state);
+    void saved.then(()=>{
       if(request===saveRequest.current)setSaveStatus("Saved");
     }).catch(error=>{
       if(request===saveRequest.current)setError(String(error));
@@ -73,8 +89,8 @@ export default function App(){
   const playtestRef=useRef<PlaytestSession|null>(null);
   const savePlaytest=(session:PlaytestSession|null)=>{
     playtestRef.current=session;setPlaytest(session);
-    try{if(session)localStorage.setItem(PLAYTEST_KEY,JSON.stringify(session));
-      else localStorage.removeItem(PLAYTEST_KEY);
+    try{if(session)localStorage.setItem(recorderKey(),JSON.stringify(session));
+      else localStorage.removeItem(recorderKey());
     }catch{setMessage("Local playtest storage unavailable. Export your report before closing the tab.");}
   };
   const observePlaytest=(next:GameState,command?:PlaytestCommand)=>{
@@ -97,23 +113,39 @@ export default function App(){
     const next=f(s);latest.current=next;setGame(next);syncClock(next);observePlaytest(next);
   },[]);
   useEffect(()=>{
-    loadGame().then(s=>{
-      const initial=s??createGame();latest.current=initial;setGame(initial);
-      try{const saved=localStorage.getItem(PLAYTEST_KEY);
+    let current=true;
+    async function loadSession(){
+      let initial:GameState;
+      if(chapterMode){
+        const {snapshot,epoch}=await chapterPlaytestSlot.load();
+        if(!current)return;
+        if(!snapshot)throw Error("No saved chapter playtest. Open Chapter Playtest to choose a start.");
+        chapterStart.current={origin:snapshot.origin,epoch};
+        initial=snapshot.game;
+      }else{
+        initial=await loadGame()??createGame();
+        if(!current)return;
+      }
+      latest.current=initial;setGame(initial);
+      try{
+        const saved=localStorage.getItem(recorderKey());
         if(saved){
           const parsed:unknown=JSON.parse(saved);
-          if(!isPlaytestSession(parsed))throw new Error("Invalid optional playtest state");
+          if(!isPlaytestSession(parsed)||
+            (chapterMode&&parsed.chapterOrigin?.checkpointId!==chapterStart.current?.origin.checkpointId))
+            throw new Error("Invalid optional playtest state");
           const session=resumePlaytest(parsed,initial,Date.now(),document.hidden);
           playtestRef.current=session;setPlaytest(session);setShowPlaytest(true);
         }
       }catch{
         // Recorder corruption or unavailable browser storage must not interrupt gameplay.
-        try{localStorage.removeItem(PLAYTEST_KEY);}catch{/* Recording remains optional. */}
+        try{localStorage.removeItem(recorderKey());}catch{/* Recording remains optional. */}
       }
       setReady(true);
-    })
-      .catch(e=>{setError(String(e));setReady(true);});
-  },[]);
+    }
+    void loadSession().catch(error=>{if(current){setError(String(error));setReady(true);}});
+    return ()=>{current=false;};
+  },[chapterMode]);
   useEffect(()=>{
     if(!ready||!latest.current||error)return;
     const clock=createSimulationClock(()=>{
@@ -227,11 +259,83 @@ export default function App(){
     clockRef.current?.dispose();
     saveRequest.current++;
     try{const s=reset();await restartGame(s);speedRef.current=1;setSpeed(1);setSaveStatus("Saved");setConfirmRestart(false);savePlaytest(null);setShowPlaytest(false);latest.current=s;setGame(s);setError(null);setSelected(null);setTool("select");setPanel(0);setShowTechnology(false);setReplayFoundry(false);setFoundryPanel(0);setTransmission(null);setTransmissionPage(0);setMessage("New factory started.");}catch(e){setError(String(e));}finally{resetting.current=false;}};
+  const navigateSession=(playtest:boolean)=>{
+    resetting.current=true;
+    clockRef.current?.dispose();
+    const url=new URL(window.location.href);
+    if(playtest)url.searchParams.set("playtest","");
+    else url.searchParams.delete("playtest");
+    if(url.href===window.location.href)window.location.reload();
+    else window.location.assign(url);
+  };
+  const enterChapterPlaytest=async(commitStart?:()=>Promise<void>)=>{
+    if(resetting.current)return;
+    resetting.current=true;
+    clockRef.current?.update(false,speedRef.current);
+    try{
+      const current=latest.current;
+      if(!chapterMode&&current&&!current.introOpen&&!error){
+        const paused=setPause(current,true);
+        latest.current=paused;setGame(paused);
+        if(!current.paused)observePlaytest(paused);
+        try{await saveGame(paused);}
+        catch(error){throw Error("Could not save the current campaign before switching: "+String(error));}
+      }
+      await commitStart?.();
+      navigateSession(true);
+    }catch(error){
+      resetting.current=false;
+      throw error;
+    }
+  };
+  const leaveChapterPlaytest=async()=>{
+    const start=chapterStart.current;
+    const current=latest.current;
+    if(resetting.current||!start||!current)return;
+    resetting.current=true;
+    clockRef.current?.update(false,speedRef.current);
+    const paused=setPause(current,true);
+    latest.current=paused;setGame(paused);observePlaytest(paused);
+    try{
+      await chapterPlaytestSlot.save({game:paused,origin:start.origin});
+      navigateSession(false);
+    }catch(error){
+      setError(String(error));
+      resetting.current=false;
+    }
+  };
+  const restartChapterPlaytest=async()=>{
+    const start=chapterStart.current;
+    const current=latest.current;
+    if(resetting.current||!start||!current)return;
+    resetting.current=true;
+    clockRef.current?.update(false,speedRef.current);
+    try{
+      const checkpoint=await fetchChapterCheckpoint(start.origin.checkpointId);
+      await chapterPlaytestSlot.restart(checkpoint,{expectedEpoch:start.epoch});
+      discardChapterPlaytestRecording(start.epoch);
+      navigateSession(true);
+    }catch(error){
+      resetting.current=false;
+      syncClock(current);
+      setChapterResetError(String(error));
+    }
+  };
+  const chapterPicker=showChapterPicker&&<ChapterPlaytestPicker allowResume={!chapterMode} onClose={()=>setShowChapterPicker(false)}
+    onEnter={enterChapterPlaytest}/>;
   if(!ready)return <main>Loading Sector 9...</main>;
+  if(error&&chapterMode)return <main className="error">
+    <h1>Chapter playtest unavailable</h1><p role="alert">{error}</p>
+    <button onClick={()=>navigateSession(false)}>Return to Campaign</button>
+    <button onClick={()=>setShowChapterPicker(true)}>Choose a Chapter Playtest</button>
+    {chapterPicker}
+  </main>;
   if(error)return <main className="error">
     <h1>Save error</h1><p role="alert">{error}</p>
     <p>Cancel keeps any stored data intact. Starting a new campaign replaces the saved factory.</p>
     <button onClick={()=>setConfirmRestart(true)}>Start new game</button>
+    <button onClick={()=>setShowChapterPicker(true)}>Chapter Playtest</button>
+    {chapterPicker}
     {confirmRestart&&<ConfirmationDialog title="Confirm restart" confirmLabel="Replace save and restart"
       description={<p>Replace the stored save and restart at Mission 1? This permanently deletes your saved progress.</p>}
       onCancel={()=>setConfirmRestart(false)} onConfirm={()=>{setConfirmRestart(false);void fresh();}}/>}
@@ -382,24 +486,24 @@ export default function App(){
         {showPlaytest&&<div id="playtest-controls">
           <p>Opt-in. Data stays in this browser; no server telemetry. Export a JSON report when finished.</p>
           {!playtest?.active&&<button data-testid="start-playtest" onClick={()=>{
-            savePlaytest(startPlaytest(latest.current!,Date.now(),BUILD_COMMIT,speedRef.current,document.hidden));
+            savePlaytest(startPlaytest(latest.current!,Date.now(),BUILD_COMMIT,speedRef.current,document.hidden,chapterStart.current?.origin));
           }}>{playtest?"Start new recording":"Start recording"}</button>}
           {playtest?.active&&<button data-testid="stop-playtest" onClick={()=>{
             savePlaytest(finishPlaytest(playtestRef.current!,latest.current!,Date.now(),document.hidden));
           }}>Stop recording</button>}
           {playtest&&<>
             <p data-testid="playtest-status">{playtest.active?"Recording":"Stopped"} · Active ticks: {playtest.activeTicks} · Wall time: {(playtest.wallMs/1000).toFixed(1)} s</p>
-            <p>Active wall time: {(activePlaytestWallMs(playtest)/1000).toFixed(1)} s · Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s · Waiting for mission/stability: {((playtest.waitingForMissionMs??0)/1000).toFixed(1)} s</p>
+            <p>Active wall time: {(activePlaytestWallMs(playtest)/1000).toFixed(1)} s · Paused: {(playtest.pausedMs/1000).toFixed(1)} s · Planning: {(playtest.planningMs/1000).toFixed(1)} s · Waiting for credits: {(playtest.waitingMs/1000).toFixed(1)} s · Waiting for mission/stability: {((playtest.waitingForMissionMs??0)/1000).toFixed(1)} s · Reading: {((playtest.readingMs??0)/1000).toFixed(1)} s</p>
             <p>Power: {playtest.poweredTicks??0} fully powered ticks · {playtest.unpoweredTicks??0} underpowered ticks (observed nonzero demand only)</p>
             <p>Recorded build: {playtest.buildCommit??"unverified local build"} · Schema at start: {playtest.schemaVersion??"legacy"} · Rules at start: {playtest.missionRuleVersion??"legacy"}</p>
             <p>Commands: placed {playtest.commands.place}, rotated {playtest.commands.turn}, demolished {playtest.commands.demolish}, researched {playtest.commands.research}</p>
             {playtest.active&&<fieldset aria-label="Playtest time annotation">
               <legend>Classify current unpaused time (manual annotation)</legend>
-              {(["unclassified","planning","waiting","waiting_mission"] as PlaytestActivity[]).map(activity=>
+              {(["unclassified","planning","waiting","waiting_mission","reading"] as PlaytestActivity[]).map(activity=>
                 <label key={activity}><input type="radio" name="playtest-activity"
                   checked={playtest.activity===activity} onChange={()=>
                     savePlaytest(annotatePlaytest(playtestRef.current!,activity,Date.now()))}/>
-                  {activity==="waiting"?"Waiting for credits":activity==="waiting_mission"?"Waiting for mission/stability":activity==="planning"?"Planning / routing":"Unclassified"}
+                  {activity==="waiting"?"Waiting for credits":activity==="waiting_mission"?"Waiting for mission/stability":activity==="planning"?"Planning / routing":activity==="reading"?"Reading":"Unclassified"}
                 </label>)}
             </fieldset>}
             <button data-testid="export-playtest" onClick={exportPlaytest}>Export local JSON report</button>
@@ -416,7 +520,7 @@ export default function App(){
           {id==="opening"&&!game.chapterII?.storySeen?"Inspect Request":"Replay "+CHAPTER_TRANSMISSIONS[id].label}
         </button>)}
       </section>}
-      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button><button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button><p>No offline production. Hidden tabs pause automatically. One tick is one simulation second.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
+      <h2>Operations</h2>{foundryActive&&<button onClick={()=>{setReplayFoundry(true);setFoundryPanel(0);}}>Replay Foundry Directive</button>}<button onClick={()=>{setPanel(0);setHelp(true);}}>Help / Replay Intro</button>{!chapterMode&&<button className="danger" onClick={()=>{if(window.confirm("Factory Reset? All progress and your save will be permanently deleted."))void fresh();}}>New Game / Factory Reset</button>}<p>No offline production. Hidden tabs pause automatically. One tick is one simulation second.</p>{saveStatus&&<p data-testid="save-status">{saveStatus}</p>}
       </aside></div>
     <footer data-testid="mission-hud"><div className="mission-hud-objectives" tabIndex={chapterCompleted?0:undefined} role={chapterCompleted?"region":undefined} aria-label={chapterCompleted?"Operations objectives":undefined}>{chapterCompleted&&<>{!game.chapterIV&&<ChapterThreePanel game={game}
         dispatch={latestDispatch&&<button onClick={()=>openTransmission(latestDispatch)}>
@@ -447,7 +551,15 @@ export default function App(){
         Latest archive dispatch: {CHAPTER_TRANSMISSIONS[narrativeAvailable[narrativeAvailable.length-1]].pages[0].heading}.
         Open Prometheus transmissions in Inspector to read or replay. Production continues.
       </p>}</div>
-      <div className="mission-hud-actions"><p role="status">{message}</p>{canBeginChapterII&&<button data-testid="begin-chapter-ii" onClick={()=>{
+      <div className="mission-hud-actions"><p role="status">{message}</p>
+      {chapterStart.current&&<>
+        <p>Chapter Playtest · Chapter {chapterStart.current.origin.chapter}
+          {chapterStart.current.origin.recipientRoute&&" · "+chapterStart.current.origin.recipientRoute}</p>
+        <button onClick={()=>void leaveChapterPlaytest()}>Return to Campaign</button>
+        <button onClick={()=>{setChapterResetError(undefined);setConfirmChapterReset(true);}}>Reset Chapter Playtest</button>
+        {chapterResetError&&<p role="alert">{chapterResetError}</p>}
+      </>}
+      {!chapterMode&&!game.introOpen&&<button onClick={()=>setShowChapterPicker(true)}>Chapter Playtest</button>}{canBeginChapterII&&<button data-testid="begin-chapter-ii" onClick={()=>{
         const result=beginChapterII(latest.current!);
         setMessage(result.message);if(result.ok){persist(result.state);setShowTechnology(true);}
       }}>Begin Chapter II</button>}{!game.chapterIII&&<button onClick={()=>{const n=structuredClone(game);n.tutorialEnabled=!n.tutorialEnabled;persist(n);}}>{game.tutorialEnabled?"Hide hints":"Show hints"}</button>}</div></footer>
@@ -465,6 +577,11 @@ export default function App(){
       </div>
     </section></div>}
     {foundryStoryOpen&&!game.introOpen&&!help&&<div className="overlay"><section className="story" role="dialog" aria-modal="true" aria-label="Foundry Directive"><small>{foundryPanel+1} / 3 · PROMETHEUS ARCHIVE</small><h1>{FOUNDRY_NARRATIVE[foundryPanel][0]}</h1><p>{FOUNDRY_NARRATIVE[foundryPanel][1]}</p><div className="actions">{foundryPanel>0&&<button onClick={()=>setFoundryPanel(p=>p-1)}>Previous</button>}{foundryPanel<2&&<button onClick={()=>setFoundryPanel(p=>p+1)}>Next</button>}<button onClick={closeFoundry}>Close / Return</button><button onClick={closeFoundry}>Skip Directive</button></div></section></div>}
-    {(game.introOpen||help)&&<div className="overlay"><section className="story" role="dialog" aria-modal="true"><small>{panel+1} / 3 · SECTOR 9 ARCHIVE</small><h1>{NARRATIVE[panel][0]}</h1><p>{NARRATIVE[panel][1]}</p><div className="actions">{panel>0&&<button onClick={()=>setPanel(p=>p-1)}>Previous</button>}{panel<2&&<button onClick={()=>setPanel(p=>p+1)}>Next</button>}<button onClick={()=>{if(help){setHelp(false);return;}go();}}> {help?"Close / Return":"Begin Operations"}</button>{!help&&<button onClick={go}>Skip Introduction</button>}</div></section></div>}
+    {(game.introOpen||help)&&<div className="overlay"><section className="story" role="dialog" aria-modal="true"><small>{panel+1} / 3 · SECTOR 9 ARCHIVE</small><h1>{NARRATIVE[panel][0]}</h1><p>{NARRATIVE[panel][1]}</p><div className="actions">{panel>0&&<button onClick={()=>setPanel(p=>p-1)}>Previous</button>}{panel<2&&<button onClick={()=>setPanel(p=>p+1)}>Next</button>}<button onClick={()=>{if(help){setHelp(false);return;}go();}}> {help?"Close / Return":"Begin Operations"}</button>{!help&&<><button onClick={go}>Skip Introduction</button><button onClick={()=>setShowChapterPicker(true)}>Chapter Playtest</button></>}</div></section></div>}
+    {chapterPicker}
+    {confirmChapterReset&&<ConfirmationDialog title="Reset Chapter Playtest" confirmLabel="Restore checkpoint"
+      description={<p>Replace this playtest's progress and recording with its original checkpoint?</p>}
+      onCancel={()=>setConfirmChapterReset(false)}
+      onConfirm={()=>{setConfirmChapterReset(false);void restartChapterPlaytest();}}/>}
   </div>;
 }

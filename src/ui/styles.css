@@ -118,3 +118,6 @@ body{overflow:hidden}
 .chapter-four-contracts h3,.chapter-four-contracts blockquote{margin:6px 0}
 .splitter-routing{display:grid;gap:4px;font-size:13px}
 .splitter-routing select{width:100%}
+
+.chapter-playtest-picker label{display:grid;gap:4px;margin-block:10px}
+.chapter-playtest-picker select{font:inherit;color:inherit;background:#25394f;border:1px solid #668496;border-radius:4px;padding:6px;max-width:100%}

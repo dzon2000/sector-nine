@@ -83,11 +83,6 @@ button:focus-visible { outline-color: var(--hud-amber); }
   max-height: none;
   margin-block: 0;
 }
-.center .board canvas {
-  /* Pixi autoDensity supplies inline CSS size. Display the complete canvas in the frame. */
-  width: 100% !important;
-  height: 100% !important;
-}
 .center .board-context {
   width: var(--fitted-board-size);
   max-width: 100%;

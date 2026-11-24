@@ -1,30 +1,37 @@
 import {createGame,DEFINITIONS,DEPOSITS,COAL_DEPOSITS,COPPER_DEPOSITS,SILICON_DEPOSITS,ITEMS,SPLITTER_MODES,STEP,rotate,type SplitterMode,type Direction,type Entity,type GameState,type Kind} from "../domain/model";
 export type CommandResult={ok:boolean;message:string;state:GameState};
 function copy(s:GameState):GameState{return structuredClone(s);}
-export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:number,direction:Direction):CommandResult {
+/** Shared by the command and the board preview; evaluating a tile does not change the game. */
+export function placementError(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:number):string|undefined {
   if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0||x>=s.width||y>=s.height)
-    return {ok:false,message:"Tile outside the map.",state:s};
-  if(s.entities.some(e=>e.x===x&&e.y===y))return {ok:false,message:"Tile is occupied.",state:s};
-  if(kind==="furnace"&&["M1","M2"].includes(s.mission.activeId))return {ok:false,message:"Complete M2 to unlock the furnace.",state:s};
+    return "Tile outside the map.";
+  if(s.entities.some(e=>e.x===x&&e.y===y))return "Tile is occupied.";
+  if(kind==="furnace"&&["M1","M2"].includes(s.mission.activeId))return "Complete M2 to unlock the furnace.";
   const technology=({coal_mine:"coal_extraction",assembler:"mechanical_components",advanced_furnace:"advanced_smelting"} as const)[kind as "coal_mine"|"assembler"|"advanced_furnace"];
-  if(technology&&!s.technologies?.[technology])return {ok:false,message:"Technology not unlocked.",state:s};
+  if(technology&&!s.technologies?.[technology])return "Technology not unlocked.";
   const chapterTech=({
     copper_mine:"resource_surveying",silicon_extractor:"resource_surveying",
     circuit_fabricator:"circuit_fabrication",splitter:"circuit_fabrication",
     coal_generator:"industrial_power"
   } as const)[kind as "copper_mine"|"silicon_extractor"|"circuit_fabricator"|"splitter"|"coal_generator"];
   if(chapterTech && !s.technologies?.[chapterTech])
-    return {ok:false,message:"Chapter II technology not unlocked.",state:s};
-  if(kind==="copper_mine"&&!COPPER_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Copper mines require a copper deposit.",state:s};
-  if(kind==="silicon_extractor"&&!SILICON_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Silicon extractors require a silicon deposit.",state:s};
-  if(kind==="coal_mine"&&!COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Coal mines require a coal deposit.",state:s};
+    return "Chapter II technology not unlocked.";
+  if(kind==="copper_mine"&&!COPPER_DEPOSITS.some(d=>d.x===x&&d.y===y))return "Copper mines require a copper deposit.";
+  if(kind==="silicon_extractor"&&!SILICON_DEPOSITS.some(d=>d.x===x&&d.y===y))return "Silicon extractors require a silicon deposit.";
+  if(kind==="coal_mine"&&!COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return "Coal mines require a coal deposit.";
   if(kind==="iron_mine"&&!DEPOSITS.some(d=>d.x===x&&d.y===y))
-    return {ok:false,message:"Mines must be placed on an iron deposit.",state:s};
-  if(kind!=="coal_mine"&&COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return {ok:false,message:"Deposit reserved for coal mining.",state:s};
+    return "Mines must be placed on an iron deposit.";
+  if(kind!=="coal_mine"&&COAL_DEPOSITS.some(d=>d.x===x&&d.y===y))return "Deposit reserved for coal mining.";
   if(kind!=="iron_mine"&&DEPOSITS.some(d=>d.x===x&&d.y===y))
-    return {ok:false,message:"Deposit reserved for an iron mine.",state:s};
+    return "Deposit reserved for an iron mine.";
   const price=DEFINITIONS[kind].price;
-  if(s.balanceCents<price)return {ok:false,message:"Insufficient credits for construction.",state:s};
+  if(s.balanceCents<price)return "Insufficient credits for construction.";
+}
+
+export function place(s:GameState,kind:Exclude<Kind,"sell_terminal">,x:number,y:number,direction:Direction):CommandResult {
+  const error=placementError(s,kind,x,y);
+  if(error)return {ok:false,message:error,state:s};
+  const price=DEFINITIONS[kind].price;
   const n=copy(s);
   n.balanceCents-=price;
   if((kind==="coal_generator"||kind==="circuit_fabricator")&&!n.power)

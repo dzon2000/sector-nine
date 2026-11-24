@@ -121,6 +121,18 @@ test("paid M15 shows live power and selected blockage on desktop and compact",as
   await expect(hud.getByText("Copper ore shipped · 0 / 3",{exact:true})).toBeInViewport({ratio:1});
   await expect(page.getByRole("button",{name:"Inspector panel · Blocked",exact:true})).toBeInViewport({ratio:1});
   await take("430x860");
+
+  await page.getByRole("combobox",{name:"Simulation speed"}).selectOption("2");
+  await page.getByRole("button",{name:/Run$/}).click();
+  await page.clock.runFor(1_000);
+  await page.getByRole("button",{name:/Pause$/}).click();
+  await expect(page.getByText("Tick 2169 · PAUSED",{exact:true})).toBeVisible();
+  await expect(board).toBeInViewport({ratio:1});
+  await expect(page.getByRole("button",{name:"Inspector panel · Blocked",exact:true})).toBeVisible();
+  if(process.env.SECTOR9_WP3_CAPTURE_DIR){
+    await page.evaluate(()=>document.fonts.ready);
+    await page.screenshot({path:`${process.env.SECTOR9_WP3_CAPTURE_DIR}/m15-compact-2x.png`});
+  }
 });
 
 test("Menu help replay contains keyboard focus and returns it to Menu on Escape",async({page})=>{

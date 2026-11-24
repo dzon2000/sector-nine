@@ -206,6 +206,7 @@ test("a stale campaign save cannot replace an existing recorded chapter playtest
   const other=await context.newPage();
   await other.goto("/");
   other.once("dialog",dialog=>void dialog.accept());
+  await other.getByRole("button",{name:"Menu",exact:true}).click();
   await other.getByRole("button",{name:"New Game / Factory Reset"}).click();
   await expect(other.getByRole("button",{name:"Skip Introduction"})).toBeVisible();
   await chooseChapter(page,"iii");

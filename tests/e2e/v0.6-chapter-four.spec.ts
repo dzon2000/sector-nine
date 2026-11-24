@@ -155,6 +155,10 @@ test("M15 ships copper, restores circuit service after reload, and unlocks one r
   await page.clock.runFor(50_000);
   await expect(page.getByText("Copper ore shipped · 3 / 3")).toBeVisible();
   await expect(page.getByText("Restore circuit continuity", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("mission-bottleneck")).toContainText("Collect the full continuity window.");
+  await page.clock.runFor(30_000);
+  await expect(page.getByTestId("mission-bottleneck"))
+    .toContainText(/Check circuit routing and power|Increase circuit production|Route more circuits/);
 
   await page.getByRole("button", { name: /Pause$/ }).click();
   await expect(page.getByTestId("save-status")).toHaveText("Saved");
@@ -172,4 +176,11 @@ test("M15 ships copper, restores circuit service after reload, and unlocks one r
   await expect(reply).toBeVisible();
   await expect(page.getByText(/return to free play/i)).toBeVisible();
   await expect(page.getByTestId("mission-hud").getByText(/^OPERATIONS CONSOLE \/\/ M1[1-5]$/)).toHaveCount(0);
+  const archive=page.getByRole("button",{name:"Archive",exact:true});
+  await archive.press("Enter");
+  await page.getByRole("dialog",{name:"Transmission Archive"}).getByRole("button",{name:"Station reply"}).click();
+  const transmission=page.getByRole("dialog",{name:"Chapter IV Transmission"});
+  await expect(transmission).toContainText("Sector 9, we can see your line again.");
+  await transmission.getByRole("button",{name:"Return to Factory"}).click();
+  await expect(archive).toBeFocused();
 });

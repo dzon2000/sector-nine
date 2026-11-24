@@ -3,7 +3,8 @@ import type {GameState} from "../domain/model";
 /** Transmissions present campaign state without mutating it. */
 export type ChapterIIITransmissionId="prometheus-opening"|"prometheus-archive"|
   "prometheus-independent"|"prometheus-corporate"|"prometheus-interlock"|"prometheus-conclusion";
-export type ChapterTransmissionId="opening"|"m8"|"m9"|"m10"|ChapterIIITransmissionId;
+export type ChapterIVTransmissionId="return-signal-independent"|"return-signal-corporate"|"return-signal-reply";
+export type ChapterTransmissionId="opening"|"m8"|"m9"|"m10"|ChapterIIITransmissionId|ChapterIVTransmissionId;
 
 export function isChapterIIITransmission(id:ChapterTransmissionId):id is ChapterIIITransmissionId {
   return id.startsWith("prometheus-");
@@ -58,6 +59,17 @@ export const CHAPTER_TRANSMISSIONS:Record<ChapterTransmissionId,ChapterTransmiss
   "prometheus-conclusion":{label:"Prometheus Reconstruction",pages:[
     {heading:"SUBLEVEL 03 // RECONSTRUCTION VERIFIED",
       text:"The reconstructed interlock isolates the test line and the rest of the site keeps running. The maintenance record and verified blueprint are now in your archive. Sector 9 is yours to operate. The next production decision is yours."}
+  ]},
+  "return-signal-independent":{label:"Maintenance-channel transmission",pages:[
+    {heading:"Maintenance-channel transmission",
+      text:"Sector 9, do you copy? We have been repeating this restart request since the shutdown. Keep your circuit line running so we can verify the connection."}
+  ]},
+  "return-signal-corporate":{label:"Redacted service ticket",pages:[
+    {heading:"Redacted service ticket",
+      text:"Origin: [redacted]. Restart request outstanding since the shutdown. Maintain circuit service so the receiving station can verify the connection."}
+  ]},
+  "return-signal-reply":{label:"Station reply",pages:[
+    {heading:"Station reply",text:"Sector 9, we can see your line again."}
   ]}
 };
 
@@ -75,6 +87,10 @@ export function availableTransmissions(state:GameState):ChapterTransmissionId[]{
     if(chapter.route)available.push(`prometheus-${chapter.route}`);
     if(chapter.completed.includes("M12"))available.push("prometheus-interlock");
     if(chapter.completed.includes("M13"))available.push("prometheus-conclusion");
+  }
+  if(state.chapterIV){
+    available.push(`return-signal-${state.chapterIV.route}`);
+    if(state.chapterIV.completed.includes("M15"))available.push("return-signal-reply");
   }
   return available;
 }

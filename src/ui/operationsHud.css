@@ -1,0 +1,207 @@
+@font-face {
+  font-family: Inter;
+  src: url("../../docs/specifications/art/v0.7-wp0/fonts/inter-400-700.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  src: url("../../docs/specifications/art/v0.7-wp0/fonts/barlow-semi-condensed-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --hud-deck: #1d272e;
+  --hud-surface: #24313a;
+  --hud-rule: #516269;
+  --hud-ink: #ebeee9;
+  --hud-muted: #b1bdbd;
+  --hud-amber: #f3c271;
+  --hud-coral: #ff9b85;
+  --heading-font: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+}
+body { background: #141b21; color: var(--hud-ink); font: 13px Inter, system-ui, sans-serif; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; }
+h2 { font-size: 22px; }
+button { border-color: var(--hud-rule); background: var(--hud-surface); color: var(--hud-ink); }
+button:hover { background: #32424a; }
+button:focus-visible { outline-color: var(--hud-amber); }
+.fault, .fault strong { color: var(--hud-coral); }
+.app>.operations-hud {
+  min-height: 56px;
+  padding: 7px 16px;
+  background: var(--hud-deck);
+  border-bottom: 1px solid var(--hud-rule);
+  gap: clamp(14px, 3vw, 40px);
+}
+.operations-hud .brand {
+  font: 700 32px / 1 var(--heading-font);
+  letter-spacing: .055em;
+}
+.operations-hud .kpis { flex: 1; min-width: 0; }
+.operations-hud .kpis>div { color: var(--hud-muted); gap: 2px; }
+.operations-hud .kpis strong {
+  color: var(--hud-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  text-transform: none;
+}
+.operations-hud .kpis .fault strong { color: var(--hud-coral); }
+.operations-hud .clock-controls { gap: 6px; }
+.operations-hud .clock-controls select, .operations-hud button {
+  min-height: 34px;
+  padding: 4px 9px;
+}
+.operations-hud .clock-toggle {
+  min-width: 75px;
+  background: #3d3528;
+  border-color: #b89460;
+  color: #ffdda5;
+  font-weight: 650;
+}
+.app .workspace { padding-block: 6px; }
+.workspace>aside {
+  background: var(--hud-deck);
+  border: 1px solid var(--hud-rule);
+  border-radius: 4px;
+}
+.workspace>aside h2 { margin: 0 0 8px; line-height: 1.05; }
+.workspace .center {
+  container-type: size;
+  --fitted-board-size: min(100%, 532px, max(0px, calc(100cqh - 38px)));
+}
+.center .board-title {
+  width: var(--fitted-board-size);
+  margin: 0 0 4px;
+  color: var(--hud-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+.center .board {
+  width: var(--fitted-board-size);
+  max-height: none;
+  margin-block: 0;
+}
+.center .board canvas {
+  /* Pixi autoDensity supplies inline CSS size. Display the complete canvas in the frame. */
+  width: 100% !important;
+  height: 100% !important;
+}
+.center .board-context {
+  width: var(--fitted-board-size);
+  max-width: 100%;
+  margin: 4px 0 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--hud-muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+.board-context p { margin: 0; line-height: inherit; }
+.board-context span { text-align: right; text-transform: capitalize; }
+.tool-group { margin: 10px 0; }
+.tool-group h3 { color: var(--hud-muted); text-transform: uppercase; letter-spacing: .07em; margin: 2px 0; }
+.palette .construction-tool {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 37px;
+  margin: 3px 0;
+  padding: 2px 5px;
+  background: #202b32;
+}
+.palette .construction-tool.active {
+  background: #3d3528;
+  border-color: #b89460;
+}
+.construction-tool b { font-size: 12px; font-weight: 650; line-height: 1.18; }
+.palette .construction-tool span { margin: 0; color: var(--hud-muted); }
+.palette .construction-tool .tool-mark { font: 20px / 1 var(--heading-font); text-align: center; color: var(--hud-amber); }
+.palette .tool-sprite { display: grid; place-items: center; width: 30px; height: 30px; }
+.tool-sprite span { transform: scale(.77); image-rendering: pixelated; }
+.palette .construction-tool .tool-price { font-size: 10px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.palette .construction-tool .tool-price span { font-size: inherit; }
+.inspector .inspected-structure { font-size: 18px; margin: 8px 0; }
+.inspector dl { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-top: 8px; }
+.inspector dt { color: var(--hud-muted); }
+.inspector dd { font-variant-numeric: tabular-nums; }
+.app>.operations-console {
+  height: 80px;
+  min-height: 0;
+  max-height: none;
+  grid-template-columns: minmax(0, 1fr) minmax(245px, 280px);
+  padding: 5px 16px;
+  background: var(--hud-deck);
+  border-top: 1px solid var(--hud-rule);
+  gap: 14px;
+}
+.operations-console .mission-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, .62fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: start;
+  padding: 2px 0;
+  font-size: 13px;
+}
+.mission-heading small { font: 600 11px ui-monospace, monospace; color: var(--hud-amber); }
+.app>.operations-console h2 { font-size: 25px; line-height: 1.05; }
+.operations-console .mission-summary, .operations-console ul { font-variant-numeric: tabular-nums; }
+.operations-console button { min-height: 29px; padding: 3px 7px; font-size: 12px; }
+.operations-console .summary-title { font: 650 13px Inter, system-ui, sans-serif; margin: 2px 0; }
+.operations-console .mission-summary p { margin: 2px 0; }
+.operations-console .mission-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+}
+.operations-console .mission-reading, .operations-console .mission-session-actions { display: flex; gap: 6px; }
+.operations-console .mission-session-actions { flex-basis: 100%; }
+.operations-console .mission-hud-actions { display: flex; flex-wrap: wrap; align-items: start; gap: 2px 6px; height: 100%; }
+.operations-console .mission-hud-actions p { flex-basis: 100%; }
+.operations-console .contract-conditions { margin: 2px 0; }
+.factory-dialog { background: var(--hud-deck); border-color: var(--hud-rule); }
+.factory-dialog h2 { color: var(--hud-ink); font-size: 26px; line-height: 1.1; }
+.font-credits a { display: block; width: fit-content; color: #a1c5bf; margin: 4px 0; }
+.factory-dialog .archive-entries { padding: 0; display: grid; gap: 5px; list-style: none; }
+.archive-entries button { width: 100%; text-align: left; }
+.factory-dialog.story { width: min(650px, calc(100% - 24px)); padding: clamp(14px, 3vw, 36px); }
+
+@media (max-width: 980px) {
+  .app>.operations-hud { gap: 8px; }
+  .operations-hud .brand { font-size: 25px; }
+  .app>.operations-console {
+    grid-template-columns: minmax(0, 1fr) 128px;
+    gap: 8px;
+    height: 126px;
+    padding: 5px 8px;
+  }
+  .operations-console .mission-layout { display: block; }
+  .app>.operations-console h2 { font-size: 22px; }
+  .operations-console .mission-reading { gap: 3px; }
+  .operations-console .mission-reading button { padding-inline: 4px; }
+  .operations-console .mission-session-actions { flex-direction: column; gap: 3px; }
+  .operations-console .mission-session-actions button {
+    min-width: 0;
+    padding-inline: 3px;
+    font-size: 11px;
+    white-space: normal;
+    line-height: 1.1;
+  }
+}
+@media (max-width: 600px) {
+  .app>.operations-hud { padding: 5px 8px; }
+  .operations-hud .kpis { gap: 9px; flex-wrap: nowrap; }
+  .operations-hud .kpis strong { font-size: 13px; }
+  .operations-hud .kpis>div { font-size: 9px; }
+  .profit-label-prefix { display: none; }
+  .operations-hud .clock-controls select, .operations-hud button { padding: 3px 5px; }
+  .operations-hud .clock-toggle { min-width: 60px; }
+  .mobile-panel-actions button { flex: 1 1 0; min-width: 0; font-size: 11px; line-height: 1.2; }
+  .workspace .center { --fitted-board-size: min(100%, 532px, max(0px, calc(100cqh - 40px))); }
+}

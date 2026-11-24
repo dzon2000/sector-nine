@@ -10,6 +10,7 @@ async function launch(page:Page){
  await page.getByRole("button",{name:"Inspect",exact:true}).click();
  await board.click({position:coords});
  await page.getByRole("button",{name:/Local playtest/}).click();
+ await page.getByTestId("start-playtest").click();
 }
 for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[1280,600]] as const){
  test("WP4 #7 fixed viewport and independent panels "+width+"×"+height,async({page})=>{

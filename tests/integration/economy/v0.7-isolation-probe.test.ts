@@ -39,7 +39,7 @@ function conserve(state: GameState) {
   const stock = stockOnHand(state.entities);
   for (const item of ITEMS) {
     const { opening, produced, consumed, sold, demolished, burned } = state.materialLedger![item];
-    expect(sold).toBe(state.sales[item]);
+    expect(sold).toBe(state.sales![item]);
     expect(opening + produced - consumed - sold - demolished - burned).toBe(stock[item]);
   }
 }
@@ -73,7 +73,7 @@ function observe(
     expect(sample.tick).toBe(state.tick);
     let totalSales = 0;
     for (const item of ITEMS) {
-      expect(sample.terminalSales[item]).toBe(state.sales[item] - before.sales[item]);
+      expect(sample.terminalSales[item]).toBe(state.sales![item] - before.sales![item]);
       totalSales += sample.terminalSales[item];
     }
     expect(totalSales).toBeLessThanOrEqual(1);
@@ -107,8 +107,8 @@ function observe(
   } else {
     for (let elapsed = 0; elapsed < ticks; elapsed++) step();
   }
-  expect(state.balanceCents).toBe(initial.balanceCents + state.totalRevenueCents -
-    initial.totalRevenueCents - (state.totalCostCents - initial.totalCostCents));
+  expect(state.balanceCents).toBe(initial.balanceCents + state.totalRevenueCents! -
+    initial.totalRevenueCents! - (state.totalCostCents! - initial.totalCostCents!));
   conserve(state);
   return { state, samples, cashFloor, elapsedSeconds };
 }

@@ -8,7 +8,7 @@ type Node = {
 type BoardTest = {
   snapshot():Node[]; lifecycle():{initialized:number;destroyed:number};
   actions():string[]; setMode(mode:"alternating"|"forward"|"clockwise"):void;
-  setDirection(direction:"N"|"E"|"S"|"W"):void; clearCargo():void; unmount():void;
+  setDirection(direction:"N"|"E"|"S"|"W"):void; clearCargo():void; addBlockedFabricator():void; unmount():void;
 };
 declare global {interface Window {boardTest:BoardTest;}}
 
@@ -103,6 +103,20 @@ test("atlas failure keeps glyphs, interaction and occupied-deposit names",async(
   await page.mouse.click(canvas.x+canvas.width/12-0.5,canvas.y+canvas.height*1.5/12);
   await page.mouse.click(canvas.x+canvas.width*8.5/12,canvas.y+canvas.height*2.5/12);
   expect(await page.evaluate(()=>window.boardTest.actions())).toEqual(["tile:0,1","tile:8,2"]);
+});
+
+test("atlas fallback keeps a blocked processor glyph and cargo clear of the warning",async({page})=>{
+  await page.route(atlas,route=>route.abort());
+  await page.goto(fixture);
+  await expect.poll(()=>scene(page,"structure:splitter")).toMatchObject({text:"Sp"});
+  await page.evaluate(()=>window.boardTest.addBlockedFabricator());
+  await expect.poll(()=>scene(page,"structure:circuit_fabricator")).toMatchObject({text:expect.any(String)});
+  const fabricator=(await scene(page,"entity:11"))!.children;
+  const [x,y,width,height]=fabricator.find(node=>node.label==="cargo-warning-mark")!.bounds!;
+  for(const label of ["structure:circuit_fabricator","cargo:circuit","cargo-stalled","outlet:N"]){
+    const [left,top,w,h]=fabricator.find(node=>node.label===label)!.bounds!;
+    expect(x+width<=left||left+w<=x||y+height<=top||top+h<=y,label).toBe(true);
+  }
 });
 
 test("unmount destroys Pixi applications even while the atlas is pending",async({page})=>{

@@ -252,8 +252,9 @@ export function Board({state,tool,direction,onTile,onDragRotate,selectedId}:{sta
         if(blocked){
           const covered=state.chapterII?.started&&CHAPTER_DEPOSIT_MARKERS.some(({extractor,point})=>
             e.x===point.x&&e.y===point.y&&e.kind!==extractor);
-          // The atlas cargo is upper left. The upper right can hold the covered deposit or fallback glyph.
+          // Stay clear of the structure glyph, cargo and covered deposit label.
           const warning=isBelt?blockedCargoMark(X+37,Y+35):
+            !structureTexture&&!texture?blockedCargoMark(X+5,Y+5,4):
             texture&&!covered?blockedCargoMark(X+37,Y+7):blockedCargoMark(cx,cy,4);
           layer.addChild(warning);
         }

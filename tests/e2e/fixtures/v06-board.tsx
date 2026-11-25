@@ -42,7 +42,7 @@ let game:GameState={
 };
 
 function describe(node:Container):unknown{
-  const bounds=node instanceof Graphics?node.getLocalBounds():null;
+  const bounds=node instanceof Graphics||node instanceof Text?node.getLocalBounds():null;
   return {
     label:node.label,
     ...(node instanceof Sprite?{
@@ -51,7 +51,7 @@ function describe(node:Container):unknown{
       x:node.x,y:node.y,
     }:{}),
     ...(node instanceof Text?{text:node.text}:{}),
-    ...(bounds?{bounds:[bounds.x,bounds.y,bounds.width,bounds.height]}:{}),
+    ...(bounds?{bounds:[bounds.x+node.x,bounds.y+node.y,bounds.width,bounds.height]}:{}),
     children:node.children.map(describe),
   };
 }
@@ -73,5 +73,11 @@ Object.assign(window,{boardTest:{
   setMode:(splitterMode:SplitterMode)=>updateSplitter({splitterMode}),
   setDirection:(direction:Entity["direction"])=>updateSplitter({direction}),
   clearCargo:()=>updateSplitter({belt:null}),
+  addBlockedFabricator:()=>{
+    game={...game,entities:[...game.entities,
+      entity(11,"circuit_fabricator",8,3,{output:"circuit",status:"blocked_output"}),
+    ]};
+    render();
+  },
   unmount:()=>root.unmount(),
 }});

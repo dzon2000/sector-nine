@@ -1,10 +1,19 @@
 import type {GameState,Kind,MissionId} from "../domain/model";
 import {CHAPTER_III_CONTRACTS,CHAPTER_III_ROUTES,type ChapterIIIContractId,type ChapterIIIRoute} from "../domain/contracts";
+import {isChapterPlaytestOrigin,type ChapterPlaytestOrigin} from "../game/chapterPlaytest";
 import {resolveBuildCommit} from "./buildProvenance";
 import type {SimulationSpeed} from "./simulationClock";
 
+export function chapterPlaytestRecorderKey(epoch:number):string{
+  return `sector-nine-chapter-playtest-${epoch}`;
+}
+export function discardChapterPlaytestRecording(epoch:number):void{
+  try{localStorage.removeItem(chapterPlaytestRecorderKey(epoch));}
+  catch{/* Recording remains optional. */}
+}
+
 /** Local UI/test-harness-only timing. Never called by the deterministic simulation. */
-export type PlaytestActivity="unclassified"|"planning"|"waiting"|"waiting_mission";
+export type PlaytestActivity="unclassified"|"planning"|"waiting"|"waiting_mission"|"reading";
 function extractionDeposit(kind:Kind,x:number,y:number):string|null {
   const name=({iron_mine:"iron",coal_mine:"coal",copper_mine:"copper",
     silicon_extractor:"silicon"} as Partial<Record<Kind,string>>)[kind];
@@ -40,6 +49,8 @@ export interface PlaytestSession {
   missionRuleVersion?:2|3|4|5;
   /** Original build provenance; absent in old sessions, null for untrusted/local builds. */
   buildCommit?:string|null;
+  chapterOrigin?:ChapterPlaytestOrigin;
+  readingMs?:number;
   startedAt:number;
   lastObservedAt:number;
   lastTick:number;
@@ -76,13 +87,14 @@ export function isPlaytestSession(value:unknown):value is PlaytestSession{
   const safe=(field:string)=>Number.isSafeInteger(v[field])&&(v[field] as number)>=0;
   if(v.buildCommit!==undefined&&v.buildCommit!==null&&
     resolveBuildCommit(v.buildCommit)===null)return false;
-  for(const optional of ["waitingForMissionMs","poweredTicks","unpoweredTicks","activeWallMs"]){
+  if(v.chapterOrigin!==undefined&&!isChapterPlaytestOrigin(v.chapterOrigin))return false;
+  for(const optional of ["readingMs","waitingForMissionMs","poweredTicks","unpoweredTicks","activeWallMs"]){
     if(v[optional]!==undefined&&(!Number.isSafeInteger(v[optional])||(v[optional] as number)<0))return false;
   }
   if((v.schemaVersion!==undefined && ![1,2,3,4,5].includes(v.schemaVersion as number))||
     (v.missionRuleVersion!==undefined && ![2,3,4,5].includes(v.missionRuleVersion as number)))return false;
   if(typeof v.active!=="boolean"||typeof v.lastPaused!=="boolean"||
-    !["unclassified","planning","waiting","waiting_mission"].includes(String(v.activity))||
+    !["unclassified","planning","waiting","waiting_mission","reading"].includes(String(v.activity))||
     !["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10","DONE"].includes(String(v.lastMission)))return false;
   for(const field of ["startedAt","lastObservedAt","lastTick","wallMs","pausedMs","planningMs",
     "waitingMs","unclassifiedMs","activeTicks","inputStarvedEntityTicks","outputBlockedEntityTicks"])
@@ -137,7 +149,8 @@ function elapsed(s:PlaytestSession,now:number):PlaytestSession{
   if(s.lastPaused)next.pausedMs+=duration;
   else{
     next.activeWallMs=activePlaytestWallMs(s)+duration;
-    if(s.activity==="planning")next.planningMs+=duration;
+    if(s.activity==="reading")next.readingMs=(next.readingMs??0)+duration;
+    else if(s.activity==="planning")next.planningMs+=duration;
     else if(s.activity==="waiting")next.waitingMs+=duration;
     else if(s.activity==="waiting_mission")next.waitingForMissionMs=(next.waitingForMissionMs??0)+duration;
     else next.unclassifiedMs+=duration;
@@ -155,9 +168,10 @@ function observeSpeed(session:PlaytestSession,speed:SimulationSpeed):PlaytestSpe
 }
 
 export function startPlaytest(game:GameState,now:number,buildCommit:string|null=null,
-  speed:SimulationSpeed=1,hidden=false):PlaytestSession{
+  speed:SimulationSpeed=1,hidden=false,chapterOrigin?:ChapterPlaytestOrigin):PlaytestSession{
   return {active:true,schemaVersion:game.schemaVersion,missionRuleVersion:game.missionRuleVersion,
     buildCommit:resolveBuildCommit(buildCommit),
+    chapterOrigin,
     startedAt:now,lastObservedAt:now,lastTick:game.tick,lastMission:game.mission.activeId,
     lastPaused:game.paused||game.introOpen||hidden,activity:"unclassified",
     wallMs:0,pausedMs:0,activeWallMs:0,speedEvents:[{speed,tick:game.tick,elapsedMs:0}],planningMs:0,waitingMs:0,waitingForMissionMs:0,
@@ -239,6 +253,8 @@ export function buildPlaytestReport(s:PlaytestSession){
   return {format:"sector-nine-playtest-v1" as const,
     schemaVersion:s.schemaVersion,missionRuleVersion:s.missionRuleVersion,
     buildCommit:s.buildCommit??null,
+    sessionOrigin:s.chapterOrigin??{kind:"campaign" as const},
+    readingMs:s.readingMs??0,
     activeTicks:s.activeTicks,wallMs:s.wallMs,pausedMs:s.pausedMs,activeWallMs:activePlaytestWallMs(s),
     speedEvents:(s.speedEvents??[]).map(event=>({...event})),
     planningMs:s.planningMs,waitingMs:s.waitingMs,

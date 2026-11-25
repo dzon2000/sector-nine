@@ -35,12 +35,18 @@ test("WP5 M5 story can be skipped and replayed without blocking progress (AC-15)
   await expect(page.getByText("Below the Surface")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("dialog",{name:"Foundry Directive"})).toHaveCount(0);
-  await page.getByRole("button",{name:"Replay Foundry Directive"}).click();
-  await expect(page.getByRole("dialog",{name:"Foundry Directive"})).toBeVisible();
-  await page.getByRole("button",{name:"Next"}).click();
-  await expect(page.getByRole("heading",{name:"CONDITIONAL AUTHORIZATION"})).toBeVisible();
-  await page.getByRole("button",{name:"Close / Return"}).click();
-  await expect(page.getByRole("dialog",{name:"Foundry Directive"})).toHaveCount(0);
+  const menu=page.getByRole("button",{name:"Menu",exact:true});
+  await menu.press("Enter");
+  await page.getByRole("button",{name:"Replay Foundry Directive"}).press("Enter");
+  const replay=page.getByRole("dialog",{name:"Foundry Directive"});
+  await expect(replay.getByRole("heading",{name:/FOUNDRY RESTORATION/})).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(replay.getByRole("button",{name:"Next",exact:true})).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(replay.getByRole("heading",{name:"CONDITIONAL AUTHORIZATION"})).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(replay).toHaveCount(0);
+  await expect(menu).toBeFocused();
 });
 test("WP5 coal palette, deposits and typed inspector are usable (AC-01, 02, 14)",async({page})=>{
   await page.goto("/");

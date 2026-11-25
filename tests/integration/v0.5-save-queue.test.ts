@@ -102,3 +102,31 @@ describe("v0.5 single-slot write boundaries",()=>{
     expect(storage.value).toMatchObject({balanceCents:29000});
   });
 });
+
+describe("v0.7 isolated chapter playtest writes",()=>{
+  it("keeps queued writes in their own slot and rejects a stale playtest tab after replacement",async()=>{
+    const storage=slot(createGame());
+    const {createSaveSlot,validateSave}=await import("../../src/persistence/indexedDb");
+    const earlier=createSaveSlot("chapter-playtest",validateSave);
+    const latest=createSaveSlot("chapter-playtest",validateSave);
+    const original={...createGame(),balanceCents:123};
+    const replacement={...createGame(),balanceCents:456};
+
+    await earlier.restart(original);
+    expect(await earlier.load()).toMatchObject({snapshot:original,epoch:1});
+    const {release,started}=storage.holdWrite();
+    const stale=earlier.save({...original,balanceCents:24});
+    await started;
+    const pending=earlier.save({...original,balanceCents:42});
+    const restarted=earlier.restart(replacement,{expectedEpoch:1});
+    release();
+    await Promise.all([stale,pending,restarted]);
+
+    expect(await latest.load()).toEqual({snapshot:replacement,epoch:2});
+    await latest.restart(original,{expectedEpoch:2});
+    await expect(earlier.save(replacement)).rejects.toThrow(/another tab/i);
+    await expect(earlier.restart(replacement,{expectedEpoch:2})).rejects.toThrow(/another tab/i);
+    expect(await latest.load()).toEqual({snapshot:original,epoch:3});
+    expect(storage.value).toEqual(createGame());
+  });
+});

@@ -1,6 +1,6 @@
 import {StrictMode} from "react";
 import {createRoot} from "react-dom/client";
-import {Application,Container,Sprite,Text} from "pixi.js";
+import {Application,Container,Graphics,Sprite,Text} from "pixi.js";
 import {createGame,emptySales,type Entity,type GameState,type SplitterMode} from "../../../src/domain/model";
 import {Board} from "../../../src/rendering/Board";
 import "../../../src/ui/styles.css";
@@ -35,10 +35,14 @@ let game:GameState={
     entity(5,"conveyor",2,8,{direction:"E"}),
     entity(6,"conveyor",3,8,{direction:"N",belt:"gear"}),
     entity(7,"conveyor",3,7,{direction:"N"}),
+    entity(8,"conveyor",5,10,{direction:"N",belt:"iron_ore"}),
+    entity(9,"conveyor",6,10,{direction:"N",belt:"copper_ore"}),
+    entity(10,"conveyor",7,10,{direction:"N",belt:"steel"}),
   ],
 };
 
 function describe(node:Container):unknown{
+  const bounds=node instanceof Graphics||node instanceof Text?node.getLocalBounds():null;
   return {
     label:node.label,
     ...(node instanceof Sprite?{
@@ -47,6 +51,7 @@ function describe(node:Container):unknown{
       x:node.x,y:node.y,
     }:{}),
     ...(node instanceof Text?{text:node.text}:{}),
+    ...(bounds?{bounds:[bounds.x+node.x,bounds.y+node.y,bounds.width,bounds.height]}:{}),
     children:node.children.map(describe),
   };
 }
@@ -66,6 +71,13 @@ Object.assign(window,{boardTest:{
   lifecycle:()=>({initialized:initialized.length,destroyed}),
   actions:()=>actions,
   setMode:(splitterMode:SplitterMode)=>updateSplitter({splitterMode}),
+  setDirection:(direction:Entity["direction"])=>updateSplitter({direction}),
   clearCargo:()=>updateSplitter({belt:null}),
+  addBlockedFabricator:()=>{
+    game={...game,entities:[...game.entities,
+      entity(11,"circuit_fabricator",8,3,{output:"circuit",status:"blocked_output"}),
+    ]};
+    render();
+  },
   unmount:()=>root.unmount(),
 }});

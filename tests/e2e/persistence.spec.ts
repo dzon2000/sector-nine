@@ -14,6 +14,7 @@ test("AC13 rapid construction, reload and reset never resurrect old state",async
  await expect(page.getByTestId("save-status")).toHaveText("Saved");
  await page.reload();
  await expect(page.getByTestId("cash")).toHaveText("270.00 Cr");
+ await page.getByRole("button",{name:"Menu",exact:true}).click();
  await page.getByRole("button",{name:"New Game / Factory Reset"}).click();
  page.on("dialog",dialog=>dialog.accept());
 });
@@ -27,6 +28,7 @@ test("AC13 rapid edits persist; reset clears snapshots across reload",async({pag
  await expect(page.getByTestId("save-status")).toHaveText("Saved");
  await page.reload();
  await expect(page.getByTestId("cash")).toHaveText("270.00 Cr");
+ await page.getByRole("button",{name:"Menu",exact:true}).click();
  await page.getByRole("button",{name:"New Game / Factory Reset"}).click();
  await expect(page.getByRole("dialog")).toBeVisible();
  await page.reload();
@@ -111,6 +113,7 @@ test("WP1 a second tab cannot restore the campaign after a confirmed reset",asyn
  await resettingTab.goto("/");
  await expect(resettingTab.getByTestId("cash")).toHaveText("295.00 Cr");
  resettingTab.once("dialog",dialog=>dialog.accept());
+ await resettingTab.getByRole("button",{name:"Menu",exact:true}).click();
  await resettingTab.getByRole("button",{name:"New Game / Factory Reset"}).click();
  await expect(resettingTab.getByRole("button",{name:"Begin Operations"})).toBeVisible();
 

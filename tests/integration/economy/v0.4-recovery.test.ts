@@ -788,7 +788,8 @@ it("V06 WP2 observes candidate continuity and gear recovery from both paid M13 r
 declare const process:{
   env:Record<string,string|undefined>;
   getBuiltinModule(name:"node:fs/promises"):{
-    writeFile(path:string,data:string,options:{flag:"wx"}):Promise<void>;
+    writeFile(path:string|URL,data:string,options?:{flag:"wx"}):Promise<void>;
+    readFile(path:string|URL,encoding:"utf8"):Promise<string>;
   };
   getBuiltinModule(name:"node:path"):{join(...paths:string[]):string};
 };
@@ -803,6 +804,25 @@ it.runIf(Boolean(checkpointExportDirectory))("exports validated post-M13 checkpo
     expect(validateSave(JSON.parse(json))).toEqual(checkpoint);
     expect(checkpoint.chapterIII).toEqual({route,completed:["M11","M12","M13"],active:null});
     await writeFile(join(checkpointExportDirectory!,route+".json"),json,{flag:"wx"});
+  }
+},45000);
+
+it("WP1 bundled chapter checkpoints match the validated paid replay",async()=>{
+  const {readFile,writeFile}=process.getBuiltinModule("node:fs/promises");
+  const endpoints=await paidChapterIIICheckpoints();
+  const starts={
+    ii:completeChapterI(),
+    iii:await paidChapterIICheckpoint(),
+    "iv-independent":endpoints.independent,
+    "iv-corporate":endpoints.corporate,
+  };
+  for(const [id,trace] of Object.entries(starts)){
+    const state=setPause(trace.state,true);
+    const serialized=JSON.stringify(state);
+    expect(validateSave(JSON.parse(serialized))).toEqual(state);
+    const path=new URL(`../../../src/game/checkpoints/${id}.json`,import.meta.url);
+    if(process.env.SEKTOR9_REFRESH_CHAPTER_PLAYTEST==="1")await writeFile(path,serialized+"\n");
+    else expect(JSON.parse(await readFile(path,"utf8"))).toEqual(state);
   }
 },45000);
 
